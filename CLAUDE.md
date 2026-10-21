@@ -14,7 +14,7 @@ Spec phase, no code yet. Spec docs are written together with the owner, section 
 ## Decided so far
 - MVP sources: JobsPipe API (aggregator: LinkedIn, Indeed, Greenhouse, Lever, Ashby, Workday and others) and the Fast Forward job board through its Getro search API
 - Run cadence configurable, freshness not critical
-- LLM calls use the Claude subscription (claude -p locally, CLAUDE_CODE_OAUTH_TOKEN in CI), not per-token API billing. So only filtered postings go to the LLM, batched, small model
+- MVP: LLM calls use the Claude subscription (claude -p, runs locally), not per-token API billing; may switch to per-token API later. So only filtered postings go to the LLM, batched, small model
 - Proposed, not agreed: one adapter per source into a common posting format; filters, LLM extraction and the report work only on that format
 - Python 3.12+, uv, pytest, ruff
 - Public repo: personal config (config.yaml) and run output (output/) are never committed
