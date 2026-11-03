@@ -15,9 +15,9 @@ Spec phase, no code yet. Spec docs are written together with the owner, section 
 - MVP sources: JobsPipe API (aggregator: LinkedIn, Indeed, Greenhouse, Lever, Ashby, Workday and others) and the Fast Forward job board through its Getro search API
 - Run cadence configurable, freshness not critical
 - MVP: LLM calls use the Claude subscription (claude -p, runs locally), not per-token API billing; may switch to per-token API later. So only filtered postings go to the LLM, batched, small model
-- Proposed, not agreed: one adapter per source into a common posting format; filters, LLM extraction and the report work only on that format
+- One adapter per source into a common posting format; every stage after fetch works only on that format
 - Python 3.12+, uv, pytest, ruff
-- Public repo: personal config (config.yaml) and run output (output/) are never committed
+- Public repo: personal files (local/) and run output (output/) are never committed
 
 ## Working rules
 - Propose before acting. No spec content or code without walking through it with the owner first

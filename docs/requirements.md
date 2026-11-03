@@ -40,7 +40,7 @@ After the MVP
 - **Report**: one per run, with a section for each MVP capability. Openings are grouped by domain, job type, or both, as set in the settings
 - **Run data**: each run saves what it collected and derived, and later runs use it. The volume is small and nothing in it is critical
 - **New data only**: by default a run covers only postings not seen in earlier runs, so duplicates and old postings are skipped and trends count each posting once. A setting turns this off so a run covers everything. A lookback cap (2 weeks by default) keeps a run from reaching far back when the last run was long ago
-- **Deleting runs**: a failed run can be deleted so it doesn't mark postings as seen or skew trends. Any run can also be deleted by hand. Both ask for confirmation first
+- **Deleting runs**: a failed run never counts: it doesn't mark postings as seen or add to trends, and is kept only for inspection until deleted. Any run can also be deleted by hand. Deleting asks for confirmation first
 - **Problem alerts**: anything that goes wrong (no data, credits used up, a failing source) is reported in the terminal and at the top of the report
 - **Format**: plain text that both people and an LLM can read. The report is Markdown by default. The report and run data formats sit behind a format layer, so either can change without touching the rest. The data model underneath is defined in `design.md`
 
@@ -82,13 +82,13 @@ Experience to gain
 Cost
 - Before fetching from a paid source, a run gets the credits left from the source's API, and asks for the match count (JobsPipe: 1 credit) to estimate the cost of the full fetch
 - Within the limits, the run shows the estimate and goes ahead
-- Over the per-run maximum or the monthly budget, the run shows the estimate, both limits and the credits left, and asks the user whether to go ahead or stop
+- Over the per-run maximum or the monthly budget, the run shows the estimate, both limits and the credits left, and asks the user whether to go ahead, skip that source for this run, or stop
 - A fetch is never partial: a source is fetched in full or not at all, so trends can rely on complete data
 - Monthly spend comes from the source's own credit data, so the budget holds whatever the number of runs
 
 Runs
 - Each run writes one report and saves its run data. The next run reads that data
-- When a run fails, it asks whether to delete its data. Once deleted, it's as if the run never happened
+- When a run fails, it asks whether to delete its data. Kept or deleted, a failed run doesn't count toward seen postings, trends or the next run's time window
 - The user can delete any earlier run, after a confirmation prompt. Its postings count as unseen again, and its data drops out of the trends
 - Only filtered postings go to the LLM, in batches
 - A new source can be added with its own settings and, if needed, its own module, without changes to filtering, extraction or the report. Tests use a fake source added the same way
