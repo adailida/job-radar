@@ -3,7 +3,7 @@
 Job search and job-market trends, pulled from job APIs. Built spec-first with Claude Code.
 
 ## Status
-Spec phase, no code yet. Spec docs are written together with the owner, section by section, before any code.
+Spec done: requirements, design and tasks. Building in task order from docs/tasks.md; each task follows the definition of done there.
 
 ## Docs
 - docs/requirements.md: what it does, acceptance criteria, non-goals
@@ -22,3 +22,4 @@ Spec phase, no code yet. Spec docs are written together with the owner, section 
 ## Working rules
 - Propose before acting. No spec content or code without walking through it with the owner first
 - No commit or push without the owner's OK
+- Paid sources: real runs start with very tight credit limits (docs/tasks.md, task 26); widen only after spend matches the estimate
