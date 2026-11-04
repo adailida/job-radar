@@ -96,7 +96,7 @@ flowchart LR
 
 ## 2. Code structure
 
-The goal is that reading `pipeline.py` shows what a run does.
+The goal is that reading `pipeline.py` shows what a run does. For the big picture first, see the diagrams in [architecture.md](architecture.md).
 
 ### Top level
 

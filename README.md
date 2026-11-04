@@ -37,6 +37,7 @@ Each run fetches postings, merges duplicates across sources, drops ones you've a
 
 - [Requirements](docs/requirements.md): what it does, acceptance criteria, non-goals
 - [Design](docs/design.md): architecture, data model, decisions and alternatives
+- [Architecture](docs/architecture.md): diagrams of the components and of one run, with where state lives
 - [Tasks](docs/tasks.md): build steps
 - [Data sources](docs/research/sources.md): source research and why these two
 

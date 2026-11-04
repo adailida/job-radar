@@ -8,6 +8,7 @@ Spec done: requirements, design and tasks. Building in task order from docs/task
 ## Docs
 - docs/requirements.md: what it does, acceptance criteria, non-goals
 - docs/design.md: architecture, data model, decisions and alternatives
+- docs/architecture.md: component and run diagrams, state marked; updated by every PR that changes the flow
 - docs/tasks.md: small ordered steps, each checkable
 - docs/research/sources.md: data source research
 
