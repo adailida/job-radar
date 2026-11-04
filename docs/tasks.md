@@ -11,7 +11,7 @@ Every task, before its box is ticked:
 3. Each acceptance criterion the task covers (from [requirements.md](requirements.md)) has a test named after it
 4. If the code differs from design.md, design.md and its decisions log are updated in the same commit
 5. No personal data: fixtures scrubbed, nothing from `local/`
-6. The owner reviewed the diff; one commit per task, after the owner's OK
+6. The owner reviewed the PR; it is squash-merged after the owner's OK, one commit per task on main
 7. The box below is ticked (`- [x]`) in the same commit
 
 ## How a task runs
@@ -19,13 +19,13 @@ Every task, before its box is ticked:
 1. Propose the approach in a few lines; wait for the owner's OK
 2. Write the tests first where there is logic to pin down
 3. Write the code
-4. Show the diff; commit after the OK
+4. Open a PR from a task branch; address review comments with new commits; squash-merge after the OK
 
 ## Phase 1: Walking skeleton
 
 Goal: `job-radar run` goes through all 11 stages and writes a report, with the simplest version of each stage. Real Fast Forward data, no LLM yet.
 
-- [ ] **1. Project setup**
+- [x] **1. Project setup**
   - Package layout (design section 2), dependencies (pydantic, httpx, pyyaml, pypdf; dev: pytest-socket), `job-radar` entry point, sockets blocked in tests
   - Tests: the package imports; a test that opens a socket fails
   - Acceptance: Runs: tests run offline

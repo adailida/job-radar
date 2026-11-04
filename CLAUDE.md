@@ -21,5 +21,5 @@ Spec done: requirements, design and tasks. Building in task order from docs/task
 
 ## Working rules
 - Propose before acting. No spec content or code without walking through it with the owner first
-- No commit or push without the owner's OK
+- Commits and pushes go to task branches with a PR; nothing reaches main without the owner's OK on the PR
 - Paid sources: real runs start with very tight credit limits (docs/tasks.md, task 26); widen only after spend matches the estimate
