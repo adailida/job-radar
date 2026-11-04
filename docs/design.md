@@ -105,8 +105,9 @@ The goal is that reading `pipeline.py` shows what a run does.
 ```python
 def run(app: App) -> None:
     user = app.inputs.load()
+    writer = app.store.start(app.new_run(user.criteria))
     plans = app.planner.plan(user.criteria)
-    postings = app.fetcher.fetch(plans)
+    postings = app.fetcher.fetch(plans, writer)
     jobs = app.deduper.dedupe(postings)
     jobs = app.filter.apply(jobs, user.criteria)
     classified = app.classifier.classify(jobs)
@@ -116,7 +117,7 @@ def run(app: App) -> None:
     gaps = app.gaps.find(extracted, user.cv)
     report = app.report_builder.build(extracted, trends, gaps, app.alerts)
     text = app.renderer.render(report)
-    app.store.save_report(app.run.id, text)
+    writer.save_report(text)
 ```
 
 `App` holds the configured objects. `config.py` builds it from the settings.
@@ -308,7 +309,7 @@ How the requirements map onto it:
 class Source(Protocol):
     name: str
     def plan(self, searches: list[Search], window: Window) -> FetchPlan: ...
-    def fetch(self, plan: FetchPlan, sink: RawSink) -> list[Posting]: ...
+    def fetch(self, plan: FetchPlan, save_page: SavePage) -> list[Posting]: ...
     def parse(self, raw: RawPage) -> list[Posting]: ...
 
 class PaidSource(Source, Protocol):
@@ -317,10 +318,10 @@ class PaidSource(Source, Protocol):
 ```
 
 - `plan` turns each search and the time window into a query for this source, recorded in `SourceResult.queries`. The cost estimate adds up the counts, so it can overestimate a little when searches overlap
-- `fetch` pages through the API and writes each raw page to the `sink` as it arrives. It returns postings only if every page succeeded; otherwise it raises `SourceError`, the run drops that source's postings and adds a warning. That keeps fetches all-or-nothing
+- `fetch` pages through the API and hands each raw page to `save_page` as it arrives. It returns postings only if every page succeeded; otherwise it raises `SourceError`, the run drops that source's postings and adds a warning. That keeps fetches all-or-nothing
 - `parse` is pure, raw page to postings. Used by `fetch`, by offline tests on recorded fixtures, and to re-parse stored raw pages after a parser fix
 - Paid sources add `credits()` and `count()`. The Plan stage checks `isinstance(source, PaidSource)`; free sources carry no cost code
-- `RawSink` comes from the store, so adapters don't know the disk layout
+- `save_page` is the run's `RunWriter.save_raw_page` (section 5), passed in by the Fetch stage. The adapter only hands pages over; where and how they are kept is the store's concern
 
 The types around it, all in `sources/base.py`:
 
@@ -337,7 +338,7 @@ class RawPage:              # one response page exactly as returned
     page: int
     body: bytes
 
-RawSink = Callable[[RawPage], None]   # a plain function: no extra Protocol
+SavePage = Callable[[RawPage], None]  # a plain function: no extra Protocol
 ```
 
 ### Settings vs adapter module
@@ -426,16 +427,8 @@ The CV cache and the spend ledger are not part of any run: deleting runs leaves 
 ### Interface
 
 ```python
-class RunStore(Protocol):
-    def start(self, run: Run) -> None: ...
-    def raw_sink(self, run_id: str, source: str) -> RawSink: ...
-    def save_jobs(self, run_id: str, jobs: list[Job]) -> None: ...   # splits off descriptions
-    def save_classifications(self, run_id: str, items: list[Classification]) -> None: ...
-    def save_matches(self, run_id: str, items: list[Match]) -> None: ...
-    def save_extractions(self, run_id: str, items: list[Extraction]) -> None: ...
-    def save_pending(self, run_id: str, jobs: list[Job]) -> None: ...
-    def save_report(self, run_id: str, text: str) -> None: ...
-    def finish(self, run: Run) -> None: ...
+class RunStore(Protocol):            # all runs
+    def start(self, run: Run) -> RunWriter: ...   # records the run as running
     def runs(self) -> list[Run]: ...
     def history(self) -> History: ...   # matched slim jobs + classifications + extractions, completed runs only
     def pending(self) -> list[Job]: ...  # from the last completed run
@@ -446,7 +439,19 @@ class RunStore(Protocol):
     def record_spend(self, source: str, credits: int, at: datetime) -> None: ...   # ledger fallback
     def spend_since(self, source: str, start: date) -> int: ...
     def delete(self, run_id: str) -> None: ...
+
+class RunWriter(Protocol):           # one run, from start to finish
+    def save_raw_page(self, page: RawPage) -> None: ...
+    def save_jobs(self, jobs: list[Job]) -> None: ...   # splits off descriptions
+    def save_classifications(self, items: list[Classification]) -> None: ...
+    def save_matches(self, items: list[Match]) -> None: ...
+    def save_extractions(self, items: list[Extraction]) -> None: ...
+    def save_pending(self, jobs: list[Job]) -> None: ...
+    def save_report(self, text: str) -> None: ...
+    def finish(self, run: Run) -> None: ...   # the final Run, same id; another id raises
 ```
+
+The store serves every run (list, history, caches, delete) and exists before the current run does, so it can't hold one run. `start` returns a writer bound to the new run: no save call takes a run id, and nothing can be saved to a run that wasn't started. `finish` takes a whole `Run` because runs are immutable; the final state is a new `Run` with the same id.
 
 ### Keeping other backends possible (SQLite later)
 
@@ -454,7 +459,7 @@ class RunStore(Protocol):
 - Stable string IDs are the only links: run id, job id, and the `job_id` on `Classification`, `Match` and `Extraction`. Nothing points to data by file path or line number
 - Contract tests: one suite runs against every `RunStore` implementation (`MemoryStore`, `FileStore`, later `SqliteStore`). A new backend is done when it passes
 - Each `run.json` records a schema version, so old runs can be told apart and migrated when models change
-- Raw pages stay gzipped files under any backend (`RawSink` keeps them separate). Trends stay in Python under any backend
+- Raw pages stay gzipped files under any backend (`save_raw_page` keeps them separate). Trends stay in Python under any backend
 
 ### Disk use
 
@@ -1046,3 +1051,5 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Models store collections as tuples | Lists, relying on "frozen" | Pydantic's frozen blocks `job.id = ...` but not `job.postings.append(...)`; tuples make "never changed after" hold |
 | Interfaces start with the methods the skeleton calls and grow per task | Full interfaces from the start | No placeholder types (`History`, `CvAnalysis`, `Credits`) before their sections are built; fakes don't carry unused methods |
 | `now()` returns local time with its UTC offset | UTC; naive local time | Run ids and report dates match the user's clock; saved times stay unambiguous |
+| `RunStore.start` returns a `RunWriter` bound to the new run | Pass `run_id` to every save; the run as a store constructor argument | The store spans all runs and exists before the current one, so it can't take the run; a bound writer removes the id from every call and can't write to an unstarted run |
+| Code comments say what a class or function does, never cite design sections; temporary notes are `TODO(task N)` | Section references in docstrings | Code reads on its own; temporary notes are findable and removed by their task |

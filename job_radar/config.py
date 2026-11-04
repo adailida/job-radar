@@ -1,4 +1,6 @@
-"""Builds the App. Settings and defaults arrive in task 7; stages and alerts in task 4."""
+"""Builds the App: the set of configured objects a run works with."""
+
+# TODO(task 7): load settings with defaults and build the App from them.
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -11,14 +13,19 @@ from job_radar.ui.base import Prompter
 
 
 def local_now() -> datetime:
-    """Current local time with its UTC offset, so run ids match the user's clock."""
+    """Current local time with its UTC offset, so run ids and dates match the user's clock."""
     return datetime.now().astimezone()
 
 
 @dataclass
 class App:
-    """The configured objects a run uses. Tests pass fakes and a fixed `now`."""
+    """Everything a run works with: the language model, run storage, user prompts,
+    job sources and the clock.
 
+    Tests build one with fakes and a fixed clock, so runs are repeatable.
+    """
+
+    # TODO(task 4): add the stages and the alerts collector.
     llm: LLM
     store: RunStore
     prompter: Prompter
