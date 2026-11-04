@@ -1,15 +1,41 @@
 [project]
 name = "job-radar"
 version = "0.1.0"
-description = ""
+description = "Job search and job-market trends, pulled from job APIs"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "httpx>=0.28.1",
+    "pydantic>=2.14.2",
+    "pypdf>=6.21.4",
+    "pyyaml>=6.0.3",
+]
+
+[project.scripts]
+job-radar = "job_radar.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = [
+    "pytest>=8",
+    "pytest-socket>=0.8.1",
+    "ruff>=0.6",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--disable-socket"
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.format]
+# Python sketches in docs are aligned for reading, not formatted
+exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
