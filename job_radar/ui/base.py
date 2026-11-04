@@ -8,6 +8,8 @@ class Prompter(Protocol):
     """Asks the user for input during a run, such as a missing profile field or a go-ahead.
 
     Swappable, so tests can supply scripted answers instead of typing.
+
+    Stateless: returns each answer to its caller and remembers none.
     """
 
     def ask(self, question: str) -> str:

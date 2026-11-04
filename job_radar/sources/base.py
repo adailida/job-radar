@@ -45,6 +45,10 @@ class Source(Protocol):
 
     Turns the user's searches into its own queries, fetches the results, and
     converts them into Postings.
+
+    Stateless: holds only its configuration (board, HTTP client, request delay)
+    and keeps nothing between calls. The plan is data the caller holds between
+    `plan` and `fetch`, so all paid sources can be approved before any fetch.
     """
 
     name: str

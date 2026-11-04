@@ -100,27 +100,73 @@ The goal is that reading `pipeline.py` shows what a run does.
 
 ### Top level
 
-`run()` lists the stages and does nothing else (names are illustrative):
+`run()` lists the stages and saves what each one produces; it does nothing else (names are illustrative):
 
 ```python
-def run(app: App) -> None:
-    user = app.inputs.load()
-    writer = app.store.start(app.new_run(user.criteria))
+def run(app: App, user: UserInput, writer: RunWriter) -> None:
     plans = app.planner.plan(user.criteria)
-    postings = app.fetcher.fetch(plans, writer)
+    postings, results = app.fetcher.fetch(plans, save_page=writer.save_raw_page)
+    writer.save_source_results(results)
     jobs = app.deduper.dedupe(postings)
     jobs = app.filter.apply(jobs, user.criteria)
+    writer.save_jobs(jobs)
     classified = app.classifier.classify(jobs)
+    writer.save_classifications(classified)
     matched = app.matcher.match(classified, user.criteria)
+    writer.save_matches(matched)
     extracted = app.extractor.extract(matched)
+    writer.save_extractions(extracted)
     trends = app.trends.aggregate(extracted)
     gaps = app.gaps.find(extracted, user.cv)
-    report = app.report_builder.build(extracted, trends, gaps, app.alerts)
-    text = app.renderer.render(report)
-    writer.save_report(text)
+    report = app.report_builder.build(writer.run, extracted, trends, gaps, app.alerts)
+    writer.save_report(app.renderer.render(report))
 ```
 
+Stages only compute: they take inputs and return outputs. Saving happens in `run()`, so each save is visible in one place and no stage writes run data.
+
 `App` holds the configured objects. `config.py` builds it from the settings.
+
+### State
+
+Stateless by default. A class takes configuration and collaborators in its constructor and never changes after; data from a run goes in as arguments and comes out as return values. Where state is needed, one holder owns it, is the only thing that changes it, and exposes it read-only. Each class's docstring says which kind it is.
+
+| Object | Kind | Lives for | Holds |
+|---|---|---|---|
+| `App`, stages, sources, `LLM`, `Renderer`, `Prompter`, `ReportBuilder` | Stateless | The process | Configuration and collaborators only |
+| Models (`Posting`, `Job`, `Run`, ...), `FetchPlan`, `RawPage` | Immutable data | As long as someone holds them | Values; a change is a new object |
+| Local variables of `run()` | State | One run | The data passed from stage to stage |
+| `RunWriter` | State | One run, `start` to `finish` | The run's record (`Run`), and what it has saved |
+| Alerts collector | State | One run | The run's warnings |
+| `RunStore` | No state in memory | The process | Nothing; what it saved on disk is the state |
+
+One run, step by step. The wrapper (section 13) owns the writer's lifecycle:
+
+```python
+app = build_app(settings)          # once: configured objects, no run data
+
+def run_once(app: App) -> int:
+    user = app.inputs.load()       # preflight: errors here leave nothing to clean up
+    writer = app.store.start(Run(id=..., status=RUNNING, window=..., criteria=user.criteria))
+                                   # writer now owns this run's record: run.json says "running"
+    try:
+        run(app, user, writer)     # stages compute, run() saves through the writer
+        writer.finish(COMPLETED, app.now())
+        return 0
+    except BaseException:          # JobRadarError, a bug, Ctrl+C
+        writer.finish(FAILED, app.now())
+        ...                        # ask whether to delete the failed run
+```
+
+Inside `run()`, one source fetch shows who holds what:
+
+```python
+plan = source.plan(searches, window)      # source: stateless, returns data
+# cost checks approve every paid source's plan here, before any fetch
+postings = source.fetch(plan, save_page=writer.save_raw_page)
+                                          # source keeps nothing; each page goes straight to the writer
+```
+
+The end to end test in task 4 runs this flow with fakes and checks the writer's record at each step.
 
 ### Interfaces at the swap points
 
@@ -440,18 +486,21 @@ class RunStore(Protocol):            # all runs
     def spend_since(self, source: str, start: date) -> int: ...
     def delete(self, run_id: str) -> None: ...
 
-class RunWriter(Protocol):           # one run, from start to finish
+class RunWriter(Protocol):           # one run, from start to finish; stateful
+    @property
+    def run(self) -> Run: ...        # the run as last saved, read-only
     def save_raw_page(self, page: RawPage) -> None: ...
+    def save_source_results(self, results: list[SourceResult]) -> None: ...  # updates the run record
     def save_jobs(self, jobs: list[Job]) -> None: ...   # splits off descriptions
     def save_classifications(self, items: list[Classification]) -> None: ...
     def save_matches(self, items: list[Match]) -> None: ...
     def save_extractions(self, items: list[Extraction]) -> None: ...
     def save_pending(self, jobs: list[Job]) -> None: ...
     def save_report(self, text: str) -> None: ...
-    def finish(self, run: Run) -> None: ...   # the final Run, same id; another id raises
+    def finish(self, status: RunStatus, finished_at: datetime) -> None: ...  # nothing saved after
 ```
 
-The store serves every run (list, history, caches, delete) and exists before the current run does, so it can't hold one run. `start` returns a writer bound to the new run: no save call takes a run id, and nothing can be saved to a run that wasn't started. `finish` takes a whole `Run` because runs are immutable; the final state is a new `Run` with the same id.
+The store serves every run (list, history, caches, delete) and exists before the current run does, so it can't hold one run. `start` returns a writer that owns the new run's record (see State in section 2): no save call takes a run id, and nothing can be saved to a run that wasn't started. Source results are saved as soon as fetching ends, so a run that fails later still shows what it spent. `finish` takes the time from the caller, so the writer needs no clock.
 
 ### Keeping other backends possible (SQLite later)
 
@@ -1053,3 +1102,5 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | `now()` returns local time with its UTC offset | UTC; naive local time | Run ids and report dates match the user's clock; saved times stay unambiguous |
 | `RunStore.start` returns a `RunWriter` bound to the new run | Pass `run_id` to every save; the run as a store constructor argument | The store spans all runs and exists before the current one, so it can't take the run; a bound writer removes the id from every call and can't write to an unstarted run |
 | Code comments say what a class or function does, never cite design sections; temporary notes are `TODO(task N)` | Section references in docstrings | Code reads on its own; temporary notes are findable and removed by their task |
+| Stateless by default; state only in a few named holders (`run()` locals, `RunWriter`, alerts) | State wherever convenient | Who changes what is visible; stateless classes are tested with plain inputs |
+| `run()` saves each stage's output through the writer; stages only compute | Stages save their own output | Every save in one place; stages need no writer and stay pure |

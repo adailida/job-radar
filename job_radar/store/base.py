@@ -1,20 +1,43 @@
 """The interfaces for saving run data and reading it back."""
 
+from datetime import datetime
 from typing import Protocol
 
-from job_radar.model import Classification, Extraction, Job, Match, Run
+from job_radar.model import (
+    Classification,
+    Extraction,
+    Job,
+    Match,
+    Run,
+    RunStatus,
+    SourceResult,
+)
 from job_radar.sources.base import RawPage
 
 
 class RunWriter(Protocol):
     """Saves what one run produces, from its start to its finish.
 
-    Got from `RunStore.start`; it already knows its run, so nothing it saves
-    can end up in another run.
+    Stateful: owns the record of one run, got from `RunStore.start` and dropped
+    when the run finishes. It is the only thing that changes that record; others
+    read it through `run`. Nothing it saves can end up in another run.
     """
+
+    @property
+    def run(self) -> Run:
+        """The run as last saved."""
+        ...
 
     def save_raw_page(self, page: RawPage) -> None:
         """Keep one raw response page as received from a source."""
+        ...
+
+    def save_source_results(self, results: list[SourceResult]) -> None:
+        """Record what each source did: queries, postings fetched, credits.
+
+        Saved as soon as fetching ends, so a run that fails later still shows
+        what it spent.
+        """
         ...
 
     def save_jobs(self, jobs: list[Job]) -> None:
@@ -37,17 +60,17 @@ class RunWriter(Protocol):
         """Keep the run's rendered report."""
         ...
 
-    def finish(self, run: Run) -> None:
-        """Record the run's final state: status, finish time, how each source did.
-
-        Takes the whole Run because runs are immutable; the final state is a new
-        Run with the same id. Raises if the id is not this writer's run.
-        """
+    def finish(self, status: RunStatus, finished_at: datetime) -> None:
+        """Close the run as completed or failed. Nothing can be saved after this."""
         ...
 
 
 class RunStore(Protocol):
-    """Where all runs are kept: starts new ones and reads earlier ones back."""
+    """Where all runs are kept: starts new ones and reads earlier ones back.
+
+    Keeps no state in memory: what it has saved is the state. One store serves
+    every run, so it holds no current run; `start` hands out a writer for that.
+    """
 
     # TODO(task 10): add history, cached LLM results, pending jobs and delete.
     # TODO(task 19): add the spend ledger.

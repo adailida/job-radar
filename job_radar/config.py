@@ -23,6 +23,9 @@ class App:
     job sources and the clock.
 
     Tests build one with fakes and a fixed clock, so runs are repeatable.
+
+    Holds configured objects only, never data from a run, so one App can serve
+    several runs.
     """
 
     # TODO(task 4): add the stages and the alerts collector.
