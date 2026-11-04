@@ -133,6 +133,8 @@ An interface exists where a second implementation exists or the requirements ask
 | `Renderer` | Markdown | The report sits behind a format layer |
 | `Prompter` | Terminal, scripted fake | Runs are interactive; tests cannot type |
 
+Interfaces grow with the build: each starts with the methods the walking skeleton calls, and the task that needs a method adds it as its section specifies.
+
 Interfaces are `typing.Protocol` classes: implementations and fakes don't inherit from them.
 
 ### Stages
@@ -204,7 +206,7 @@ class Posting:              # built by the adapter
     source_id: str          # id inside that source; key = "source:source_id"
     title: str
     company: str
-    locations: list[Location]
+    locations: tuple[Location, ...]
     work_mode: WorkMode     # onsite | hybrid | remote | unknown
     salary: Salary | None
     url: str                # link to the posting
@@ -225,8 +227,8 @@ class Salary:
 
 class Job:                  # one opening after dedupe
     id: str                 # stable across runs: an earlier job's id when keys overlap, else the primary posting's key
-    keys: list[str]         # identity keys: posting, ATS, fuzzy (section 8)
-    postings: list[Posting] # primary first; the report shows its fields
+    keys: tuple[str, ...]   # identity keys: posting, ATS, fuzzy (section 8)
+    postings: tuple[Posting, ...]  # primary first; the report shows its fields
     first_seen: date        # date of the run that first saw it
 
 class Classification:       # one per classified job
@@ -239,12 +241,12 @@ class Classification:       # one per classified job
 
 class Extraction:           # one per matched job
     job_id: str
-    requirements: list[Requirement]
+    requirements: tuple[Requirement, ...]
     prompt_version: str
 
 class Match:                # one per matched job
     job_id: str
-    searches: list[str]     # names of the searches it matched
+    searches: tuple[str, ...]  # names of the searches it matched
 
 class Requirement:
     type: RequirementType   # skill | tool | certification | years
@@ -256,13 +258,17 @@ class Run:
     started_at: datetime
     finished_at: datetime | None
     status: RunStatus       # running | completed | failed
-    window: tuple[date, date]
+    window: Window
     criteria: SearchCriteria    # snapshot of the profile's searches, to note changes between periods
-    sources: list[SourceResult]
+    sources: tuple[SourceResult, ...]
+
+class Window:               # dates a run covers, both ends included; start after end is rejected
+    start: date
+    end: date
 
 class SourceResult:
     source: str
-    queries: list[dict]     # what was sent, one per search
+    queries: tuple[dict, ...]  # what was sent, one per search
     fetched: int
     estimate: int | None        # paid sources: sum of counts (section 12)
     credits_before: int | None
@@ -282,6 +288,8 @@ How the requirements map onto it:
 ### Model classes
 
 - **Pydantic** (frozen) for everything that crosses a boundary: files, LLM output, APIs. That is every model above, plus settings and user input (section 7)
+- Frozen means frozen: collections are tuples, so `job.postings.append(...)` fails like `job.id = ...` does. Lists passed in are converted. The `dict` inside `SourceResult.queries` stays mutable; it is written once by the Plan stage
+- Unknown fields are rejected (`extra="forbid"`), so a typo in saved data fails to load instead of being dropped. Optional fields default to `None`
 - **Pydantic inside each adapter** for that source's raw response, with only the fields used (extra fields ignored). An API change then fails with the field that broke, reported as a source warning. These models never leave the adapter
 - **Dataclasses** for objects that live only in memory during a run: `App`, fetch plans, the `Report` passed to the renderer
 
@@ -313,6 +321,24 @@ class PaidSource(Source, Protocol):
 - `parse` is pure, raw page to postings. Used by `fetch`, by offline tests on recorded fixtures, and to re-parse stored raw pages after a parser fix
 - Paid sources add `credits()` and `count()`. The Plan stage checks `isinstance(source, PaidSource)`; free sources carry no cost code
 - `RawSink` comes from the store, so adapters don't know the disk layout
+
+The types around it, all in `sources/base.py`:
+
+```python
+@dataclass(frozen=True)
+class FetchPlan:            # in memory only
+    source: str
+    window: Window
+    queries: tuple[dict, ...]   # one per search; copied to SourceResult.queries
+
+@dataclass(frozen=True)
+class RawPage:              # one response page exactly as returned
+    source: str
+    page: int
+    body: bytes
+
+RawSink = Callable[[RawPage], None]   # a plain function: no extra Protocol
+```
 
 ### Settings vs adapter module
 
@@ -573,6 +599,14 @@ sources:
 - If `profile.yaml` is missing or a field is invalid, the `Prompter` asks for those fields only and validates each answer
 - An empty answer stops the run with an error
 - At the end it offers to save the answers to `local/profile.yaml`
+
+```python
+class Prompter(Protocol):
+    def ask(self, question: str) -> str: ...      # free text; "" when the user gives none
+    def choose(self, question: str, options: Sequence[str], default: str | None = None) -> str: ...
+```
+
+`choose` covers yes/no confirmations (delete a run, failed-run prompt) and the cost-check outcomes (section 12).
 
 ## 8. Cross-source dedup and job identity
 
@@ -1009,3 +1043,6 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Preflight before the run folder exists | Create the folder first | Settings and input errors leave nothing to clean up, and no credits or LLM calls are spent |
 | Failed-run delete prompt defaults to yes | Default no | A failed run never counts; keeping it is only for inspection |
 | Exit codes 0, 1, 2 | Always 0 | Scheduled runs later can tell outcomes apart |
+| Models store collections as tuples | Lists, relying on "frozen" | Pydantic's frozen blocks `job.id = ...` but not `job.postings.append(...)`; tuples make "never changed after" hold |
+| Interfaces start with the methods the skeleton calls and grow per task | Full interfaces from the start | No placeholder types (`History`, `CvAnalysis`, `Credits`) before their sections are built; fakes don't carry unused methods |
+| `now()` returns local time with its UTC offset | UTC; naive local time | Run ids and report dates match the user's clock; saved times stay unambiguous |

@@ -30,8 +30,8 @@ Goal: `job-radar run` goes through all 11 stages and writes a report, with the s
   - Tests: the package imports; a test that opens a socket fails
   - Acceptance: Runs: tests run offline
 
-- [ ] **2. Models and interfaces**
-  - Pydantic models (section 3) with the fields the skeleton needs; the five `Protocol`s (section 2); `App`; `now()`
+- [x] **2. Models and interfaces**
+  - Pydantic models (section 3) with the fields the skeleton needs; the `Source`, `LLM`, `RunStore` and `Prompter` `Protocol`s (section 2), with the methods the skeleton calls; `App`; `now()`
   - Tests: models round-trip to JSON; models are frozen
 
 - [ ] **3. Fakes**
@@ -40,7 +40,7 @@ Goal: `job-radar run` goes through all 11 stages and writes a report, with the s
 
 - [ ] **4. Pipeline with stub stages**
   - `run()` lists all 11 stages; each stage is its own class at its simplest: dedupe by posting key, filter on roles only, Classify and Extract return empty, Match keeps all, trends count only, gaps empty
-  - `JobRadarError` and `App.alerts` (section 13); Markdown renderer with every report section
+  - `JobRadarError` and `App.alerts` (section 13); `Report` and the `Renderer` `Protocol` (section 11); Markdown renderer with every report section
   - Tests: end to end with fakes gives a report with every section; a warning raised in a stage shows at the top
 
 - [ ] **5. Minimal FileStore and CLI**
