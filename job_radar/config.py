@@ -28,7 +28,8 @@ class App:
     several runs.
     """
 
-    # TODO(task 4): add the stages and the alerts collector.
+    # TODO(task 4): add the stages and the renderer.
+    # TODO(task 7): add the settings.
     llm: LLM
     store: RunStore
     prompter: Prompter

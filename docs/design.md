@@ -100,73 +100,298 @@ The goal is that reading `pipeline.py` shows what a run does.
 
 ### Top level
 
-`run()` lists the stages and saves what each one produces; it does nothing else (names are illustrative):
+`run()` lists the stages in order. It also does every read and write of run data, so stages only compute: they take data in and return data out.
 
 ```python
-def run(app: App, user: UserInput, writer: RunWriter) -> None:
-    plans = app.planner.plan(user.criteria)
-    postings, results = app.fetcher.fetch(plans, save_page=writer.save_raw_page)
-    writer.save_source_results(results)
-    jobs = app.deduper.dedupe(postings)
+def run(app: App, user: UserInput, writer: RunWriter, alerts: Alerts) -> None:
+    history = app.store.history()
+    plans = app.planner.plan(user.criteria, writer.run.window, alerts)
+    fetched = app.fetcher.fetch(plans, writer.save_raw_page, alerts)
+    writer.save_source_results(fetched.results)
+    jobs = app.deduper.dedupe(fetched.postings, history, app.store.pending(), writer.run.started_at.date())
     jobs = app.filter.apply(jobs, user.criteria)
     writer.save_jobs(jobs)
-    classified = app.classifier.classify(jobs)
-    writer.save_classifications(classified)
-    matched = app.matcher.match(classified, user.criteria)
-    writer.save_matches(matched)
-    extracted = app.extractor.extract(matched)
-    writer.save_extractions(extracted)
-    trends = app.trends.aggregate(extracted)
-    gaps = app.gaps.find(extracted, user.cv)
-    report = app.report_builder.build(writer.run, extracted, trends, gaps, app.alerts)
+    classified = app.classifier.classify(jobs, app.store.cached_classifications(ids(jobs)), alerts)
+    writer.save_classifications(classified.items)
+    matches = app.matcher.match(jobs, classified.items, user.criteria)
+    writer.save_matches(matches)
+    extracted = app.extractor.extract(matched(jobs, matches), app.store.cached_extractions(...), history.vocabulary, alerts)
+    writer.save_extractions(extracted.items)
+    writer.save_pending(classified.pending + extracted.pending)
+    trends = app.trends.aggregate(history, extracted.items, writer.run)
+    asks = app.requirements.rank(history, extracted.items, writer.run)
+    gaps = app.gaps.find(asks, user.cv, app.store.cv_analysis(user.cv.hash))
+    if gaps.new_analysis:
+        app.store.save_cv_analysis(user.cv.hash, gaps.new_analysis)
+    report = app.report_builder.build(writer.run, jobs, classified, matches, extracted, trends, asks, gaps, alerts.items)
     writer.save_report(app.renderer.render(report))
 ```
 
-Stages only compute: they take inputs and return outputs. Saving happens in `run()`, so each save is visible in one place and no stage writes run data.
-
-`App` holds the configured objects. `config.py` builds it from the settings.
+Argument lists are trimmed for reading; the Actors table below has the exact functions.
 
 ### State
 
 Stateless by default. A class takes configuration and collaborators in its constructor and never changes after; data from a run goes in as arguments and comes out as return values. Where state is needed, one holder owns it, is the only thing that changes it, and exposes it read-only. Each class's docstring says which kind it is.
 
-| Object | Kind | Lives for | Holds |
+State lives in exactly four places, all scoped to one run:
+
+| Holder | Holds | Lives |
+|---|---|---|
+| `run_once()` local variables | `user`, `writer`, `alerts` | One run |
+| `run()` local variables | The data passed from stage to stage | One run |
+| `RunWriter` (`FileRunWriter`, `MemoryRunWriter`) | The run's record (`Run`) and what it has saved | `RunStore.start` to `finish` |
+| `Alerts` | The run's warnings | One run |
+
+Everything else is stateless or immutable data. `RunStore` keeps nothing in memory: what it saved is the state. A stateless object may hold another stateless one (a stage holds the `LLM`), never a stateful one: per-run holders (`writer`, `alerts`) are passed as call arguments.
+
+### Actors
+
+Every class and function of the MVP. **Kind**: stateless (S), state holder (**State**), immutable data (D). **Task**: where it is built (later tasks extend it).
+
+#### Entry and run lifecycle
+
+| Actor | Kind | Functions | Task |
 |---|---|---|---|
-| `App`, stages, sources, `LLM`, `Renderer`, `Prompter`, `ReportBuilder` | Stateless | The process | Configuration and collaborators only |
-| Models (`Posting`, `Job`, `Run`, ...), `FetchPlan`, `RawPage` | Immutable data | As long as someone holds them | Values; a change is a new object |
-| Local variables of `run()` | State | One run | The data passed from stage to stage |
-| `RunWriter` | State | One run, `start` to `finish` | The run's record (`Run`), and what it has saved |
-| Alerts collector | State | One run | The run's warnings |
-| `RunStore` | No state in memory | The process | Nothing; what it saved on disk is the state |
+| `cli.main` | S, function | `main(argv) -> int`: parse the command, build the App, dispatch to `run_once`, `list_runs`, `delete_run`; returns the exit code | 1, 5, 10 |
+| `config.load_settings` | S, function | `load_settings(path) -> Settings`: defaults, deep merge, validation | 7 |
+| `config.build_app` | S, function | `build_app(settings) -> App`: builds every object below from the settings | 5, 7 |
+| `App` | S, dataclass | Fields only: `settings`, `sources`, `llm`, `store`, `prompter`, `renderer`, the stages, `now`. No run data, so one App can serve several runs | 2, 4 |
+| `pipeline.run_once` | S, function; its locals are **State** | `run_once(app, profile_path) -> int`: preflight, `store.start`, `run`, `finish`, failed-run prompt, exit code | 4, 24 |
+| `pipeline.preflight` | S, function | `preflight(app, profile_path) -> UserInput`: load and validate input, take the lock, handle a stale run, check the LLM and API keys. Raises before anything is created | 4, 24 |
+| `pipeline.run` | S, function; its locals are **State** | `run(app, user, writer, alerts) -> None`: the stages in order, every save | 4 |
+| `stages.window.window_for` | S, function | `window_for(runs, today, lookback_days, new_only) -> WindowChoice`: the run's dates and whether the lookback capped them | 5, 11 |
+| `Alerts` | **State** | `warn(code, message)`: record and print a warning; `items -> list[Alert]`. Created per run by `run_once` | 4 |
+| `JobRadarError` and subclasses | D, exception | `code`, `message`, `hint`. One subclass per error code (section 13) | 4, 24 |
 
-One run, step by step. The wrapper (section 13) owns the writer's lifecycle:
+#### Inputs
 
-```python
-app = build_app(settings)          # once: configured objects, no run data
+| Actor | Kind | Functions | Task |
+|---|---|---|---|
+| `InputLoader` | S | `load(profile_path) -> UserInput`: read the profile and CV; ask through the `Prompter` for anything missing | 5, 8, 9 |
+| `UserInput` | D | `criteria: SearchCriteria`, `cv: CV` | 5 |
+| `CV` | D | `text`, `hash` | 8 |
+| `Settings` and parts | D | Every setting with its default (section 7) | 7 |
 
-def run_once(app: App) -> int:
-    user = app.inputs.load()       # preflight: errors here leave nothing to clean up
-    writer = app.store.start(Run(id=..., status=RUNNING, window=..., criteria=user.criteria))
-                                   # writer now owns this run's record: run.json says "running"
-    try:
-        run(app, user, writer)     # stages compute, run() saves through the writer
-        writer.finish(COMPLETED, app.now())
-        return 0
-    except BaseException:          # JobRadarError, a bug, Ctrl+C
-        writer.finish(FAILED, app.now())
-        ...                        # ask whether to delete the failed run
+#### Stages (each in `stages/`, constructor takes settings and stateless collaborators)
+
+| Actor | Kind | Functions | Task |
+|---|---|---|---|
+| `Planner(sources, prompter, limits)` | S | `plan(criteria, window, alerts) -> list[FetchPlan]`: one plan per source; paid sources get credits, counts and the cost check, which may ask the user | 4, 19 |
+| `Fetcher(sources)` | S | `fetch(plans, save_page, alerts) -> Fetched`: each source in full or not at all; a failed source is a warning, all failed is an error | 4, 6 |
+| `Deduper(new_only)` | S | `dedupe(postings, history, pending, today) -> list[Job]`: merge across sources, inherit ids, drop seen jobs, add pending jobs | 4, 13, 17 |
+| `Filter()` | S | `apply(jobs, criteria) -> list[Job]`: criteria on source fields; drop counts go to the funnel | 4, 12 |
+| `Classifier(llm, prompter, batch_size, domains, job_types)` | S | `classify(jobs, cached, alerts) -> Classified`: reuse cached labels, batch the rest to the LLM; on the usage limit, ask and leave the rest pending | 4, 15, 17 |
+| `Matcher()` | S | `match(jobs, classifications, criteria) -> list[Match]`: criteria on inferred fields | 4, 15 |
+| `Extractor(llm, prompter, batch_size, max_jobs)` | S | `extract(jobs, cached, vocabulary, alerts) -> Extracted`: volume guard, reuse cached, batch the rest | 4, 16, 17 |
+| `TrendAggregator(period)` | S | `aggregate(history, this_run, run) -> Trends`: figures per period, coverage, criteria changes | 4, 20 |
+| `RequirementRanker(per_type)` | S | `rank(history, this_run, run) -> Asks`: top requirements per type over the rolling window | 4, 21 |
+| `GapFinder(llm)` | S | `find(asks, cv, cached) -> Gaps`: exact match, then one LLM call; returns any new CV analysis for the caller to cache | 4, 22 |
+| `ReportBuilder(report_settings)` | S | `build(run, jobs, classified, matches, extracted, trends, asks, gaps, alerts) -> Report`: every number, order and grouping | 4, 23 |
+
+#### Sources
+
+| Actor | Kind | Functions | Task |
+|---|---|---|---|
+| `Source` | Protocol | `name`; `plan(searches, window) -> FetchPlan`; `fetch(plan, save_page) -> list[Posting]`; `parse(raw) -> list[Posting]` | 2 |
+| `PaidSource` | Protocol | `Source` plus `credits() -> Credits`; `count(plan) -> int` | 18 |
+| `GetroSource(board, http, delay)` | S | `Source` | 6 |
+| `JobsPipeSource(api_key, plan, filters, http)` | S | `PaidSource` | 18 |
+| `FakeSource(postings)` | S | `Source`, returns its postings | 3 |
+| `FetchPlan`, `RawPage`, `Credits` | D | Data between a source and the run | 2, 18 |
+
+#### LLM
+
+| Actor | Kind | Functions | Task |
+|---|---|---|---|
+| `LLM` | Protocol | `complete(system, prompt) -> str`; `check()`: raises if unavailable (task 14) | 2, 14 |
+| `ClaudeCliLLM(model, timeout, concurrency, runner)` | S | `LLM`, through `claude -p` | 14 |
+| `FakeLLM(answers)` | S | `LLM`, scripted replies | 3 |
+| `llm.ask_json` | S, function | `ask_json(llm, system, prompt, model) -> T`: validate, retry once, then split the batch | 14 |
+
+#### Storage
+
+| Actor | Kind | Functions | Task |
+|---|---|---|---|
+| `RunStore` | Protocol | `start(run) -> RunWriter`; `runs()`; `history()`; `pending()`; `cached_classifications(ids)`; `cached_extractions(ids)`; `cv_analysis(hash)`; `save_cv_analysis(hash, item)`; `lock()`; `delete(run_id)`; `record_spend`, `spend_since` | 2, 10, 19 |
+| `RunWriter` | Protocol, **State** | `run`; `save_raw_page`; `save_source_results`; `save_jobs`; `save_classifications`; `save_matches`; `save_extractions`; `save_pending`; `save_report`; `finish(status, finished_at)` | 2 |
+| `FileStore(path)`, `FileRunWriter` | S, **State** | Files under `output/` (section 5) | 5, 10 |
+| `MemoryStore`, `MemoryRunWriter` | S, **State** | In memory, for tests | 3 |
+| `History` | D | Matched jobs from completed runs, slim, with classifications, extractions and the key index; `vocabulary` | 10 |
+
+#### Report and user prompts
+
+| Actor | Kind | Functions | Task |
+|---|---|---|---|
+| `Renderer` | Protocol | `extension`; `render(report) -> str` | 4 |
+| `MarkdownRenderer` | S | `Renderer` | 4, 23 |
+| `Report` and parts | D | Everything the report shows, decided (section 11) | 4, 23 |
+| `Prompter` | Protocol | `ask(question) -> str`; `choose(question, options, default) -> str` | 2 |
+| `TerminalPrompter` | S | `Prompter`, on stdin and stdout | 9 |
+| `ScriptedPrompter(answers)` | S | `Prompter`, scripted answers | 3 |
+
+#### Data passed between stages (all D)
+
+| Type | Made by | Holds |
+|---|---|---|
+| `Fetched` | `Fetcher` | `postings`, `results: list[SourceResult]` |
+| `Classified` | `Classifier` | `items: list[Classification]`, `pending: list[Job]` |
+| `Extracted` | `Extractor` | `items: list[Extraction]`, `pending: list[Job]` |
+| `Trends`, `Asks`, `Gaps` | Aggregate and Compare stages | Their report sections; `Gaps.new_analysis` for the cache |
+| `WindowChoice` | `window_for` | `window`, `capped` |
+
+### One run, end to end
+
+Shaded boxes hold state. Every other participant is stateless.
+
+**Startup**, from the command to the first stage:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CLI as cli.main
+    participant CFG as config
+    participant Once as run_once
+    participant Pre as preflight
+    participant In as InputLoader
+    participant P as Prompter
+    participant L as LLM
+    participant S as RunStore
+    box rgba(255, 193, 7, 0.25) State for this run
+        participant W as RunWriter
+        participant A as Alerts
+    end
+    participant Run as run
+
+    CLI->>CFG: load_settings(path)
+    CFG-->>CLI: Settings
+    CLI->>CFG: build_app(settings)
+    CFG-->>CLI: App
+    CLI->>Once: run_once(app, profile_path)
+    Once->>Pre: preflight(app, profile_path)
+    Pre->>In: load(profile_path)
+    opt profile field missing or invalid
+        In->>P: ask(question)
+        P-->>In: answer
+    end
+    In-->>Pre: UserInput
+    Pre->>S: lock()
+    Pre->>S: runs()
+    S-->>Pre: earlier runs
+    opt a run is still marked running
+        Pre->>P: choose("delete it?", yes or no)
+        Pre->>S: delete(run_id)
+    end
+    Pre->>L: check()
+    Pre-->>Once: UserInput
+    Once->>S: runs()
+    S-->>Once: earlier runs
+    Once->>Once: window_for(runs, today, lookback, new_only)
+    Once->>S: start(Run with status running)
+    S-->>Once: RunWriter
+    Once->>A: Alerts()
+    Once->>Run: run(app, user, writer, alerts)
+    Run-->>Once: done
+    Once->>W: finish(COMPLETED, now)
+    Once-->>CLI: exit code 0
+    opt error, bug or Ctrl+C after start
+        Once->>W: finish(FAILED, now)
+        Once->>P: choose("delete its data?", yes or no)
+        Once->>S: delete(run_id)
+        Once-->>CLI: exit code 1 or 2
+    end
 ```
 
-Inside `run()`, one source fetch shows who holds what:
+**Inside `run()`**, from planning to the report:
 
-```python
-plan = source.plan(searches, window)      # source: stateless, returns data
-# cost checks approve every paid source's plan here, before any fetch
-postings = source.fetch(plan, save_page=writer.save_raw_page)
-                                          # source keeps nothing; each page goes straight to the writer
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Run as run
+    participant S as RunStore
+    box rgba(255, 193, 7, 0.25) State for this run
+        participant W as RunWriter
+        participant A as Alerts
+    end
+    participant Pl as Planner
+    participant Src as Source
+    participant F as Fetcher
+    participant D as Deduper and Filter
+    participant C as Classifier
+    participant M as Matcher
+    participant E as Extractor
+    participant L as LLM
+    participant P as Prompter
+    participant Ag as TrendAggregator and RequirementRanker
+    participant G as GapFinder
+    participant R as ReportBuilder and Renderer
+
+    Run->>S: history()
+    S-->>Run: History
+    Run->>Pl: plan(criteria, window, alerts)
+    Pl->>Src: plan(searches, window)
+    Src-->>Pl: FetchPlan
+    opt paid source
+        Pl->>Src: credits(), count(plan)
+        opt over a limit
+            Pl->>P: choose(go ahead, skip, stop)
+        end
+    end
+    Pl-->>Run: plans
+    Run->>F: fetch(plans, writer.save_raw_page, alerts)
+    F->>Src: fetch(plan, save_page)
+    loop each page
+        Src->>W: save_raw_page(RawPage)
+    end
+    Src-->>F: postings
+    opt source failed
+        F->>A: warn(source_failed)
+    end
+    F-->>Run: Fetched
+    Run->>W: save_source_results(results)
+    Run->>S: pending()
+    Run->>D: dedupe(postings, history, pending, today), then apply(jobs, criteria)
+    D-->>Run: jobs
+    Run->>W: save_jobs(jobs)
+    Run->>S: cached_classifications(ids)
+    Run->>C: classify(jobs, cached, alerts)
+    C->>L: complete(system, prompt), per batch
+    opt usage limit reached
+        C->>P: choose(finish and carry over, stop)
+    end
+    C-->>Run: Classified
+    Run->>W: save_classifications(items)
+    Run->>M: match(jobs, classifications, criteria)
+    M-->>Run: matches
+    Run->>W: save_matches(matches)
+    Run->>S: cached_extractions(ids)
+    Run->>E: extract(matched jobs, cached, vocabulary, alerts)
+    opt above max_jobs_per_run
+        E->>P: choose(go ahead, stop)
+    end
+    E->>L: complete(system, prompt), per batch
+    E-->>Run: Extracted
+    Run->>W: save_extractions(items)
+    Run->>W: save_pending(jobs left by the usage limit)
+    Run->>Ag: aggregate(history, this run, run), rank(...)
+    Ag-->>Run: Trends, Asks
+    Run->>S: cv_analysis(cv.hash)
+    Run->>G: find(asks, cv, cached)
+    G->>L: complete(...), only for requirements not cached
+    G-->>Run: Gaps
+    opt new CV analysis
+        Run->>S: save_cv_analysis(hash, analysis)
+    end
+    Run->>R: build(run, ..., alerts.items), render(report)
+    R-->>Run: report text
+    Run->>W: save_report(text)
 ```
 
-The end to end test in task 4 runs this flow with fakes and checks the writer's record at each step.
+What to read from it:
+
+- Only `run_once` creates and finishes the writer, so a failure anywhere still closes the run as failed
+- Only `run()` reads earlier runs (`RunStore`) and writes this one (`RunWriter`). Stages get data in and return data, so they are tested with plain inputs
+- The one place a stateless object touches a state holder directly is `Source.fetch` calling `save_page`, a function `run()` passes in: the source never holds the writer
+- `Alerts` is passed per call, never stored in a stage
 
 ### Interfaces at the swap points
 
@@ -189,9 +414,9 @@ Interfaces are `typing.Protocol` classes: implementations and fakes don't inheri
 Each stage is a small class in its own file. It takes its settings and collaborators in the constructor and has no interface of its own:
 
 ```python
-deduper = Deduper(store=store, new_only=settings.new_only)
-trends = TrendAggregator(store=store, period=settings.trend_period)
-extractor = Extractor(llm=llm, batch_size=settings.llm.extract_batch)
+deduper = Deduper(new_only=settings.new_only)
+trends = TrendAggregator(period=settings.trend_period)
+extractor = Extractor(llm=llm, prompter=prompter, batch_size=settings.llm.extract_batch, max_jobs=settings.llm.max_jobs_per_run)
 ```
 
 ### Declarative configuration
@@ -219,7 +444,8 @@ The stage order stays in code, not in settings.
 ```
 job_radar/
   cli.py           commands: run, runs, delete
-  pipeline.py      run(): the stages, nothing else
+  pipeline.py      run_once(), preflight(), run(): the run lifecycle and the stages in order
+  errors.py        JobRadarError and its subclasses, Alerts
   model.py         Posting, Job, Classification, Match, Extraction, Run
   config.py        settings and defaults; builds App
   inputs.py        profile and CV (PDF via pypdf)
@@ -228,7 +454,7 @@ job_radar/
   store/           base.py (RunStore), files.py
   report/          base.py (Renderer), builder.py (ReportBuilder), markdown.py
   ui/              base.py (Prompter), terminal.py
-  stages/          plan.py, fetch.py, dedupe.py, filter.py, classify.py, match.py, extract.py, trends.py, gaps.py
+  stages/          window.py, plan.py, fetch.py, dedupe.py, filter.py, classify.py, match.py, extract.py, trends.py, requirements.py, gaps.py
 tests/
   fakes.py         FakeSource, FakeLLM, MemoryStore, ScriptedPrompter
 ```
@@ -977,7 +1203,7 @@ Credits left: 3,180.
 ### Mechanism
 
 - Errors are exceptions: one base class `JobRadarError`; each subclass carries a message and a hint on what to do. Stages raise them; one wrapper around `run()` catches them, so `run()` stays a plain list of stages
-- Warnings are collected, not raised: `App.alerts` is passed to stages, which call `alerts.warn(code, message, ...)`. Each is printed when it happens, saved in `run.json`, and shown at the top of the report
+- Warnings are collected, not raised: `run_once` creates one `Alerts` per run and passes it to the stages that warn, which call `alerts.warn(code, message)`. Each is printed when it happens, saved in `run.json`, and shown at the top of the report
 - Unexpected exceptions (bugs) and Ctrl+C take the same failed-run path. For a bug, the traceback goes to `error.log` in the run folder and the terminal shows one line pointing to it
 
 ### Preflight
@@ -1093,7 +1319,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | No "go ahead" when the estimate exceeds credits left | Allow it, hoping overlap makes it fit | Running out mid-fetch would make the fetch partial |
 | Fetch capped at estimate plus 10%; over the cap the source fails | No cap; hard cap at the estimate | Keeps fetches all-or-nothing and spend near what was approved; repeats within the month are free |
 | Monthly spend from the source's credit data; ledger outside run folders as fallback | Sum spend recorded in run data | Deleting runs must not reset the budget |
-| Errors as exceptions caught by one wrapper; warnings collected in `App.alerts` | Result objects from every stage; a logging framework | `run()` stays a plain list of stages; warnings reach terminal, run data and report from one place |
+| Errors as exceptions caught by one wrapper; warnings collected in a per-run `Alerts` | Result objects from every stage; a logging framework | `run()` stays a plain list of stages; warnings reach terminal, run data and report from one place |
 | Preflight before the run folder exists | Create the folder first | Settings and input errors leave nothing to clean up, and no credits or LLM calls are spent |
 | Failed-run delete prompt defaults to yes | Default no | A failed run never counts; keeping it is only for inspection |
 | Exit codes 0, 1, 2 | Always 0 | Scheduled runs later can tell outcomes apart |
@@ -1103,4 +1329,5 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | `RunStore.start` returns a `RunWriter` bound to the new run | Pass `run_id` to every save; the run as a store constructor argument | The store spans all runs and exists before the current one, so it can't take the run; a bound writer removes the id from every call and can't write to an unstarted run |
 | Code comments say what a class or function does, never cite design sections; temporary notes are `TODO(task N)` | Section references in docstrings | Code reads on its own; temporary notes are findable and removed by their task |
 | Stateless by default; state only in a few named holders (`run()` locals, `RunWriter`, alerts) | State wherever convenient | Who changes what is visible; stateless classes are tested with plain inputs |
-| `run()` saves each stage's output through the writer; stages only compute | Stages save their own output | Every save in one place; stages need no writer and stay pure |
+| `run()` does every read of earlier runs and write of this run; stages get data and return data | Stages hold the store and read or save themselves | Stages are tested with plain inputs and no fakes (section 6); every I/O call is visible in one function |
+| `Alerts` created per run and passed per call | `App.alerts` | `App` is built once and holds no run data; a stateless stage never holds a stateful object |
