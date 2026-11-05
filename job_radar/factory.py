@@ -10,12 +10,11 @@ from job_radar.app import JobRadarApp
 from job_radar.checkpoints import FileCheckpoints
 from job_radar.clock import Clock
 from job_radar.history import FileRunHistory
-from job_radar.llm import ClaudeCli
 from job_radar.model import CandidateProfile, Model, Search, Window
 from job_radar.pipeline import Pipeline, Step
-from job_radar.profile import DEMO_PROFILE, ProfileLoader
+from job_radar.profile import DEMO_PROFILE
 from job_radar.prompter import Prompter
-from job_radar.ranking import JobRanker, KeywordRanker, LlmRanker
+from job_radar.ranking import JobRanker, KeywordRanker
 from job_radar.report_writer import FileReportWriter
 from job_radar.sources.base import JobBoardParser, JobBoardSource
 from job_radar.sources.demo import DemoParser, DemoSource
@@ -36,7 +35,7 @@ class Settings(Model):
     # TODO(task 10): load from a settings file.
     output: Path = Path("output")  # run folders go under output/runs/, demo runs under output/demo/
     local: Path = Path("local")  # the user's CV and preferences
-    board: str = ""  # TODO(task 5): Fast Forward's board name on Getro.
+    getro_network: str = "997"  # Fast Forward's job board on Getro
     search: Search = Search(name="default", roles=())
     lookback_days: int = 14  # how far back a run may reach: a first run, or after a long break
     model: str = "haiku"
@@ -60,6 +59,8 @@ class AppFactory:
     Wires concrete classes together, so every other class depends only on
     interfaces. Stateless: holds only the settings, the clock and the prompter.
     """
+
+    USER_AGENT = "job-radar (+https://github.com/adailida/job-radar)"
 
     def __init__(self, settings: Settings, clock: Clock, prompter: Prompter) -> None:
         """Keep the settings, the clock and the prompter the app is built from."""
@@ -101,11 +102,12 @@ class AppFactory:
         return Parts([DemoSource()], [DemoParser()], KeywordRanker(), DEMO_PROFILE)
 
     def _real(self) -> Parts:
-        """The boards, ranker and profile of a real run, from the settings and the user's folder."""
-        settings = self._settings
+        """The boards, ranker and profile of a real run: Fast Forward, from the settings."""
+        http = httpx.Client(headers={"User-Agent": self.USER_AGENT}, timeout=20)
+        # TODO(task 7): LlmRanker over ClaudeCli, and the profile from ProfileLoader.
         return Parts(
-            [GetroSource(settings.board, httpx.Client())],
+            [GetroSource(self._settings.getro_network, http)],
             [GetroParser()],
-            LlmRanker(ClaudeCli(settings.model), settings.batch_size),
-            ProfileLoader(settings.local).load(),
+            KeywordRanker(),
+            DEMO_PROFILE,
         )

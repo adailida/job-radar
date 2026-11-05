@@ -55,11 +55,11 @@ Goal: `job-radar run` fetches Fast Forward, recommends the top N jobs against th
   - Tests: each window case; asking only when needed; a cancelled run leaves nothing; a second run starts from the first; failed and unreadable runs skipped
   - Acceptance: Job search: a run never looks further back than the lookback cap (the report note on the gap is task 14). Runs: a failed run doesn't count toward the next run's window
 
-- [ ] **5. Fast Forward**
-  - Find the Getro search API endpoint; check whether it filters by date
+- [x] **5. Fast Forward**
+  - Find the Getro search API endpoint; check whether it filters by date (it doesn't, but it lists newest first, so paging stops at the window's start). Notes in [research/sources.md](research/sources.md)
   - Record fixtures with a neutral query, scrubbed, reviewed by the owner
-  - `GetroSource` with paging, 1s delay and retries; `GetroParser`; both wired in `AppFactory`
-  - Tests: `parse` on fixtures; paging with `MockTransport`; live check (opt-in)
+  - `GetroSource` with paging, 1s delay and retries; `GetroParser`; both wired in `AppFactory`. Until task 7 a real run ranks by `KeywordRanker` against the demo profile
+  - Tests: `parse` on fixtures; paging, retries and failures with `MockTransport`; live check (opt-in: `uv run pytest -m live`)
   - Also done when: a real `job-radar run` saves Fast Forward postings in its run folder
 
 - [ ] **6. Dedupe and filter**
@@ -68,7 +68,8 @@ Goal: `job-radar run` fetches Fast Forward, recommends the top N jobs against th
   - Acceptance: Job search: a run keeps only postings that match the search criteria
 
 - [ ] **7. Recommend**
-  - `ProfileLoader` (CV PDF, preferences Markdown); `ClaudeCli` (verify the `claude -p` flags); `LlmRanker` with batches, JSON checks, one retry
+  - A describe step after filter: fetches full descriptions only for the jobs kept, through a describer per board picked by the posting's source (Getro: one request per job, 1s apart); boards whose postings already have one pass through
+  - `ProfileLoader` (CV PDF, preferences Markdown); `ClaudeCli` (verify the `claude -p` flags); `LlmRanker` with batches, JSON checks, one retry; real runs switch from `KeywordRanker` and the demo profile
   - Tests, with a fake `Llm`: batching; a bad answer retried, then the step fails; top N kept; missing CV is a setup error
   - Acceptance: Runs: only filtered postings go to the LLM, in batches
 
