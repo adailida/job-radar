@@ -123,8 +123,8 @@ Every class depends on interfaces only; `AppFactory` is the only class that know
 |---|---|---|
 | `Step` | Pipeline step | `FetchStep`, `ConvertStep`, `DedupeStep`, `FilterStep`, `RecommendTopJobsStep`, `ReportStep` |
 | `Checkpoints`, `RunStats` | Repository, with a read-only view | `FileCheckpoints` (a database later) |
-| `JobBoardSource`, `JobBoardParser` | Adapter | `GetroSource`, `GetroParser` (JobsPipe later) |
-| `JobRanker` | Strategy | `LlmRanker` |
+| `JobBoardSource`, `JobBoardParser` | Adapter | `GetroSource`, `GetroParser` (JobsPipe later); `DemoSource`, `DemoParser` |
+| `JobRanker` | Strategy | `LlmRanker`; `KeywordRanker` |
 | `Llm` | | `ClaudeCli` (per-token API later) |
 | `ReportWriter` | | `FileReportWriter` |
 
@@ -141,6 +141,7 @@ No free functions: every behaviour belongs to a class with one responsibility, o
 ### CLI
 
 - `job-radar run`: one run
+- `job-radar run --demo`: one run on a made-up board and profile, with keyword scoring in place of the LLM: no network, no LLM, nothing from `local/`. For trying the tool and for the end-to-end tests. A flag, not a setting: a demo is a one-off choice for one command
 - Later: `job-radar runs` lists runs with their status; `job-radar delete <run-id>` deletes a run after confirmation
 
 ### Layout
@@ -153,13 +154,14 @@ job_radar/
   factory.py          AppFactory, Settings
   clock.py            Clock
   model.py            data models
-  profile.py          ProfileLoader
+  profile.py          ProfileLoader, the demo profile
   pipeline.py         Pipeline, Step
   checkpoints.py      Checkpoints, RunStats, FileCheckpoints
-  ranking.py          JobRanker, LlmRanker
+  ranking.py          JobRanker, LlmRanker, KeywordRanker
   llm.py              Llm, ClaudeCli
   report_writer.py    ReportWriter, FileReportWriter
-  sources/            base.py (JobBoardSource, JobBoardParser), getro.py (GetroSource, GetroParser)
+  sources/            base.py (JobBoardSource, JobBoardParser), getro.py (GetroSource, GetroParser),
+                      demo.py (DemoSource, DemoParser)
   steps/              fetch.py, convert.py, dedupe.py (DedupeStep, JobKey), filter.py, recommend.py, report.py
 ```
 
@@ -339,7 +341,7 @@ One folder per run, all plain text:
 ```
 output/                        (setting; default ./output, gitignored)
   runs/
-    2026-11-05T10-00/
+    2026-11-05T10-00-00/       named by the start time, to the second
       fetch.jsonl              raw pages, as the boards returned them
       convert.jsonl            postings
       dedupe.jsonl             jobs
@@ -427,7 +429,7 @@ A plain `pytest` never touches the network, `claude`, or credits. `pytest-socket
 | LLM | `LlmRanker` batching, JSON checks and retry (later Classify and Extract); `ClaudeCli` output parsing | A fake `Llm`; a fake command runner instead of `claude` |
 | Contracts | Every `Checkpoints` implementation (`FileCheckpoints`, later a database) | One suite, run against every implementation |
 | Pipeline | Steps in order, resume after the last finished step, errors become `RunFailed`, checkpoints deleted on success | Fake steps, `FileCheckpoints` on a temp folder |
-| End to end | `job-radar run` from `Cli` to the report; later over several runs (nothing new the second time, trends span periods) | Fake sources and `Llm`, a temp folder |
+| End to end | `job-radar run --demo` from `Cli` to the report; later over several runs (nothing new the second time, trends span periods) | The demo board and `KeywordRanker`, a fixed `Clock`, a temp folder |
 | Report | Markdown output | Golden files, regenerated with a flag and reviewed in the diff |
 
 - Time: `AppFactory` gets a `Clock`; tests pass one with a fixed time, so windows, periods and run folders are deterministic
@@ -1007,6 +1009,9 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Exit codes 0, 1, 2 | Always 0 | Scheduled runs later can tell outcomes apart |
 | Models store collections as tuples | Lists, relying on "frozen" | Pydantic's frozen blocks `job.id = ...` but not `job.postings.append(...)`; tuples make "never changed after" hold |
 | Interfaces start with the methods the skeleton calls and grow per task | Full interfaces from the start | No placeholder types (`History`, `CvAnalysis`, `Credits`) before their sections are built; fakes don't carry unused methods |
+| Build a walking skeleton first: every step works end to end in a simple form, then each grows | Build each step complete, in order | The whole flow runs and is tested from the start; each later PR swaps one simple part for the real one. Changed on Nov 5 |
+| A demo board, demo profile and `KeywordRanker`, kept for good behind `run --demo` | Fakes that live only in tests; throwaway scaffolding | The end-to-end test stays offline, and anyone can try the tool without credits, an LLM or a CV. The demo board plugs in like a real one, which also tests that a new source needs no changes downstream |
+| Run folders named to the second | To the minute | Two runs in the same minute would share a folder |
 | `Clock.now()` returns local time with its UTC offset | UTC; naive local time | Run folders and report dates match the user's clock; saved times stay unambiguous |
 | One `FileCheckpoints` per run, created by `AppFactory` with the run's folder | A store for all runs that starts a writer per run (`RunStore.start` returning a `RunWriter`, the earlier choice) | Born for one run, it never starts or tracks a run and holds no state in memory. Run history gets its own interface with task 13 |
 | Code comments say what a class or function does, never cite design sections; temporary notes are `TODO(task N)` | Section references in docstrings | Code reads on its own; temporary notes are findable and removed by their task |

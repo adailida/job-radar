@@ -2,9 +2,9 @@
 
 How the code is put together: which classes exist, what each one is responsible for, which others it knows, and where state lives. Every box is a real class, named as in the code. The reasons behind each part are in [design.md](design.md).
 
-**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 builds it as a skeleton: every class and its signatures, no internals. Later PRs fill in one class at a time; each PR that changes the flow updates these diagrams.
+**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 makes the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
 
-The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, asks the LLM which fit the CV best, and writes a report with the top N and a few counts.
+The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, a made-up profile and keyword scoring in place of the LLM.
 
 ## Rules the design follows
 
@@ -31,7 +31,7 @@ classDiagram
         <<Factory>>
         -settings: Settings
         -clock: Clock
-        +create() JobRadarApp
+        +create(demo) JobRadarApp
     }
     class JobRadarApp {
         -pipeline: Pipeline
@@ -91,6 +91,15 @@ classDiagram
     RunResult <|-- RunFailed : extends
     Checkpoints <|.. FileCheckpoints : implements
     RunStats <|.. FileCheckpoints : implements
+
+    style Cli stroke:#2e7d32,stroke-width:3px
+    style AppFactory stroke:#2e7d32,stroke-width:3px
+    style JobRadarApp stroke:#2e7d32,stroke-width:3px
+    style RunResult stroke:#2e7d32,stroke-width:3px
+    style RunSucceeded stroke:#2e7d32,stroke-width:3px
+    style RunFailed stroke:#2e7d32,stroke-width:3px
+    style Pipeline stroke:#2e7d32,stroke-width:3px
+    style FileCheckpoints stroke:#2e7d32,stroke-width:3px
 ```
 
 ### Steps and what they use
@@ -118,6 +127,7 @@ classDiagram
     class GetroSource {
         -board: str
     }
+    class DemoSource
     class ConvertStep {
         -parsers: dict~str, JobBoardParser~
     }
@@ -127,8 +137,10 @@ classDiagram
         +parse(page) list~Posting~
     }
     class GetroParser
+    class DemoParser
     class DedupeStep {
         -key: JobKey
+        -today: date
     }
     class JobKey {
         +of(posting) str
@@ -150,6 +162,7 @@ classDiagram
         -llm: Llm
         -batch_size: int
     }
+    class KeywordRanker
     class Llm {
         <<interface>>
         +complete(system, prompt) str
@@ -189,11 +202,14 @@ classDiagram
     Step <|.. ReportStep : implements
     FetchStep o-- JobBoardSource : holds, one per board
     JobBoardSource <|.. GetroSource : implements
+    JobBoardSource <|.. DemoSource : implements
     ConvertStep o-- JobBoardParser : holds, one per board
     JobBoardParser <|.. GetroParser : implements
+    JobBoardParser <|.. DemoParser : implements
     DedupeStep o-- JobKey : holds
     RecommendTopJobsStep o-- JobRanker : holds
     JobRanker <|.. LlmRanker : implements
+    JobRanker <|.. KeywordRanker : implements
     LlmRanker o-- Llm : holds
     Llm <|.. ClaudeCli : implements
     RecommendTopJobsStep o-- CandidateProfile : holds
@@ -201,6 +217,18 @@ classDiagram
     ReportStep o-- RunStats : holds
     ReportStep o-- ReportWriter : holds
     ReportWriter <|.. FileReportWriter : implements
+
+    style FetchStep stroke:#2e7d32,stroke-width:3px
+    style ConvertStep stroke:#2e7d32,stroke-width:3px
+    style DedupeStep stroke:#2e7d32,stroke-width:3px
+    style JobKey stroke:#2e7d32,stroke-width:3px
+    style FilterStep stroke:#2e7d32,stroke-width:3px
+    style RecommendTopJobsStep stroke:#2e7d32,stroke-width:3px
+    style ReportStep stroke:#2e7d32,stroke-width:3px
+    style FileReportWriter stroke:#2e7d32,stroke-width:3px
+    style DemoSource stroke:#2e7d32,stroke-width:3px
+    style DemoParser stroke:#2e7d32,stroke-width:3px
+    style KeywordRanker stroke:#2e7d32,stroke-width:3px
 ```
 
 How to read the arrows:
@@ -211,6 +239,7 @@ How to read the arrows:
 | `--\|>` solid, hollow triangle | Extends the class |
 | `..>` dashed | Uses: calls the named functions, or creates the object |
 | `o--` hollow diamond | Holds as a configured part, set once at creation, never changed |
+| Green border | Works now, some in a simple form ([tasks.md](tasks.md) says which); no colour means signatures only, or an interface |
 
 ### What each step takes and gives
 
@@ -232,7 +261,7 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | Class | Pattern | Responsibility | Knows |
 |---|---|---|---|
 | `Cli` | Entry point | Turn the command line into a call; print the result; return the exit code | `AppFactory`, `JobRadarApp`, `RunResult` |
-| `AppFactory` | Factory | Build the app for one command. The only class that knows concrete classes | all of them |
+| `AppFactory` | Factory | Build the app for one command, real or demo. The only class that knows concrete classes | all of them |
 | `JobRadarApp` | | Launch the pipeline for one command and hand back how it ended | `Pipeline`, `RunResult` |
 | `RunResult`, `RunSucceeded`, `RunFailed` | Polymorphism | Say how a run ended, in words and as an exit code | nothing |
 | `Pipeline` | Pipeline | Run the steps in order; skip steps already saved; save each output; turn an error into `RunFailed` and the final `Report` into `RunSucceeded`; delete the checkpoints on success | `Step`, `Checkpoints`, `Report`, `RunResult` |
@@ -244,11 +273,13 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `JobBoardSource`, `GetroSource` | Adapter | Query one board's API, page by page | the board's API |
 | `ConvertStep` | Step | Send each raw page to the parser for its board | `JobBoardParser` |
 | `JobBoardParser`, `GetroParser` | Adapter | Turn one board's records into `Posting`s | the board's format |
+| `DemoSource`, `DemoParser` | Adapter | A made-up board: the same postings every run, for `--demo` and tests | `Posting` |
 | `DedupeStep` | Step | Group postings of the same job into one `Job` | `JobKey` |
 | `JobKey` | | Decide which postings are the same job | `Posting` |
 | `FilterStep` | Step | Keep the jobs that match every criterion set in the search | `Search` |
 | `RecommendTopJobsStep` | Step | Keep the N best-scored jobs | `JobRanker`, `CandidateProfile` |
 | `JobRanker`, `LlmRanker` | Strategy | Score jobs against the CV and preferences, in batches | `Llm` |
+| `KeywordRanker` | Strategy | Score a job by the share of its title words found in the profile, for `--demo` and tests | models |
 | `Llm`, `ClaudeCli` | Interface | Send one prompt to a language model; `ClaudeCli` runs `claude -p` on the subscription | `claude -p` |
 | `ProfileLoader` | | Read the CV and preferences from `local/` into a `CandidateProfile` | `local/` |
 | `ReportStep` | Step | Build the Markdown report: the funnel and the top N | `RunStats`, `ReportWriter` |
@@ -260,7 +291,7 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 
 ### From the command to the result
 
-The pipeline's view: every step is a black box. The run folder is the only state.
+The pipeline's view, as built now: every step is a black box. The run folder is the only state.
 
 ```mermaid
 sequenceDiagram
@@ -275,57 +306,50 @@ sequenceDiagram
         participant cp as FileCheckpoints
     end
 
-    U->>cli: job-radar run
-    cli->>f: create()
-    f->>f: load the profile, build the steps, FileCheckpoints and Pipeline
+    U->>cli: job-radar run --demo
+    cli->>f: create(demo)
+    f->>f: pick the demo parts (a real run loads the profile), make the run folder, build the steps, FileCheckpoints and Pipeline
+    Note over cli,f: a setup error stops here: Cli prints it and exits with 2
     f-->>cli: JobRadarApp
     cli->>app: run()
     app->>p: run()
-    p->>cp: has(step), for each step
-    cp-->>p: steps already done (none on a fresh run)
-    opt resuming: some steps already done
-        p->>cp: load(last done step)
-        cp-->>p: its output, read from disk
-    end
-    loop each step not done yet, in order
+    loop each step, in order
         p->>s: run(data)
         s-->>p: output, passed on in memory as the next data
         p->>cp: save(step, output)
         Note right of cp: writes step.jsonl and adds its count to manifest.json
     end
     alt every step succeeded
-        p->>cp: load(report)
         p->>cp: discard_all()
-        p-->>app: RunSucceeded(location, summary)
+        p-->>app: RunSucceeded(location, summary), from the Report in memory
     else a step raised an error
         p-->>app: RunFailed(step, reason)
-        Note right of cp: all files stay, ready to resume
+        Note right of cp: all files stay
     end
     app-->>cli: RunResult
     cli-->>U: result.message(), exit with result.exit_code()
 ```
 
 - `Cli` never checks which result it got; each result knows its own message and exit code
-- A failed run keeps every saved step, so a later run can resume after the last one that finished
-- Outputs pass between steps in memory; the disk is read only when resuming, since nothing is in memory yet
+- A failed run keeps every saved step. Resuming after the last one that finished comes in task 4: the pipeline will skip the saved steps and load the last saved output from disk, once
+- Outputs pass between steps in memory; the disk is only written, except when resuming
 
 ### Inside the steps
 
-The same run, opening the black boxes. The save and load around each step (above) are left out.
+The demo run, opening the black boxes. The save around each step (above) is left out. A real run puts `GetroSource` and `GetroParser` (task 5) and `LlmRanker` over `ClaudeCli` (task 7) where the demo parts are; dedupe and filter get their real rules in task 6.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant p as Pipeline
     participant fetch as FetchStep
-    participant gs as GetroSource
+    participant ds as DemoSource
     participant conv as ConvertStep
-    participant gp as GetroParser
+    participant dp as DemoParser
     participant dd as DedupeStep
     participant fl as FilterStep
     participant rec as RecommendTopJobsStep
-    participant rk as LlmRanker
-    participant llm as ClaudeCli
+    participant rk as KeywordRanker
     participant rep as ReportStep
     box rgba(255, 193, 7, 0.25) STATE: the run folder on disk
         participant cp as FileCheckpoints
@@ -334,30 +358,26 @@ sequenceDiagram
 
     p->>fetch: run(nothing)
     loop each job board
-        fetch->>gs: fetch(search, window)
-        gs-->>fetch: RawPages, paging through the API
+        fetch->>ds: fetch(search, window)
+        ds-->>fetch: RawPages, the same made-up pages every run
     end
     fetch-->>p: RawPages
     p->>conv: run(RawPages)
     loop each page
-        conv->>gp: parse(page)
-        gp-->>conv: Postings
+        conv->>dp: parse(page), picked by page.source
+        dp-->>conv: Postings
     end
     conv-->>p: Postings
     p->>dd: run(Postings)
-    dd->>dd: group by JobKey.of(posting)
+    dd->>dd: group by JobKey.of(posting), for now the posting's own key
     dd-->>p: Jobs
     p->>fl: run(Jobs)
-    fl->>fl: matches(job), against the Search
-    fl-->>p: matching Jobs
+    fl->>fl: matches(job), for now every job
+    fl-->>p: Jobs
     p->>rec: run(Jobs)
     rec->>rk: score(jobs, profile)
-    loop each batch of jobs
-        rk->>llm: complete(system, prompt)
-        llm-->>rk: a score and reason per job, as JSON
-    end
-    rk-->>rec: Recommendations
-    rec->>rec: keep the top N
+    rk-->>rec: Recommendations, by title words found in the profile
+    rec->>rec: sort, keep the top N
     rec-->>p: top N Recommendations
     p->>rep: run(Recommendations)
     rep->>cp: funnel()
@@ -369,10 +389,10 @@ sequenceDiagram
 
 ## The run folder
 
-Each run gets its own folder, named by its start time:
+Each run gets its own folder, named by its start time, to the second:
 
 ```
-output/runs/2026-11-05T10-00/
+output/runs/2026-11-05T10-00-00/
     fetch.jsonl  convert.jsonl  dedupe.jsonl  filter.jsonl  recommend.jsonl  report.jsonl
     manifest.json     # each finished step and how many items it produced
     report.md

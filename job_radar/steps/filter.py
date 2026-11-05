@@ -18,10 +18,9 @@ class FilterStep:
 
     def run(self, data: list[Job]) -> list[Job]:
         """Keep the jobs that match."""
-        # TODO(task 6): keep the jobs that match.
-        raise NotImplementedError
+        return [job for job in data if self.matches(job)]
 
     def matches(self, job: Job) -> bool:
         """Whether the job meets every criterion set in the search."""
-        # TODO(task 6): check the roles.
-        raise NotImplementedError
+        # TODO(task 6): check the roles; until then every job matches.
+        return True

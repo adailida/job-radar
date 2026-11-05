@@ -1,6 +1,6 @@
 # Tasks
 
-Build order for the MVP in [design.md](design.md), following the classes in [architecture.md](architecture.md). First a thin slice: one real run from Fast Forward to a report, one step per PR. Then each part grown until it meets its design section, then an acceptance pass.
+Build order for the MVP in [design.md](design.md), following the classes in [architecture.md](architecture.md). First the whole run works end to end on made-up data, with every step in a simple form. Then a thin slice: one real run from Fast Forward to a report, one step per PR. Then each part grown until it meets its design section, then an acceptance pass.
 
 ## Definition of done
 
@@ -24,7 +24,7 @@ Every task, before its box is ticked:
 
 ## Phase 1: First real run
 
-Goal: `job-radar run` fetches Fast Forward, recommends the top N jobs against the CV and preferences, and writes a report. Each PR takes the run one step further; until a step is built, the run ends with `RunFailed` at that step.
+Goal: `job-radar run` fetches Fast Forward, recommends the top N jobs against the CV and preferences, and writes a report. `job-radar run --demo` runs the same steps on made-up postings from task 3 on; each later PR swaps one simple or demo part for the real one.
 
 - [x] **1. Project setup**
   - Package layout, dependencies (pydantic, httpx, pyyaml, pypdf; dev: pytest-socket), `job-radar` entry point, sockets blocked in tests
@@ -36,33 +36,38 @@ Goal: `job-radar run` fetches Fast Forward, recommends the top N jobs against th
   - Models: the current ones plus `RawPage`, `Recommendation`, `Report`, `StepCount`, `CandidateProfile`
   - Tests: models round-trip to JSON; models are frozen; each concrete class satisfies its interface
 
-- [ ] **3. Pipeline and checkpoints**
-  - `Pipeline.run`: steps in order, resume after the last finished step, errors wrapped in `RunFailed`, discard on success; `FileCheckpoints`: one JSON Lines file per step, `manifest.json`, `funnel`; `RunSucceeded` and `RunFailed` messages and exit codes
-  - Tests, with fake steps on a temp folder: a fresh run succeeds; a failing step keeps all files; a rerun resumes after the last finished step; funnel counts per step
+- [x] **3. End to end with demo data**
+  - `job-radar run --demo` goes through every step on made-up postings and writes a report: no network, no LLM, nothing from `local/`
+  - `Pipeline.run`: steps in order, errors wrapped in `RunFailed`, discard on success; `FileCheckpoints`: one JSON Lines file per step (temp file, then rename), `manifest.json`, `funnel`; `RunSucceeded` and `RunFailed` messages and exit codes
+  - `Cli` with `run` and `--demo`, `JobRadarApp`, `AppFactory`, `Settings` with defaults in code, `Clock`; exit codes 0 (success), 1 (failed run), 2 (setup error)
+  - Every step in a simple form: fetch and convert complete; dedupe merges exact repeats only; filter keeps every job; recommend keeps the top N; a short report
+  - Demo parts, kept for trying the tool and for tests: `DemoSource`, `DemoParser`, `KeywordRanker`, a made-up profile
+  - Tests: a demo run end to end; a failing step keeps its files; funnel counts per step; exit codes 0, 1 and 2
+  - Acceptance: Runs: a new source is added without changes downstream (the demo board)
 
-- [ ] **4. Command to app**
-  - `Cli`, `JobRadarApp`, `AppFactory`, `Settings` with defaults in code, `Clock`
-  - Tests: `job-radar run` end to end with fake steps; exit codes 0 (success), 1 (failed run), 2 (setup error)
+- [ ] **4. Resume**
+  - `Pipeline.run` skips the steps already saved and loads the last saved output once; `RunFailed` says a rerun resumes from there
+  - Tests, with fake steps on a temp folder: a rerun resumes after the last finished step; a run with every step saved only discards
 
 - [ ] **5. Fast Forward**
   - Find the Getro search API endpoint; check whether it filters by date
   - Record fixtures with a neutral query, scrubbed, reviewed by the owner
-  - `GetroSource` with paging, 1s delay and retries; `GetroParser`; `FetchStep` and `ConvertStep`
+  - `GetroSource` with paging, 1s delay and retries; `GetroParser`; both wired in `AppFactory`
   - Tests: `parse` on fixtures; paging with `MockTransport`; live check (opt-in)
   - Also done when: a real `job-radar run` saves Fast Forward postings in its run folder
 
 - [ ] **6. Dedupe and filter**
-  - `DedupeStep` with `JobKey` (normalized company, title, location); `FilterStep` on roles, any criterion left empty passes
+  - `JobKey` on normalized company, title and location; `FilterStep` on roles, any criterion left empty passes
   - Tests: two postings of one job become one `Job`; a role match is kept, others dropped; an empty criterion keeps everything
   - Acceptance: Job search: a run keeps only postings that match the search criteria
 
 - [ ] **7. Recommend**
-  - `ProfileLoader` (CV PDF, preferences Markdown); `ClaudeCli` (verify the `claude -p` flags); `LlmRanker` with batches, JSON checks, one retry; `RecommendTopJobsStep`
+  - `ProfileLoader` (CV PDF, preferences Markdown); `ClaudeCli` (verify the `claude -p` flags); `LlmRanker` with batches, JSON checks, one retry
   - Tests, with a fake `Llm`: batching; a bad answer retried, then the step fails; top N kept; missing CV is a setup error
   - Acceptance: Runs: only filtered postings go to the LLM, in batches
 
 - [ ] **8. Report**
-  - `ReportStep`: the funnel and the top N with score, title, company, location, work mode, salary, link and reason; `FileReportWriter`
+  - `ReportStep` complete: the funnel and the top N with score, title, company, location, work mode, salary, link and reason
   - Tests: golden-file report; `RunSucceeded` shows the report location
   - Acceptance: Runs: each run writes one report and saves its run data
 

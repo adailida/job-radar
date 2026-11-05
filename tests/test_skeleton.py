@@ -11,10 +11,11 @@ from job_radar.factory import AppFactory, Settings
 from job_radar.llm import ClaudeCli, Llm
 from job_radar.model import CandidateProfile, Search, Window
 from job_radar.pipeline import Step
-from job_radar.ranking import JobRanker, LlmRanker
+from job_radar.ranking import JobRanker, KeywordRanker, LlmRanker
 from job_radar.report_writer import FileReportWriter, ReportWriter
 from job_radar.result import RunFailed, RunResult, RunSucceeded
 from job_radar.sources.base import JobBoardParser, JobBoardSource
+from job_radar.sources.demo import DemoParser, DemoSource
 from job_radar.sources.getro import GetroParser, GetroSource
 from job_radar.steps.convert import ConvertStep
 from job_radar.steps.dedupe import DedupeStep, JobKey
@@ -37,7 +38,7 @@ def steps():
     return [
         FetchStep([GetroSource("board", httpx.Client())], SEARCH, WINDOW),
         ConvertStep({"getro": GetroParser()}),
-        DedupeStep(JobKey()),
+        DedupeStep(JobKey(), date(2026, 11, 5)),
         FilterStep(SEARCH),
         RecommendTopJobsStep(RANKER, PROFILE, top_n=10),
         ReportStep(CHECKPOINTS, FileReportWriter(FOLDER)),
@@ -47,9 +48,12 @@ def steps():
 IMPLEMENTATIONS = [
     (GetroSource("board", httpx.Client()), JobBoardSource),
     (GetroParser(), JobBoardParser),
+    (DemoSource(), JobBoardSource),
+    (DemoParser(), JobBoardParser),
     (CHECKPOINTS, Checkpoints),
     (CHECKPOINTS, RunStats),
     (RANKER, JobRanker),
+    (KeywordRanker(), JobRanker),
     (LLM, Llm),
     (FileReportWriter(FOLDER), ReportWriter),
     (RunSucceeded(location="report.md", summary=""), RunResult),

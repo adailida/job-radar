@@ -11,7 +11,7 @@ Each person runs their own copy. Everything about you (CV, searches, settings) s
 
 ## Status
 
-Design is complete; building Phase 1 (the first real run). See the docs below.
+Design is complete; building Phase 1 (the first real run). The whole run already works end to end on made-up data: try `uv run job-radar run --demo`. See the docs below.
 
 ## How it works
 
@@ -27,7 +27,13 @@ Each run fetches postings, merges duplicates across sources, drops ones you've a
 - [Claude Code](https://claude.com/claude-code), logged in
 - A JobsPipe API key, if you use JobsPipe
 
-## Usage (planned)
+## Usage
+
+Works now:
+
+    job-radar run --demo   # a run on made-up postings: no network, no LLM, no CV needed
+
+Planned:
 
     job-radar run          # one run; writes output/runs/<run-id>/report.md
     job-radar runs         # list runs

@@ -21,5 +21,24 @@ class ReportStep:
 
     def run(self, data: list[Recommendation]) -> list[Report]:
         """Build the Markdown report, write it, and say where it is."""
-        # TODO(task 8): build the funnel and the top N in Markdown.
-        raise NotImplementedError
+        # TODO(task 8): add work mode and salary; settle the layout with a golden file.
+        lines = ["# job-radar report", "", f"## Recommended jobs ({len(data)})", ""]
+        if not data:
+            lines.append("No jobs to recommend this run.")
+        for rank, rec in enumerate(data, start=1):
+            lines.extend(self._job(rank, rec))
+        lines.extend(["", "## About this run", "", "Items each step produced:", ""])
+        lines.extend(f"- {count.step}: {count.count}" for count in self._stats.funnel())
+        location = self._writer.write("\n".join(lines) + "\n")
+        jobs = "job" if len(data) == 1 else "jobs"
+        return [Report(location=location, summary=f"{len(data)} {jobs} recommended")]
+
+    def _job(self, rank: int, rec: Recommendation) -> list[str]:
+        """One recommended job as a numbered list item, from its primary posting."""
+        posting = rec.job.postings[0]
+        places = ", ".join(location.text for location in posting.locations)
+        return [
+            f"{rank}. **{posting.title}**, {posting.company} (score {rec.score})",
+            f"   {places}. {posting.url}",
+            f"   {rec.reason}",
+        ]

@@ -24,5 +24,6 @@ class FetchStep:
 
     def run(self, data: list[Never]) -> list[RawPage]:
         """Fetch from each board in turn. Takes nothing: it is the first step."""
-        # TODO(task 5): loop over the sources.
-        raise NotImplementedError
+        return [
+            page for source in self._sources for page in source.fetch(self._search, self._window)
+        ]

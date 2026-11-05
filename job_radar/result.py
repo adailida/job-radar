@@ -29,13 +29,11 @@ class RunSucceeded(RunResult):
 
     def message(self) -> str:
         """Say what the run found and where the report is."""
-        # TODO(task 3): build the success message.
-        raise NotImplementedError
+        return f"Run finished: {self.summary}.\nReport: {self.location}"
 
     def exit_code(self) -> int:
         """Exit code for a successful run."""
-        # TODO(task 3): return 0.
-        raise NotImplementedError
+        return 0
 
 
 @dataclass(frozen=True)
@@ -46,11 +44,13 @@ class RunFailed(RunResult):
     reason: str
 
     def message(self) -> str:
-        """Say which step failed, why, and that a rerun resumes from there."""
-        # TODO(task 3): build the failure message.
-        raise NotImplementedError
+        """Say which step failed and why, and that the finished steps are kept."""
+        # TODO(task 4): say that a rerun resumes after the last finished step.
+        return (
+            f"Run failed at step '{self.step}': {self.reason}\n"
+            "The steps that finished are kept in the run folder."
+        )
 
     def exit_code(self) -> int:
         """Exit code for a failed run."""
-        # TODO(task 3): return 1.
-        raise NotImplementedError
+        return 1
