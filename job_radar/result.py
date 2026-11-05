@@ -45,7 +45,7 @@ class RunFailed(RunResult):
 
     def message(self) -> str:
         """Say which step failed and why, and that the finished steps are kept."""
-        # TODO(task 4): say that a rerun resumes after the last finished step.
+        # TODO(task 13): say that a rerun resumes after the last finished step.
         return (
             f"Run failed at step '{self.step}': {self.reason}\n"
             "The steps that finished are kept in the run folder."
@@ -54,3 +54,16 @@ class RunFailed(RunResult):
     def exit_code(self) -> int:
         """Exit code for a failed run."""
         return 1
+
+
+@dataclass(frozen=True)
+class RunCancelled(RunResult):
+    """A run the user called off before it started: nothing was fetched or saved."""
+
+    def message(self) -> str:
+        """Say that nothing ran."""
+        return "Cancelled. Nothing was fetched."
+
+    def exit_code(self) -> int:
+        """Exit code for a run the user called off: not an error."""
+        return 0

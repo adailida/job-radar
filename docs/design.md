@@ -52,12 +52,14 @@ A run that stops with an error writes no report. The terminal shows why, and the
 
 ### Time window
 
-A run fetches postings from the start of its window to now:
+A run fetches postings from the start of its window to today. Windows are whole days: postings usually carry only a date, so a time of day would add precision the data doesn't have.
 
 - First run: the window is the lookback (a setting, 2 weeks by default)
-- Later runs: the window starts at the last completed run. A failed or deleted run doesn't count
-- If the last completed run is older than the lookback, the window is the lookback, and the report says so and which dates it covers
+- Later runs: the window starts one day before the last completed run's last day. That day is fetched again because the last run may have been early in it, and the day before because boards can list a posting a day after its date. Repeats cost nothing on Fast Forward or on JobsPipe (repeats within a month are free), and recognising jobs already seen removes them (task 15). A failed or deleted run doesn't count
+- If the last completed run is older than the lookback, the window is the lookback, and the report says so and which dates it covers (task 14)
 - With "new data only" turned off, the window is always the lookback
+- Before anything is fetched, the terminal says which dates the run covers and why. On a first run, or after a long break, it asks to continue, since the run reaches back further than usual; after a recent run it goes ahead. "n" runs nothing and creates no run folder
+- A board that returns everything it has (Fast Forward) is cut to the window by the filter: jobs dated before it are dropped, jobs with no date are kept
 
 ### Stages
 
@@ -123,6 +125,8 @@ Every class depends on interfaces only; `AppFactory` is the only class that know
 |---|---|---|
 | `Step` | Pipeline step | `FetchStep`, `ConvertStep`, `DedupeStep`, `FilterStep`, `RecommendTopJobsStep`, `ReportStep` |
 | `Checkpoints`, `RunStats` | Repository, with a read-only view | `FileCheckpoints` (a database later) |
+| `RunHistory` | Repository, read-only | `FileRunHistory` |
+| `Prompter` | | `TerminalPrompter` |
 | `JobBoardSource`, `JobBoardParser` | Adapter | `GetroSource`, `GetroParser` (JobsPipe later); `DemoSource`, `DemoParser` |
 | `JobRanker` | Strategy | `LlmRanker`; `KeywordRanker` |
 | `Llm` | | `ClaudeCli` (per-token API later) |
@@ -141,7 +145,7 @@ No free functions: every behaviour belongs to a class with one responsibility, o
 ### CLI
 
 - `job-radar run`: one run
-- `job-radar run --demo`: one run on a made-up board and profile, with keyword scoring in place of the LLM: no network, no LLM, nothing from `local/`. For trying the tool and for the end-to-end tests. A flag, not a setting: a demo is a one-off choice for one command
+- `job-radar run --demo`: one run on a made-up board and profile, with keyword scoring in place of the LLM: no network, no LLM, nothing from `local/`. For trying the tool and for the end-to-end tests. A flag, not a setting: a demo is a one-off choice for one command. Demo runs keep their own run folders and history under `output/demo/`, so they never move a real run's window
 - Later: `job-radar runs` lists runs with their status; `job-radar delete <run-id>` deletes a run after confirmation
 
 ### Layout
@@ -150,13 +154,17 @@ No free functions: every behaviour belongs to a class with one responsibility, o
 job_radar/
   cli.py              Cli
   app.py              JobRadarApp
-  result.py           RunResult, RunSucceeded, RunFailed
+  result.py           RunResult, RunSucceeded, RunFailed, RunCancelled
+  window.py           WindowPlanner, WindowPlan, WindowReason
+  window_chooser.py   WindowChooser
+  history.py          RunHistory, FileRunHistory
+  prompter.py         Prompter, TerminalPrompter
   factory.py          AppFactory, Settings
   clock.py            Clock
   model.py            data models
   profile.py          ProfileLoader, the demo profile
   pipeline.py         Pipeline, Step
-  checkpoints.py      Checkpoints, RunStats, FileCheckpoints
+  checkpoints.py      Checkpoints, RunStats, FileCheckpoints, Manifest
   ranking.py          JobRanker, LlmRanker, KeywordRanker
   llm.py              Llm, ClaudeCli
   report_writer.py    ReportWriter, FileReportWriter
@@ -380,6 +388,7 @@ The CV cache and the spend ledger are not part of any run: deleting runs leaves 
 ### Progress and resume
 
 - After each step, the pipeline saves its output and adds the step and its count to `manifest.json`. A step listed there is finished
+- The manifest also records the run's window, and once every step has finished, that the run completed. Run history reads both: the next run's window starts from the last completed one
 - A failed run keeps every file. A rerun of it skips the finished steps and starts at the step that failed. For the first run every command starts a new folder; choosing which failed run to resume comes with run history (task 13)
 - Outputs pass between steps in memory. A resumed run starts with nothing in memory, so it loads the last saved output from disk once, then carries on in memory
 - Writes go to a temp file, then rename, so a crash never leaves half a file
@@ -391,7 +400,7 @@ class Checkpoints(Protocol):        # Repository: one run's step outputs
     def has(self, step: str) -> bool: ...
     def save(self, step: str, items: Sequence[Model]) -> None: ...   # also records the count
     def load(self, step: str, kind: type[M]) -> list[M]: ...
-    def discard_all(self) -> None: ...                               # once the run succeeded
+    def complete(self) -> None: ...                                  # once the run succeeded
 
 class RunStats(Protocol):           # read-only view for the report
     def funnel(self) -> list[StepCount]: ...
@@ -402,7 +411,7 @@ class ReportWriter(Protocol):       # where the finished report goes
 
 - `FileCheckpoints` implements both `Checkpoints` and `RunStats`; `FileReportWriter` writes `report.md`. `AppFactory` creates them with the run's folder, so they never start or track a run: they are born for one
 - Only `Pipeline` uses `Checkpoints`. `ReportStep` gets the same object as `RunStats`, so it can read the counts but not save or delete
-- The interface for run history (list runs, delete, caches) is added with task 13
+- `RunHistory` is read-only and starts with one method, `last_window()`, which `FileRunHistory` reads from the manifests. Listing and deleting runs and the caches are added with task 13
 
 ### Keeping other backends possible (SQLite later)
 
@@ -559,11 +568,15 @@ sources:
 
 ```python
 class Prompter(Protocol):
-    def ask(self, question: str) -> str: ...      # free text; "" when the user gives none
-    def choose(self, question: str, options: Sequence[str], default: str | None = None) -> str: ...
+    def tell(self, message: str) -> None: ...     # built in task 4
+    def confirm(self, question: str) -> bool: ... # built in task 4: yes or no, yes by default
+    def ask(self, question: str) -> str: ...      # task 12: free text; "" when the user gives none
+    def choose(self, question: str, options: Sequence[str], default: str | None = None) -> str: ...  # task 17
 ```
 
-`choose` covers yes/no confirmations (delete a run, failed-run prompt) and the cost-check outcomes (section 12).
+- `confirm` covers yes/no questions (the window, deleting a run, the failed-run prompt). It shows `(y/n, Enter for y)`: always lowercase, with the default spelled out. Any other answer asks again
+- `choose` covers the cost-check outcomes (section 12)
+- With no input to read, as in a script, `TerminalPrompter` takes the default
 
 ## 8. Cross-source dedup and job identity
 
@@ -1012,6 +1025,11 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Build a walking skeleton first: every step works end to end in a simple form, then each grows | Build each step complete, in order | The whole flow runs and is tested from the start; each later PR swaps one simple part for the real one. Changed on Nov 5 |
 | A demo board, demo profile and `KeywordRanker`, kept for good behind `run --demo` | Fakes that live only in tests; throwaway scaffolding | The end-to-end test stays offline, and anyone can try the tool without credits, an LLM or a CV. The demo board plugs in like a real one, which also tests that a new source needs no changes downstream |
 | Run folders named to the second | To the minute | Two runs in the same minute would share a folder |
+| Windows in whole days, starting one day before the last run's last day | Times of day; one day after the last run; a later run the same day replaces the earlier one | Postings carry only a date, so a time would be false precision. Repeating the last day covers a run made early in it, the extra day covers postings listed late; repeats are free and removed by the seen check. Replacing runs would delete history and needs extra logic |
+| Ask before a first run or a long-break run; just say the dates after a recent run | Ask every time; never ask | The unusual cases reach back further than usual, so they're worth a look; asking every time trains you to press Enter |
+| Cancelling at the prompt exits with 0 | 1, like an error | Calling a run off isn't a failure; nothing was started |
+| Demo runs keep their own history under `output/demo/` | Demo runs among real runs | A demo run must never move a real run's window |
+| Run completion recorded in the manifest, by `Checkpoints.complete()` | Infer it from which files remain; a separate marker file | One place says what a run covered and whether it completed; replaces `discard_all`, which ran at the same moment |
 | `Clock.now()` returns local time with its UTC offset | UTC; naive local time | Run folders and report dates match the user's clock; saved times stay unambiguous |
 | One `FileCheckpoints` per run, created by `AppFactory` with the run's folder | A store for all runs that starts a writer per run (`RunStore.start` returning a `RunWriter`, the earlier choice) | Born for one run, it never starts or tracks a run and holds no state in memory. Run history gets its own interface with task 13 |
 | Code comments say what a class or function does, never cite design sections; temporary notes are `TODO(task N)` | Section references in docstrings | Code reads on its own; temporary notes are findable and removed by their task |

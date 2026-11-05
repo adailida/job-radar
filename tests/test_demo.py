@@ -26,6 +26,12 @@ def test_demo_postings_are_complete():
     assert first.url.startswith("https://example.org/")
 
 
+def test_demo_postings_are_dated_back_from_the_window_end():
+    pages = DemoSource().fetch(SEARCH, WINDOW)
+    first = DemoParser().parse(pages[0])[0]
+    assert first.posted_at == date(2026, 11, 2)
+
+
 def test_keyword_ranker_scores_share_of_title_words_in_profile():
     profile = CandidateProfile(cv="Python data pipelines.", preferences="Remote.")
     jobs = [job("1", "Data Engineer"), job("2", "Python Data Developer"), job("3", "Designer")]
