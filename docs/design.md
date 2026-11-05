@@ -2,6 +2,8 @@
 
 How job-radar meets [requirements.md](requirements.md).
 
+Redesigned on Nov 4: sections 1 to 6 and 9 follow the classes in [architecture.md](architecture.md). Sections 7, 8 and 10 to 13 still use some older names (`RunStore`, `Prompter`, `run()`, `Alerts`, stages); each is brought in line by the task that builds it.
+
 ## 1. Pipeline
 
 A run is one pass through these stages. The user starts it in the terminal.
@@ -64,6 +66,8 @@ flowchart LR
     Load --> Plan --> Fetch --> Dedupe --> Filter --> Classify --> Match --> Extract --> Aggregate --> Compare --> Report
 ```
 
+The first real run has six steps: fetch, convert (Fetch above, split in two), dedupe, filter, recommend (new: the top N against the CV and preferences) and report. The other stages become steps the same way, one task each.
+
 1. **Load**: read the settings (defaults merged with the user's file) and the user input (CV, search criteria). Prompt in the terminal for anything missing; stop with an error if it is still invalid
 2. **Plan**: for each source, turn each search into that source's query and set the time window (see above). Paid sources also get the credits left and a match count, estimate the cost, check it against the limits, and ask the user when it is over
 3. **Fetch**: each source fetches in full or not at all. Its adapter turns raw records into `Posting`s. Raw responses are saved with the run data
@@ -81,7 +85,7 @@ flowchart LR
 - **Adapter boundary**: everything after Fetch works only on `Posting` and never sees a source's raw format. A new source plugs in without changes to the stages after it
 - **I/O at the edges**: network, disk, LLM and terminal sit behind small interfaces (section 2). The stages in between are plain logic, so tests run offline and the LLM backend can be swapped
 - **Trends recomputed from stored data**: no running counters. Deleting a run removes its data, and the next report is correct without undo logic
-- **Raw responses kept**: a parser fix can be re-run on stored data without spending credits again
+- **Raw pages kept until the run succeeds**: a failed parse resumes from the saved pages without spending credits again
 
 ### Volume
 
@@ -90,373 +94,73 @@ flowchart LR
 | Typical (~1,600 per 7 days from the research funnel, 2-week window, plus Fast Forward) | ~4,500 | ~25 to 45 MB |
 | Worst case (a whole Seeker month of 10,000 in one run, plus ~1,500 Fast Forward) | ~11,500 | ~60 to 120 MB, up to ~250 MB in memory |
 
-- One run fits in memory, and the credit limits cap it. Stages pass plain lists; no streaming
-- Raw responses are written to disk as they arrive and not kept in memory: nothing after the adapter reads them
+- One run fits in memory, and the credit limits cap it. Steps pass plain lists; dedupe and recommend need all their input at once anyway
+- Raw pages are saved as the fetch step's output; only the convert step reads them
 - History grows with every run (at 10,000 jobs a month, ~120,000 a year). Trends read slim per-job records without descriptions (~1 KB each, ~120 MB a year at the full budget). Storage keeps descriptions apart (section 5)
 
 ## 2. Code structure
 
-The goal is that reading `pipeline.py` shows what a run does. For the big picture first, see the diagrams in [architecture.md](architecture.md).
+The classes, how they depend on each other and how a run flows through them are drawn in [architecture.md](architecture.md). This section gives the rules behind them and the file layout.
 
-### Top level
+### Shape of a run
 
-`run()` lists the stages in order. It also does every read and write of run data, so stages only compute: they take data in and return data out.
+- `Cli` asks `AppFactory` for a `JobRadarApp`, runs it, and prints the `RunResult` it gets back. It never checks which kind of result it got: each result gives its own message and exit code
+- `JobRadarApp` lives for one terminal command and launches the `Pipeline` as a black box
+- `Pipeline` knows only the steps and their order. It saves every step's output through `Checkpoints` and passes it to the next step in memory, skips steps an earlier attempt already saved (loading the last saved output from disk), turns any error into `RunFailed` and the final `Report` into `RunSucceeded`
+- Every step implements `Step`: it takes the previous step's output as a list and gives its own. Steps never save or read run data themselves
 
-```python
-def run(app: App, user: UserInput, writer: RunWriter, alerts: Alerts) -> None:
-    history = app.store.history()
-    plans = app.planner.plan(user.criteria, writer.run.window, alerts)
-    fetched = app.fetcher.fetch(plans, writer.save_raw_page, alerts)
-    writer.save_source_results(fetched.results)
-    jobs = app.deduper.dedupe(fetched.postings, history, app.store.pending(), writer.run.started_at.date())
-    jobs = app.filter.apply(jobs, user.criteria)
-    writer.save_jobs(jobs)
-    classified = app.classifier.classify(jobs, app.store.cached_classifications(ids(jobs)), alerts)
-    writer.save_classifications(classified.items)
-    matches = app.matcher.match(jobs, classified.items, user.criteria)
-    writer.save_matches(matches)
-    extracted = app.extractor.extract(matched(jobs, matches), app.store.cached_extractions(...), history.vocabulary, alerts)
-    writer.save_extractions(extracted.items)
-    writer.save_pending(classified.pending + extracted.pending)
-    trends = app.trends.aggregate(history, extracted.items, writer.run)
-    asks = app.requirements.rank(history, extracted.items, writer.run)
-    gaps = app.gaps.find(asks, user.cv, app.store.cv_analysis(user.cv.hash))
-    if gaps.new_analysis:
-        app.store.save_cv_analysis(user.cv.hash, gaps.new_analysis)
-    report = app.report_builder.build(writer.run, jobs, classified, matches, extracted, trends, asks, gaps, alerts.items)
-    writer.save_report(app.renderer.render(report))
-```
-
-Argument lists are trimmed for reading; the Actors table below has the exact functions.
+The first real run has six steps: fetch, convert, dedupe, filter, recommend, report. The later stages in section 1 become steps the same way.
 
 ### State
 
-Stateless by default. A class takes configuration and collaborators in its constructor and never changes after; data from a run goes in as arguments and comes out as return values. Where state is needed, one holder owns it, is the only thing that changes it, and exposes it read-only. Each class's docstring says which kind it is.
+No class holds changing state in memory. Every class gets its configuration and collaborators in its constructor and never changes after. A run's state is its run folder: the saved step outputs, the manifest and the report. Each class's docstring says what it holds.
 
-State lives in exactly four places, all scoped to one run:
+### Interfaces
 
-| Holder | Holds | Lives |
+Every class depends on interfaces only; `AppFactory` is the only class that knows concrete classes.
+
+| Interface | Pattern | Implementations |
 |---|---|---|
-| `run_once()` local variables | `user`, `writer`, `alerts` | One run |
-| `run()` local variables | The data passed from stage to stage | One run |
-| `RunWriter` (`FileRunWriter`, `MemoryRunWriter`) | The run's record (`Run`) and what it has saved | `RunStore.start` to `finish` |
-| `Alerts` | The run's warnings | One run |
+| `Step` | Pipeline step | `FetchStep`, `ConvertStep`, `DedupeStep`, `FilterStep`, `RecommendTopJobsStep`, `ReportStep` |
+| `Checkpoints`, `RunStats` | Repository, with a read-only view | `FileCheckpoints` (a database later) |
+| `JobBoardSource`, `JobBoardParser` | Adapter | `GetroSource`, `GetroParser` (JobsPipe later) |
+| `JobRanker` | Strategy | `LlmRanker` |
+| `Llm` | | `ClaudeCli` (per-token API later) |
+| `ReportWriter` | | `FileReportWriter` |
 
-Everything else is stateless or immutable data. `RunStore` keeps nothing in memory: what it saved is the state. A stateless object may hold another stateless one (a stage holds the `LLM`), never a stateful one: per-run holders (`writer`, `alerts`) are passed as call arguments.
+Interfaces are `typing.Protocol` classes, so implementations and test fakes don't inherit from them. The exception is `RunResult`, an abstract class that `RunSucceeded` and `RunFailed` extend. Interfaces grow with the build: each starts with the methods the first run calls.
 
-### Actors
+### Everything is a class
 
-Every class and function of the MVP. **Kind**: stateless (S), state holder (**State**), immutable data (D). **Task**: where it is built (later tasks extend it).
+No free functions: every behaviour belongs to a class with one responsibility, one main class per file, with its small helpers beside it. Data models are immutable Pydantic classes.
 
-#### Entry and run lifecycle
+### Settings
 
-| Actor | Kind | Functions | Task |
-|---|---|---|---|
-| `cli.main` | S, function | `main(argv) -> int`: parse the command, build the App, dispatch to `run_once`, `list_runs`, `delete_run`; returns the exit code | 1, 5, 10 |
-| `config.load_settings` | S, function | `load_settings(path) -> Settings`: defaults, deep merge, validation | 7 |
-| `config.build_app` | S, function | `build_app(settings) -> App`: builds every object below from the settings | 5, 7 |
-| `App` | S, dataclass | Fields only: `settings`, `sources`, `llm`, `store`, `prompter`, `renderer`, the stages, `now`. No run data, so one App can serve several runs | 2, 4 |
-| `pipeline.run_once` | S, function; its locals are **State** | `run_once(app, profile_path) -> int`: preflight, `store.start`, `run`, `finish`, failed-run prompt, exit code | 4, 24 |
-| `pipeline.preflight` | S, function | `preflight(app, profile_path) -> UserInput`: load and validate input, take the lock, handle a stale run, check the LLM and API keys. Raises before anything is created | 4, 24 |
-| `pipeline.run` | S, function; its locals are **State** | `run(app, user, writer, alerts) -> None`: the stages in order, every save | 4 |
-| `stages.window.window_for` | S, function | `window_for(runs, today, lookback_days, new_only) -> WindowChoice`: the run's dates and whether the lookback capped them | 5, 11 |
-| `Alerts` | **State** | `warn(code, message)`: record and print a warning; `items -> list[Alert]`. Created per run by `run_once` | 4 |
-| `JobRadarError` and subclasses | D, exception | `code`, `message`, `hint`. One subclass per error code (section 13) | 4, 24 |
-
-#### Inputs
-
-| Actor | Kind | Functions | Task |
-|---|---|---|---|
-| `InputLoader` | S | `load(profile_path) -> UserInput`: read the profile and CV; ask through the `Prompter` for anything missing | 5, 8, 9 |
-| `UserInput` | D | `criteria: SearchCriteria`, `cv: CV` | 5 |
-| `CV` | D | `text`, `hash` | 8 |
-| `Settings` and parts | D | Every setting with its default (section 7) | 7 |
-
-#### Stages (each in `stages/`, constructor takes settings and stateless collaborators)
-
-| Actor | Kind | Functions | Task |
-|---|---|---|---|
-| `Planner(sources, prompter, limits)` | S | `plan(criteria, window, alerts) -> list[FetchPlan]`: one plan per source; paid sources get credits, counts and the cost check, which may ask the user | 4, 19 |
-| `Fetcher(sources)` | S | `fetch(plans, save_page, alerts) -> Fetched`: each source in full or not at all; a failed source is a warning, all failed is an error | 4, 6 |
-| `Deduper(new_only)` | S | `dedupe(postings, history, pending, today) -> list[Job]`: merge across sources, inherit ids, drop seen jobs, add pending jobs | 4, 13, 17 |
-| `Filter()` | S | `apply(jobs, criteria) -> list[Job]`: criteria on source fields; drop counts go to the funnel | 4, 12 |
-| `Classifier(llm, prompter, batch_size, domains, job_types)` | S | `classify(jobs, cached, alerts) -> Classified`: reuse cached labels, batch the rest to the LLM; on the usage limit, ask and leave the rest pending | 4, 15, 17 |
-| `Matcher()` | S | `match(jobs, classifications, criteria) -> list[Match]`: criteria on inferred fields | 4, 15 |
-| `Extractor(llm, prompter, batch_size, max_jobs)` | S | `extract(jobs, cached, vocabulary, alerts) -> Extracted`: volume guard, reuse cached, batch the rest | 4, 16, 17 |
-| `TrendAggregator(period)` | S | `aggregate(history, this_run, run) -> Trends`: figures per period, coverage, criteria changes | 4, 20 |
-| `RequirementRanker(per_type)` | S | `rank(history, this_run, run) -> Asks`: top requirements per type over the rolling window | 4, 21 |
-| `GapFinder(llm)` | S | `find(asks, cv, cached) -> Gaps`: exact match, then one LLM call; returns any new CV analysis for the caller to cache | 4, 22 |
-| `ReportBuilder(report_settings)` | S | `build(run, jobs, classified, matches, extracted, trends, asks, gaps, alerts) -> Report`: every number, order and grouping | 4, 23 |
-
-#### Sources
-
-| Actor | Kind | Functions | Task |
-|---|---|---|---|
-| `Source` | Protocol | `name`; `plan(searches, window) -> FetchPlan`; `fetch(plan, save_page) -> list[Posting]`; `parse(raw) -> list[Posting]` | 2 |
-| `PaidSource` | Protocol | `Source` plus `credits() -> Credits`; `count(plan) -> int` | 18 |
-| `GetroSource(board, http, delay)` | S | `Source` | 6 |
-| `JobsPipeSource(api_key, plan, filters, http)` | S | `PaidSource` | 18 |
-| `FakeSource(postings)` | S | `Source`, returns its postings | 3 |
-| `FetchPlan`, `RawPage`, `Credits` | D | Data between a source and the run | 2, 18 |
-
-#### LLM
-
-| Actor | Kind | Functions | Task |
-|---|---|---|---|
-| `LLM` | Protocol | `complete(system, prompt) -> str`; `check()`: raises if unavailable (task 14) | 2, 14 |
-| `ClaudeCliLLM(model, timeout, concurrency, runner)` | S | `LLM`, through `claude -p` | 14 |
-| `FakeLLM(answers)` | S | `LLM`, scripted replies | 3 |
-| `llm.ask_json` | S, function | `ask_json(llm, system, prompt, model) -> T`: validate, retry once, then split the batch | 14 |
-
-#### Storage
-
-| Actor | Kind | Functions | Task |
-|---|---|---|---|
-| `RunStore` | Protocol | `start(run) -> RunWriter`; `runs()`; `history()`; `pending()`; `cached_classifications(ids)`; `cached_extractions(ids)`; `cv_analysis(hash)`; `save_cv_analysis(hash, item)`; `lock()`; `delete(run_id)`; `record_spend`, `spend_since` | 2, 10, 19 |
-| `RunWriter` | Protocol, **State** | `run`; `save_raw_page`; `save_source_results`; `save_jobs`; `save_classifications`; `save_matches`; `save_extractions`; `save_pending`; `save_report`; `finish(status, finished_at)` | 2 |
-| `FileStore(path)`, `FileRunWriter` | S, **State** | Files under `output/` (section 5) | 5, 10 |
-| `MemoryStore`, `MemoryRunWriter` | S, **State** | In memory, for tests | 3 |
-| `History` | D | Matched jobs from completed runs, slim, with classifications, extractions and the key index; `vocabulary` | 10 |
-
-#### Report and user prompts
-
-| Actor | Kind | Functions | Task |
-|---|---|---|---|
-| `Renderer` | Protocol | `extension`; `render(report) -> str` | 4 |
-| `MarkdownRenderer` | S | `Renderer` | 4, 23 |
-| `Report` and parts | D | Everything the report shows, decided (section 11) | 4, 23 |
-| `Prompter` | Protocol | `ask(question) -> str`; `choose(question, options, default) -> str` | 2 |
-| `TerminalPrompter` | S | `Prompter`, on stdin and stdout | 9 |
-| `ScriptedPrompter(answers)` | S | `Prompter`, scripted answers | 3 |
-
-#### Data passed between stages (all D)
-
-| Type | Made by | Holds |
-|---|---|---|
-| `Fetched` | `Fetcher` | `postings`, `results: list[SourceResult]` |
-| `Classified` | `Classifier` | `items: list[Classification]`, `pending: list[Job]` |
-| `Extracted` | `Extractor` | `items: list[Extraction]`, `pending: list[Job]` |
-| `Trends`, `Asks`, `Gaps` | Aggregate and Compare stages | Their report sections; `Gaps.new_analysis` for the cache |
-| `WindowChoice` | `window_for` | `window`, `capped` |
-
-### One run, end to end
-
-Shaded boxes hold state. Every other participant is stateless.
-
-**Startup**, from the command to the first stage:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant CLI as cli.main
-    participant CFG as config
-    participant Once as run_once
-    participant Pre as preflight
-    participant In as InputLoader
-    participant P as Prompter
-    participant L as LLM
-    participant S as RunStore
-    box rgba(255, 193, 7, 0.25) State for this run
-        participant W as RunWriter
-        participant A as Alerts
-    end
-    participant Run as run
-
-    CLI->>CFG: load_settings(path)
-    CFG-->>CLI: Settings
-    CLI->>CFG: build_app(settings)
-    CFG-->>CLI: App
-    CLI->>Once: run_once(app, profile_path)
-    Once->>Pre: preflight(app, profile_path)
-    Pre->>In: load(profile_path)
-    opt profile field missing or invalid
-        In->>P: ask(question)
-        P-->>In: answer
-    end
-    In-->>Pre: UserInput
-    Pre->>S: lock()
-    Pre->>S: runs()
-    S-->>Pre: earlier runs
-    opt a run is still marked running
-        Pre->>P: choose("delete it?", yes or no)
-        Pre->>S: delete(run_id)
-    end
-    Pre->>L: check()
-    Pre-->>Once: UserInput
-    Once->>S: runs()
-    S-->>Once: earlier runs
-    Once->>Once: window_for(runs, today, lookback, new_only)
-    Once->>S: start(Run with status running)
-    S-->>Once: RunWriter
-    Once->>A: Alerts()
-    Once->>Run: run(app, user, writer, alerts)
-    Run-->>Once: done
-    Once->>W: finish(COMPLETED, now)
-    Once-->>CLI: exit code 0
-    opt error, bug or Ctrl+C after start
-        Once->>W: finish(FAILED, now)
-        Once->>P: choose("delete its data?", yes or no)
-        Once->>S: delete(run_id)
-        Once-->>CLI: exit code 1 or 2
-    end
-```
-
-**Inside `run()`**, from planning to the report:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Run as run
-    participant S as RunStore
-    box rgba(255, 193, 7, 0.25) State for this run
-        participant W as RunWriter
-        participant A as Alerts
-    end
-    participant Pl as Planner
-    participant Src as Source
-    participant F as Fetcher
-    participant D as Deduper and Filter
-    participant C as Classifier
-    participant M as Matcher
-    participant E as Extractor
-    participant L as LLM
-    participant P as Prompter
-    participant Ag as TrendAggregator and RequirementRanker
-    participant G as GapFinder
-    participant R as ReportBuilder and Renderer
-
-    Run->>S: history()
-    S-->>Run: History
-    Run->>Pl: plan(criteria, window, alerts)
-    Pl->>Src: plan(searches, window)
-    Src-->>Pl: FetchPlan
-    opt paid source
-        Pl->>Src: credits(), count(plan)
-        opt over a limit
-            Pl->>P: choose(go ahead, skip, stop)
-        end
-    end
-    Pl-->>Run: plans
-    Run->>F: fetch(plans, writer.save_raw_page, alerts)
-    F->>Src: fetch(plan, save_page)
-    loop each page
-        Src->>W: save_raw_page(RawPage)
-    end
-    Src-->>F: postings
-    opt source failed
-        F->>A: warn(source_failed)
-    end
-    F-->>Run: Fetched
-    Run->>W: save_source_results(results)
-    Run->>S: pending()
-    Run->>D: dedupe(postings, history, pending, today), then apply(jobs, criteria)
-    D-->>Run: jobs
-    Run->>W: save_jobs(jobs)
-    Run->>S: cached_classifications(ids)
-    Run->>C: classify(jobs, cached, alerts)
-    C->>L: complete(system, prompt), per batch
-    opt usage limit reached
-        C->>P: choose(finish and carry over, stop)
-    end
-    C-->>Run: Classified
-    Run->>W: save_classifications(items)
-    Run->>M: match(jobs, classifications, criteria)
-    M-->>Run: matches
-    Run->>W: save_matches(matches)
-    Run->>S: cached_extractions(ids)
-    Run->>E: extract(matched jobs, cached, vocabulary, alerts)
-    opt above max_jobs_per_run
-        E->>P: choose(go ahead, stop)
-    end
-    E->>L: complete(system, prompt), per batch
-    E-->>Run: Extracted
-    Run->>W: save_extractions(items)
-    Run->>W: save_pending(jobs left by the usage limit)
-    Run->>Ag: aggregate(history, this run, run), rank(...)
-    Ag-->>Run: Trends, Asks
-    Run->>S: cv_analysis(cv.hash)
-    Run->>G: find(asks, cv, cached)
-    G->>L: complete(...), only for requirements not cached
-    G-->>Run: Gaps
-    opt new CV analysis
-        Run->>S: save_cv_analysis(hash, analysis)
-    end
-    Run->>R: build(run, ..., alerts.items), render(report)
-    R-->>Run: report text
-    Run->>W: save_report(text)
-```
-
-What to read from it:
-
-- Only `run_once` creates and finishes the writer, so a failure anywhere still closes the run as failed
-- Only `run()` reads earlier runs (`RunStore`) and writes this one (`RunWriter`). Stages get data in and return data, so they are tested with plain inputs
-- The one place a stateless object touches a state holder directly is `Source.fetch` calling `save_page`, a function `run()` passes in: the source never holds the writer
-- `Alerts` is passed per call, never stored in a stage
-
-### Interfaces at the swap points
-
-An interface exists where a second implementation exists or the requirements ask for a swap. Each one also has a test fake.
-
-| Interface | Implementations | Why it is a swap point |
-|---|---|---|
-| `Source` | Getro, JobsPipe, fake | Sources are added without touching the rest |
-| `LLM` | Claude CLI, fake (API later) | The way the LLM is called must be easy to swap |
-| `RunStore` | Files, in-memory fake | Run data sits behind a format layer |
-| `Renderer` | Markdown | The report sits behind a format layer |
-| `Prompter` | Terminal, scripted fake | Runs are interactive; tests cannot type |
-
-Interfaces grow with the build: each starts with the methods the walking skeleton calls, and the task that needs a method adds it as its section specifies.
-
-Interfaces are `typing.Protocol` classes: implementations and fakes don't inherit from them.
-
-### Stages
-
-Each stage is a small class in its own file. It takes its settings and collaborators in the constructor and has no interface of its own:
-
-```python
-deduper = Deduper(new_only=settings.new_only)
-trends = TrendAggregator(period=settings.trend_period)
-extractor = Extractor(llm=llm, prompter=prompter, batch_size=settings.llm.extract_batch, max_jobs=settings.llm.max_jobs_per_run)
-```
-
-### Declarative configuration
-
-The settings pick implementations by name, and `config.py` builds them:
-
-```yaml
-sources:
-  getro: {board: ffwd}
-  jobspipe: {plan: seeker}
-llm: {backend: claude_cli, model: haiku}
-report: {format: markdown}
-```
-
-The stage order stays in code, not in settings.
+`Settings` says which board, model and limits to use; `AppFactory` builds the classes from them. The step order stays in code, in `AppFactory`. For the first run the settings are defaults in code; a settings file comes later (task 10).
 
 ### CLI
 
-- `job-radar run`: one run (`--profile`, `--settings` to override paths)
-- `job-radar runs`: list runs with their status
-- `job-radar delete <run-id>`: delete a run, after confirmation
+- `job-radar run`: one run
+- Later: `job-radar runs` lists runs with their status; `job-radar delete <run-id>` deletes a run after confirmation
 
 ### Layout
 
 ```
 job_radar/
-  cli.py           commands: run, runs, delete
-  pipeline.py      run_once(), preflight(), run(): the run lifecycle and the stages in order
-  errors.py        JobRadarError and its subclasses, Alerts
-  model.py         Posting, Job, Classification, Match, Extraction, Run
-  config.py        settings and defaults; builds App
-  inputs.py        profile and CV (PDF via pypdf)
-  sources/         base.py (Source), getro.py, jobspipe.py
-  llm/             base.py (LLM), claude_cli.py, ask_json.py, prompts/
-  store/           base.py (RunStore), files.py
-  report/          base.py (Renderer), builder.py (ReportBuilder), markdown.py
-  ui/              base.py (Prompter), terminal.py
-  stages/          window.py, plan.py, fetch.py, dedupe.py, filter.py, classify.py, match.py, extract.py, trends.py, requirements.py, gaps.py
-tests/
-  fakes.py         FakeSource, FakeLLM, MemoryStore, ScriptedPrompter
+  cli.py              Cli
+  app.py              JobRadarApp
+  result.py           RunResult, RunSucceeded, RunFailed
+  factory.py          AppFactory, Settings
+  clock.py            Clock
+  model.py            data models
+  profile.py          ProfileLoader
+  pipeline.py         Pipeline, Step
+  checkpoints.py      Checkpoints, RunStats, FileCheckpoints
+  ranking.py          JobRanker, LlmRanker
+  llm.py              Llm, ClaudeCli
+  report_writer.py    ReportWriter, FileReportWriter
+  sources/            base.py (JobBoardSource, JobBoardParser), getro.py (GetroSource, GetroParser)
+  steps/              fetch.py, convert.py, dedupe.py (DedupeStep, JobKey), filter.py, recommend.py, report.py
 ```
 
 ## 3. Data model
@@ -526,45 +230,48 @@ class Requirement:
     name: str               # normalized: "Python", "CISSP"
     years: int | None       # for type years: 5 in "5+ years of Python"
 
-class Run:
-    id: str                 # start time, e.g. "2026-11-03T14-05"
-    started_at: datetime
-    finished_at: datetime | None
-    status: RunStatus       # running | completed | failed
-    window: Window
-    criteria: SearchCriteria    # snapshot of the profile's searches, to note changes between periods
-    sources: tuple[SourceResult, ...]
-
 class Window:               # dates a run covers, both ends included; start after end is rejected
     start: date
     end: date
 
-class SourceResult:
+class RawPage:              # one page as a job board returned it, before parsing
     source: str
-    queries: tuple[dict, ...]  # what was sent, one per search
-    fetched: int
-    estimate: int | None        # paid sources: sum of counts (section 12)
-    credits_before: int | None
-    credits_after: int | None
-    credits_spent: int | None   # None for free sources
-    decision: Decision | None   # auto | approved | skipped
-    error: str | None
+    page: int
+    body: str               # the response text, unchanged
+
+class CandidateProfile:     # what a good job is for the user
+    cv: str                 # text taken from the CV file
+    preferences: str        # the ideal job, in the user's own words
+
+class Recommendation:       # one recommended job
+    job: Job
+    score: int              # 0 to 100
+    reason: str             # one line
+
+class Report:               # the finished report
+    location: str           # e.g. a file path
+    summary: str            # "12 recommendations from 340 postings"
+
+class StepCount:            # how many items one finished step produced
+    step: str
+    count: int
 ```
+
+A record of each run (when it ran, its window, criteria snapshot, what each source spent) comes back with run history and cost checks (tasks 13 and 17). For the first run, the manifest in the run folder is the record (section 5).
 
 How the requirements map onto it:
 
 - Trend date: the primary posting's `posted_at`, or `first_seen` when missing
 - Traceability: a requirement belongs to an `Extraction`, which points to a `Job` and its postings
-- Criteria changes: each `Run` keeps a snapshot of the criteria it used
-- Monthly spend and source alerts: from `SourceResult`
+- Criteria changes, monthly spend and source alerts: from the run record, once it comes back (tasks 13 and 17)
 
 ### Model classes
 
 - **Pydantic** (frozen) for everything that crosses a boundary: files, LLM output, APIs. That is every model above, plus settings and user input (section 7)
-- Frozen means frozen: collections are tuples, so `job.postings.append(...)` fails like `job.id = ...` does. Lists passed in are converted. The `dict` inside `SourceResult.queries` stays mutable; it is written once by the Plan stage
+- Frozen means frozen: collections are tuples, so `job.postings.append(...)` fails like `job.id = ...` does. Lists passed in are converted
 - Unknown fields are rejected (`extra="forbid"`), so a typo in saved data fails to load instead of being dropped. Optional fields default to `None`
 - **Pydantic inside each adapter** for that source's raw response, with only the fields used (extra fields ignored). An API change then fails with the field that broke, reported as a source warning. These models never leave the adapter
-- **Dataclasses** for objects that live only in memory during a run: `App`, fetch plans, the `Report` passed to the renderer
+- **Frozen dataclasses** for objects that never leave memory: `RunSucceeded` and `RunFailed`
 
 ### Left for later sections
 
@@ -577,41 +284,22 @@ How the requirements map onto it:
 
 ### Interface
 
+Each job board brings two classes: one fetches, one parses.
+
 ```python
-class Source(Protocol):
+class JobBoardSource(Protocol):     # Adapter: talks to one board's API
     name: str
-    def plan(self, searches: list[Search], window: Window) -> FetchPlan: ...
-    def fetch(self, plan: FetchPlan, save_page: SavePage) -> list[Posting]: ...
-    def parse(self, raw: RawPage) -> list[Posting]: ...
+    def fetch(self, search: Search, window: Window) -> list[RawPage]: ...
 
-class PaidSource(Source, Protocol):
-    def credits(self) -> Credits: ...             # left, and used this billing month
-    def count(self, plan: FetchPlan) -> int: ...  # match count (JobsPipe: 1 credit)
+class JobBoardParser(Protocol):     # Adapter: turns one board's records into postings
+    source: str
+    def parse(self, page: RawPage) -> list[Posting]: ...
 ```
 
-- `plan` turns each search and the time window into a query for this source, recorded in `SourceResult.queries`. The cost estimate adds up the counts, so it can overestimate a little when searches overlap
-- `fetch` pages through the API and hands each raw page to `save_page` as it arrives. It returns postings only if every page succeeded; otherwise it raises `SourceError`, the run drops that source's postings and adds a warning. That keeps fetches all-or-nothing
-- `parse` is pure, raw page to postings. Used by `fetch`, by offline tests on recorded fixtures, and to re-parse stored raw pages after a parser fix
-- Paid sources add `credits()` and `count()`. The Plan stage checks `isinstance(source, PaidSource)`; free sources carry no cost code
-- `save_page` is the run's `RunWriter.save_raw_page` (section 5), passed in by the Fetch stage. The adapter only hands pages over; where and how they are kept is the store's concern
-
-The types around it, all in `sources/base.py`:
-
-```python
-@dataclass(frozen=True)
-class FetchPlan:            # in memory only
-    source: str
-    window: Window
-    queries: tuple[dict, ...]   # one per search; copied to SourceResult.queries
-
-@dataclass(frozen=True)
-class RawPage:              # one response page exactly as returned
-    source: str
-    page: int
-    body: bytes
-
-SavePage = Callable[[RawPage], None]  # a plain function: no extra Protocol
-```
+- `FetchStep` asks each source in turn. `fetch` turns the search and window into the board's own query and pages through the API. The pages are the fetch step's output, so the pipeline saves them like any other step's
+- A board that fails part way raises, and the step fails: fetches stay all-or-nothing. Once there is a second board, skipping the failed one with a warning comes with the cost checks
+- `ConvertStep` sends each page to the parser for its board. `parse` is pure: tested offline on recorded fixtures, and after a parser fix a failed run resumes at convert from the saved pages, without fetching again
+- Paid sources (JobsPipe) add their credit and match-count calls when cost checks are built (task 17); free sources carry no cost code
 
 ### Settings vs adapter module
 
@@ -622,7 +310,7 @@ SavePage = Callable[[RawPage], None]  # a plain function: no extra Protocol
 | Source-only filters (JobsPipe: occupation group, ghost score, company size, no agencies) | How the common criteria become this source's query |
 | Name of the API key variable (the key itself is in `.env`) | How this source reports credits |
 
-Adding a source: a module under `sources/`, one line in the registry (name to class), and its settings. The test fake is registered the same way.
+Adding a source: a module under `sources/` with its source and parser classes, wired in `AppFactory`, and its settings.
 
 "Declarative where possible" (requirements) means settings configure and choose each source, and the field mapping stays in code. A generic adapter that maps JSON fields from settings pays off only when several sources share a shape (per-company Greenhouse, Lever and Ashby feeds, later).
 
@@ -651,28 +339,25 @@ One folder per run, all plain text:
 ```
 output/                        (setting; default ./output, gitignored)
   runs/
-    2026-11-03T14-05/
-      run.json                 Run: schema version, status, window, criteria snapshot, SourceResults
+    2026-11-05T10-00/
+      fetch.jsonl              raw pages, as the boards returned them
+      convert.jsonl            postings
+      dedupe.jsonl             jobs
+      filter.jsonl             jobs that match the search
+      recommend.jsonl          the top N recommendations
+      report.jsonl             the Report: where it is, one-line summary
+      manifest.json            schema version; each finished step and its count, in order
       report.md                this run's report
-      raw/getro/0001.json.gz   raw pages, written as they arrive
-      raw/jobspipe/0001.json.gz
-      jobs.jsonl               slim jobs this run classified or first matched (postings without descriptions)
-      descriptions.jsonl       posting key, description
-      classifications.jsonl    one Classification per job in jobs.jsonl
-      extractions.jsonl        one Extraction per matched job in jobs.jsonl
-      matches.jsonl            one Match per job this run owns
-      pending.jsonl            full jobs the LLM couldn't process (usage limit), for the next run
-  cv/
-    <cv hash>.json             the CV's requirements and coverage judgments (section 10); not tied to a run
-  ledger.jsonl                 spend per paid source, only if the API lacks monthly usage (section 12); not tied to a run
-  .lock                        one run at a time
 ```
 
-- JSON for the run record, JSONL for lists: one record per line, easy to append, `grep` and hand to an LLM
-- Raw pages are gzipped: only the parser reads them, and they are the largest files (~10 KB per posting before compression)
+- One JSON Lines file per step, named after the step: one record per line, easy to `grep` and hand to an LLM
+- After a successful run only `manifest.json` and `report.md` remain. A failed run keeps everything, ready to resume
 - The report sits in the run folder, so deleting a run deletes its report. The terminal prints its path
+- Later, outside any run folder: the CV analysis cache (section 10), the spend ledger if the API lacks monthly usage (section 12), and a lock for one run at a time
 
 ### What a run stores
+
+Once run history is built (task 13), runs also store and read what earlier runs found:
 
 - Every job it sent to the LLM, matched or not, with its classification; matched jobs also with their extraction
 - A `Match` for each job it matched that no earlier completed run matched. That run owns the job
@@ -690,51 +375,40 @@ What counts:
 
 The CV cache and the spend ledger are not part of any run: deleting runs leaves them. A new CV hash starts a new cache entry.
 
-### Status lifecycle
+### Progress and resume
 
-- `run.json` is written at start with status `running`, and updated to `completed` or `failed` at the end. Writes go to a temp file, then rename, so a crash never leaves half a file
-- A run still `running` when the next one starts means the process died: it is treated as failed, and the user is asked whether to delete it
-- Only completed runs count: seen check, trends, window start. A kept failed run is for inspection only
+- After each step, the pipeline saves its output and adds the step and its count to `manifest.json`. A step listed there is finished
+- A failed run keeps every file. A rerun of it skips the finished steps and starts at the step that failed. For the first run every command starts a new folder; choosing which failed run to resume comes with run history (task 13)
+- Outputs pass between steps in memory. A resumed run starts with nothing in memory, so it loads the last saved output from disk once, then carries on in memory
+- Writes go to a temp file, then rename, so a crash never leaves half a file
 
 ### Interface
 
 ```python
-class RunStore(Protocol):            # all runs
-    def start(self, run: Run) -> RunWriter: ...   # records the run as running
-    def runs(self) -> list[Run]: ...
-    def history(self) -> History: ...   # matched slim jobs + classifications + extractions, completed runs only
-    def pending(self) -> list[Job]: ...  # from the last completed run
-    def cached_classifications(self, job_ids: list[str]) -> dict[str, Classification]: ...
-    def cached_extractions(self, job_ids: list[str]) -> dict[str, Extraction]: ...
-    def cv_analysis(self, cv_hash: str) -> CvAnalysis | None: ...
-    def save_cv_analysis(self, cv_hash: str, item: CvAnalysis) -> None: ...
-    def record_spend(self, source: str, credits: int, at: datetime) -> None: ...   # ledger fallback
-    def spend_since(self, source: str, start: date) -> int: ...
-    def delete(self, run_id: str) -> None: ...
+class Checkpoints(Protocol):        # Repository: one run's step outputs
+    def has(self, step: str) -> bool: ...
+    def save(self, step: str, items: Sequence[Model]) -> None: ...   # also records the count
+    def load(self, step: str, kind: type[M]) -> list[M]: ...
+    def discard_all(self) -> None: ...                               # once the run succeeded
 
-class RunWriter(Protocol):           # one run, from start to finish; stateful
-    @property
-    def run(self) -> Run: ...        # the run as last saved, read-only
-    def save_raw_page(self, page: RawPage) -> None: ...
-    def save_source_results(self, results: list[SourceResult]) -> None: ...  # updates the run record
-    def save_jobs(self, jobs: list[Job]) -> None: ...   # splits off descriptions
-    def save_classifications(self, items: list[Classification]) -> None: ...
-    def save_matches(self, items: list[Match]) -> None: ...
-    def save_extractions(self, items: list[Extraction]) -> None: ...
-    def save_pending(self, jobs: list[Job]) -> None: ...
-    def save_report(self, text: str) -> None: ...
-    def finish(self, status: RunStatus, finished_at: datetime) -> None: ...  # nothing saved after
+class RunStats(Protocol):           # read-only view for the report
+    def funnel(self) -> list[StepCount]: ...
+
+class ReportWriter(Protocol):       # where the finished report goes
+    def write(self, text: str) -> str: ...   # returns its location
 ```
 
-The store serves every run (list, history, caches, delete) and exists before the current run does, so it can't hold one run. `start` returns a writer that owns the new run's record (see State in section 2): no save call takes a run id, and nothing can be saved to a run that wasn't started. Source results are saved as soon as fetching ends, so a run that fails later still shows what it spent. `finish` takes the time from the caller, so the writer needs no clock.
+- `FileCheckpoints` implements both `Checkpoints` and `RunStats`; `FileReportWriter` writes `report.md`. `AppFactory` creates them with the run's folder, so they never start or track a run: they are born for one
+- Only `Pipeline` uses `Checkpoints`. `ReportStep` gets the same object as `RunStats`, so it can read the counts but not save or delete
+- The interface for run history (list runs, delete, caches) is added with task 13
 
 ### Keeping other backends possible (SQLite later)
 
-- Nothing outside `store/` touches `output/`. Stages, renderer and CLI go through `RunStore` methods that take and return models. So the renderer returns text and the store saves it
-- Stable string IDs are the only links: run id, job id, and the `job_id` on `Classification`, `Match` and `Extraction`. Nothing points to data by file path or line number
-- Contract tests: one suite runs against every `RunStore` implementation (`MemoryStore`, `FileStore`, later `SqliteStore`). A new backend is done when it passes
-- Each `run.json` records a schema version, so old runs can be told apart and migrated when models change
-- Raw pages stay gzipped files under any backend (`save_raw_page` keeps them separate). Trends stay in Python under any backend
+- Nothing outside `FileCheckpoints` and `FileReportWriter` touches `output/`. Steps take and return models
+- Stable string IDs are the only links: job id, and the `job_id` on `Classification`, `Match` and `Extraction`. Nothing points to data by file path or line number
+- Contract tests: one suite runs against every `Checkpoints` implementation. A database backend is done when it passes; `funnel()` becomes a query
+- The manifest records a schema version, so old runs can be told apart and migrated when models change
+- Trends stay in Python under any backend
 
 ### Disk use
 
@@ -748,14 +422,15 @@ A plain `pytest` never touches the network, `claude`, or credits. `pytest-socket
 
 | Layer | What it tests | With what |
 |---|---|---|
-| Stages | Dedupe, filter, trends, gaps, plan | Real inputs from small factories (`make_posting(title=...)`), no fakes |
+| Steps | Each step on its own: dedupe, filter, recommend, report, and later trends and gaps | Real inputs from small factories (`make_posting(title=...)`); fakes only for the interfaces a step holds (`JobRanker`, `RunStats`, `ReportWriter`) |
 | Adapters | `parse` on recorded pages; `fetch` paging, retries, all-or-nothing (page 2 fails, nothing returned) | Recorded fixtures, `httpx.MockTransport` |
-| LLM | Classify and Extract batching, retry and split, pending jobs on usage limit; `ClaudeCliLLM` output parsing, malformed JSON | `FakeLLM`; a fake command runner instead of `claude` |
-| Contracts | Every `RunStore` (`MemoryStore`, `FileStore`) and every `Source` (adapters, `FakeSource`) | One suite each, run against every implementation |
-| End to end | `run()` over several runs: the second finds nothing new, deleting a run makes its jobs unseen, trends span periods | Fakes, `FileStore` on a temp folder, `ScriptedPrompter` |
+| LLM | `LlmRanker` batching, JSON checks and retry (later Classify and Extract); `ClaudeCli` output parsing | A fake `Llm`; a fake command runner instead of `claude` |
+| Contracts | Every `Checkpoints` implementation (`FileCheckpoints`, later a database) | One suite, run against every implementation |
+| Pipeline | Steps in order, resume after the last finished step, errors become `RunFailed`, checkpoints deleted on success | Fake steps, `FileCheckpoints` on a temp folder |
+| End to end | `job-radar run` from `Cli` to the report; later over several runs (nothing new the second time, trends span periods) | Fake sources and `Llm`, a temp folder |
 | Report | Markdown output | Golden files, regenerated with a flag and reviewed in the diff |
 
-- Time: `App` gets a `now()` callable; tests pass a fixed time, so windows, periods and run ids are deterministic
+- Time: `AppFactory` gets a `Clock`; tests pass one with a fixed time, so windows, periods and run folders are deterministic
 - Each acceptance criterion in requirements.md has at least one test named after it. No coverage percentage target
 
 ### Recorded fixtures
@@ -947,11 +622,16 @@ Each run records how many merges came from each kind of key, and `jobs.jsonl` ke
 ### Interface
 
 ```python
-class LLM(Protocol):
+class Llm(Protocol):                # any language model
     def complete(self, system: str, prompt: str) -> str: ...
+
+class JobRanker(Protocol):          # Strategy: scores jobs against the CV and preferences
+    def score(self, jobs: Sequence[Job], profile: CandidateProfile) -> list[Recommendation]: ...
 ```
 
-JSON parsing and validation live in one shared helper (`ask_json(llm, prompt, Model)`), so a later API backend implements only `complete`.
+- `ClaudeCli` implements `Llm`; a per-token API backend later implements only `complete`
+- `LlmRanker` implements `JobRanker`: it builds the prompts, sends jobs in batches, and checks the JSON answers. `RecommendTopJobsStep` keeps the best N and knows nothing about the LLM
+- JSON checking stays with the class that asks, so `Llm` stays one method. If Classify and Extract (task 18) repeat it, it moves to a shared class then
 
 ### Claude CLI backend
 
@@ -1253,7 +933,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 ### Failed run
 
 - `run.json` gets status `failed` with the error code and message. No report is written
-- The user is asked "Run failed: <message>. Delete its data? [Y/n]". Default yes: a failed run never counts, so keeping it is only for inspection
+- The user is asked "Run failed: <message>. Delete its data? [y/N]". Default no: a kept failed run can be resumed (section 5). It still never counts toward seen postings, trends or the next window
 - Exit codes: 0 completed (with or without warnings), 1 error, 2 stopped by the user. Useful for scheduled runs later
 
 ## 14. Decisions and alternatives
@@ -1261,13 +941,15 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Decision | Alternatives considered | Why |
 |---|---|---|
 | Stages after Fetch see only `Posting` | Stages read each source's raw format | New sources plug in without changes elsewhere |
-| Interfaces only at the five swap points | An interface per stage | Stages have one implementation and are pure logic, tested directly; extra interfaces add indirection. A `Protocol` can be added over an existing class later at no cost |
+| Every step implements one `Step` interface; every collaborator sits behind an interface; only `AppFactory` knows concrete classes | Interfaces only at the swap points (the earlier choice) | The pipeline runs steps as black boxes, and each class knows the fewest neighbours. Changed on Nov 4, when the swap-point design felt coupled |
 | Stages are small configured classes | Plain functions; interface plus implementation per stage | Settings and collaborators injected in one place, without empty abstractions |
 | `typing.Protocol` for interfaces | `abc.ABC` | Structural: fakes need no inheritance |
-| Stage order in code | Pipeline defined in settings | Reading `pipeline.py` shows the flow |
+| Step order in code, in `AppFactory` | Pipeline defined in settings | One place shows the flow; settings choose what each step uses, not the order |
 | Trends recomputed from slim per-job records | Running counters; per-run summaries split by period | Deleting a run needs no undo logic. Summaries can't be recomputed when metrics, groups, top-N or extraction change, and inferred labels drift between runs. Volume is small. Summaries may come later as a cache built from the records, never the source of truth |
-| Raw responses saved with run data, written as they arrive | Save only parsed postings; keep raw in memory | Re-parse without spending credits; nothing after the adapter needs raw |
-| Stages pass plain lists | Streaming with generators | A run fits in memory (see Volume); dedupe needs all postings and fetches are all-or-nothing |
+| Raw pages are the fetch step's saved output | Save only parsed postings; keep raw in memory | A failed parse resumes at convert without fetching again |
+| Every step's output is saved | Checkpoint only the expensive steps (fetch, recommend) | One rule with no exceptions: no per-step settings, one way to count for the funnel, one way to resume. Saving the cheap steps costs seconds |
+| Outputs pass between steps in memory; the disk is read only when resuming | Each step reads its input back from disk, also in a fresh run | With lists, passing in memory is as short and avoids a read per step. The JSON round trip that resume relies on is covered by the model tests and a resume test |
+| Steps take and give lists | Streams (iterators), with per-item steps | Dedupe and recommend need all their input at once anyway, a stream can only be read once, and a run fits in memory. Volume that grows is across runs, which gets its own storage (task 13) |
 | Three model layers: `Posting`, `Job`, `Extraction` | One posting type with derived fields added in place | Re-extract without re-fetch; dedupe result is a type |
 | Pydantic for models that cross a boundary; dataclasses for in-memory only | Pydantic only for external input; dataclasses everywhere | Every domain model is saved and read back, so it needs parsing anyway; one model per concept, no converters |
 | Per-source Pydantic models for raw responses, inside the adapter | Plain dict access | API changes fail with a clear field error |
@@ -1319,15 +1001,26 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | No "go ahead" when the estimate exceeds credits left | Allow it, hoping overlap makes it fit | Running out mid-fetch would make the fetch partial |
 | Fetch capped at estimate plus 10%; over the cap the source fails | No cap; hard cap at the estimate | Keeps fetches all-or-nothing and spend near what was approved; repeats within the month are free |
 | Monthly spend from the source's credit data; ledger outside run folders as fallback | Sum spend recorded in run data | Deleting runs must not reset the budget |
-| Errors as exceptions caught by one wrapper; warnings collected in a per-run `Alerts` | Result objects from every stage; a logging framework | `run()` stays a plain list of stages; warnings reach terminal, run data and report from one place |
+| Errors as exceptions, caught by `Pipeline` and turned into `RunFailed`; warnings collected in a per-run `Alerts` (task 24) | Result objects from every step; a logging framework | Steps stay plain; one place decides how a run ends |
 | Preflight before the run folder exists | Create the folder first | Settings and input errors leave nothing to clean up, and no credits or LLM calls are spent |
-| Failed-run delete prompt defaults to yes | Default no | A failed run never counts; keeping it is only for inspection |
+| Failed-run delete prompt defaults to no | Default yes (the earlier choice) | A kept failed run can be resumed after its last finished step; it still never counts |
 | Exit codes 0, 1, 2 | Always 0 | Scheduled runs later can tell outcomes apart |
 | Models store collections as tuples | Lists, relying on "frozen" | Pydantic's frozen blocks `job.id = ...` but not `job.postings.append(...)`; tuples make "never changed after" hold |
 | Interfaces start with the methods the skeleton calls and grow per task | Full interfaces from the start | No placeholder types (`History`, `CvAnalysis`, `Credits`) before their sections are built; fakes don't carry unused methods |
-| `now()` returns local time with its UTC offset | UTC; naive local time | Run ids and report dates match the user's clock; saved times stay unambiguous |
-| `RunStore.start` returns a `RunWriter` bound to the new run | Pass `run_id` to every save; the run as a store constructor argument | The store spans all runs and exists before the current one, so it can't take the run; a bound writer removes the id from every call and can't write to an unstarted run |
+| `Clock.now()` returns local time with its UTC offset | UTC; naive local time | Run folders and report dates match the user's clock; saved times stay unambiguous |
+| One `FileCheckpoints` per run, created by `AppFactory` with the run's folder | A store for all runs that starts a writer per run (`RunStore.start` returning a `RunWriter`, the earlier choice) | Born for one run, it never starts or tracks a run and holds no state in memory. Run history gets its own interface with task 13 |
 | Code comments say what a class or function does, never cite design sections; temporary notes are `TODO(task N)` | Section references in docstrings | Code reads on its own; temporary notes are findable and removed by their task |
-| Stateless by default; state only in a few named holders (`run()` locals, `RunWriter`, alerts) | State wherever convenient | Who changes what is visible; stateless classes are tested with plain inputs |
-| `run()` does every read of earlier runs and write of this run; stages get data and return data | Stages hold the store and read or save themselves | Stages are tested with plain inputs and no fakes (section 6); every I/O call is visible in one function |
+| No state in memory: every class is configured once; a run's state is its folder | A few named in-memory holders (the earlier choice) | Nothing to track or reset; a crash loses nothing that resume needs |
+| `Pipeline` saves and loads every step's output; steps never touch storage | Steps save their own output; a saving decorator around each step | Resume decides where a run starts, which is about step order, so it belongs to the pipeline. A decorator per step would load every earlier output just to pass it along, with the skip logic spread over six wrappers |
 | `Alerts` created per run and passed per call | `App.alerts` | `App` is built once and holds no run data; a stateless stage never holds a stateful object |
+| `RunResult` with `RunSucceeded` and `RunFailed`, each giving its own `message()` and `exit_code()` | One result class with an `ok` flag | Each outcome carries only its own data; `Cli` shows any result without checking its kind, so a new outcome needs no change there |
+| `JobRadarApp` between `Cli` and `Pipeline` | `Cli` calls the pipeline directly | Thin today; later commands (`runs`, `delete`) become its methods while `Cli` keeps talking to one object |
+| Steps exchange lists of models | Any Python object | One generic save and load works for every step, with files now and a database later |
+| A source and a parser per board | One `Source` class that fetches and parses | Parsers are tested on saved pages with no network; a failed parse resumes without fetching again, which matters when fetching costs credits |
+| One `FilterStep` that knows the `Search` model; an empty criterion lets every job through | A filter class per criterion | Flexibility comes from the search settings, not from more classes |
+| `CandidateProfile` is the CV and free-text preferences; the search is not passed to the ranker | Ranker also gets the search criteria | The search decides what gets in, the profile what ranks well; soft wishes like salary go in the preferences |
+| Ranking is a Strategy (`JobRanker`) over an `Llm` interface | The step calls `claude -p` itself | Another ranker, or the per-token API, is a new class; tests use a fake ranker or a fake `Llm` |
+| The report reads counts through a read-only `RunStats`, from the manifest | A shared context all steps read and write; the report asks for each step by name | No hidden coupling between steps: a new step shows up in the funnel on its own, and the report can't save or delete |
+| On success, delete every checkpoint; keep the manifest and the report | Keep every step's output; keep chosen outputs such as the deduped jobs | Checkpoints are only for resuming, which a successful run no longer needs. Jobs kept for history get their own storage with task 13 |
+| Files for checkpoints; SQLite considered again at task 13 | SQLite now; MySQL | Plain text is a requirement and lets you read a step's output directly while building. SQLite wins once data spans runs (history, seen jobs, trends); `Checkpoints` is an interface, so switching is one class. A database server is too much for a local tool |
+| Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |

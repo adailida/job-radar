@@ -11,7 +11,7 @@ Each person runs their own copy. Everything about you (CV, searches, settings) s
 
 ## Status
 
-Design is complete; building Phase 1 (walking skeleton). See the docs below.
+Design is complete; building Phase 1 (the first real run). See the docs below.
 
 ## How it works
 

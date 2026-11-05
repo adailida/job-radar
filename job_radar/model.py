@@ -4,12 +4,12 @@ Each record is created once by one step of a run and never changed after. Every
 model is frozen and stores collections as tuples, so nothing can modify it in place.
 """
 
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any, Self
+from typing import Self
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Model(BaseModel):
@@ -61,22 +61,6 @@ class RequirementType(StrEnum):
     YEARS = "years"
 
 
-class RunStatus(StrEnum):
-    """State of a run: running until it completes or fails. Only completed runs count."""
-
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-
-class Decision(StrEnum):
-    """How a paid source's fetch was cleared: within limits, by the user, or skipped."""
-
-    AUTO = "auto"
-    APPROVED = "approved"
-    SKIPPED = "skipped"
-
-
 class Window(Model):
     """The dates a run fetches postings for, both ends included."""
 
@@ -107,6 +91,14 @@ class Salary(Model):
     currency: str
     period: Period
     text: str | None = None  # original wording
+
+
+class RawPage(Model):
+    """One page of results as a job board returned it, before it is parsed."""
+
+    source: str  # "getro", "jobspipe"
+    page: int  # 1 for the first page
+    body: str  # the response text, unchanged
 
 
 class Posting(Model):
@@ -182,7 +174,7 @@ class Match(Model):
 class Search(Model):
     """One named search: criteria a job must meet together."""
 
-    # TODO(task 8): add locations, work mode, keywords, salary and if_missing.
+    # TODO(task 11): add locations, work mode, keywords, salary and if_missing.
     name: str
     roles: tuple[str, ...]
 
@@ -193,27 +185,30 @@ class SearchCriteria(Model):
     searches: tuple[Search, ...]
 
 
-class SourceResult(Model):
-    """What one source did in a run: queries sent, postings fetched, and credits for paid ones."""
+class CandidateProfile(Model):
+    """What a good job is for the user: their CV and their ideal job in their own words."""
 
-    source: str
-    queries: tuple[dict[str, Any], ...]  # what was sent, one per search
-    fetched: int
-    estimate: int | None = None  # paid sources: postings expected, from count queries
-    credits_before: int | None = None
-    credits_after: int | None = None
-    credits_spent: int | None = None  # None for free sources
-    decision: Decision | None = None  # None for free sources
-    error: str | None = None  # why the source failed, if it did
+    cv: str  # text taken from the CV file
+    preferences: str  # free text
 
 
-class Run(Model):
-    """One run: when it ran, which dates it covered, with what criteria, and how each source did."""
+class Recommendation(Model):
+    """One job recommended for the user, with how well it fits and why."""
 
-    id: str  # start time, e.g. "2026-11-03T14-05"
-    started_at: datetime
-    finished_at: datetime | None = None
-    status: RunStatus
-    window: Window
-    criteria: SearchCriteria  # snapshot, so criteria changes between runs can be noted
-    sources: tuple[SourceResult, ...] = ()
+    job: Job
+    score: int = Field(ge=0, le=100)
+    reason: str  # one line
+
+
+class Report(Model):
+    """The finished report of a run: where to find it and what it found, in one line."""
+
+    location: str  # e.g. a file path
+    summary: str  # e.g. "12 recommendations from 340 postings"
+
+
+class StepCount(Model):
+    """How many items one finished step of a run produced."""
+
+    step: str
+    count: int

@@ -11,7 +11,7 @@ The first real run: `job-radar run` fetches Fast Forward through its search API,
 - **One responsibility per class**, and each class knows the fewest neighbours it can
 - **Depend on interfaces.** Only `AppFactory` knows concrete classes
 - **No state in memory.** Every class is configured once at creation and never changes. A run's state lives in its folder on disk, written only by `FileCheckpoints` and `FileReportWriter`
-- **Steps exchange only models**, so one generic save and load works for every step
+- **Steps exchange lists of models**, so one generic save and load works for every step
 
 ## Classes and dependencies
 
@@ -53,21 +53,20 @@ classDiagram
     class Pipeline {
         -steps: list~Step~
         -checkpoints: Checkpoints
-        -keep: set~str~
         +run() RunResult
     }
     class Step {
         <<interface>>
         +name: str
         +output: type
-        +run(data) Iterable
+        +run(data) list
     }
     class Checkpoints {
         <<Repository>>
         +has(step) bool
         +save(step, items)
-        +load(step, kind) Iterator
-        +discard(keep)
+        +load(step, kind) list
+        +discard_all()
     }
     class RunStats {
         <<interface>>
@@ -104,7 +103,7 @@ classDiagram
         <<interface>>
         +name: str
         +output: type
-        +run(data) Iterable
+        +run(data) list
     }
     class FetchStep {
         -sources: list~JobBoardSource~
@@ -114,7 +113,7 @@ classDiagram
     class JobBoardSource {
         <<Adapter>>
         +name: str
-        +fetch(search, window) Iterator~RawPage~
+        +fetch(search, window) list~RawPage~
     }
     class GetroSource {
         -board: str
@@ -125,7 +124,7 @@ classDiagram
     class JobBoardParser {
         <<Adapter>>
         +source: str
-        +parse(page) Iterator~Posting~
+        +parse(page) list~Posting~
     }
     class GetroParser
     class DedupeStep {
@@ -215,7 +214,7 @@ How to read the arrows:
 
 ### What each step takes and gives
 
-Each step's output is saved by the pipeline and read back from disk as the next step's input.
+The pipeline saves each step's output and passes it to the next step in memory. Only a resumed run reads from disk, once, to get the last saved output.
 
 | Step | Name in the run folder | Takes | Gives |
 |---|---|---|---|
@@ -236,9 +235,9 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `AppFactory` | Factory | Build the app for one command. The only class that knows concrete classes | all of them |
 | `JobRadarApp` | | Launch the pipeline for one command and hand back how it ended | `Pipeline`, `RunResult` |
 | `RunResult`, `RunSucceeded`, `RunFailed` | Polymorphism | Say how a run ended, in words and as an exit code | nothing |
-| `Pipeline` | Pipeline | Run the steps in order; skip steps already saved; save each output; turn an error into `RunFailed` and the final `Report` into `RunSucceeded` | `Step`, `Checkpoints`, `Report`, `RunResult` |
+| `Pipeline` | Pipeline | Run the steps in order; skip steps already saved; save each output; turn an error into `RunFailed` and the final `Report` into `RunSucceeded`; delete the checkpoints on success | `Step`, `Checkpoints`, `Report`, `RunResult` |
 | `Step` | Interface | The shape every step shares | models |
-| `Checkpoints` | Repository | Save and load each step's output for one run; record counts in the manifest; discard what's not kept | models |
+| `Checkpoints` | Repository | Save and load each step's output for one run; record counts in the manifest; delete the outputs once the run succeeds | models |
 | `RunStats` | Interface | Read-only: how many items each finished step produced | models |
 | `FileCheckpoints` | Implements both | One JSON Lines file per step, plus `manifest.json`, in the run folder | its run folder |
 | `FetchStep` | Step | Fetch raw pages from every configured job board | `JobBoardSource` |
@@ -284,17 +283,19 @@ sequenceDiagram
     app->>p: run()
     p->>cp: has(step), for each step
     cp-->>p: steps already done (none on a fresh run)
+    opt resuming: some steps already done
+        p->>cp: load(last done step)
+        cp-->>p: its output, read from disk
+    end
     loop each step not done yet, in order
-        p->>cp: load(previous step)
-        cp-->>p: its output, streamed from disk
         p->>s: run(data)
-        s-->>p: output
+        s-->>p: output, passed on in memory as the next data
         p->>cp: save(step, output)
         Note right of cp: writes step.jsonl and adds its count to manifest.json
     end
     alt every step succeeded
         p->>cp: load(report)
-        p->>cp: discard(keep = dedupe, report)
+        p->>cp: discard_all()
         p-->>app: RunSucceeded(location, summary)
     else a step raised an error
         p-->>app: RunFailed(step, reason)
@@ -306,7 +307,7 @@ sequenceDiagram
 
 - `Cli` never checks which result it got; each result knows its own message and exit code
 - A failed run keeps every saved step, so a later run can resume after the last one that finished
-- A fresh run and a resumed run take the same path: each step always reads its input from disk
+- Outputs pass between steps in memory; the disk is read only when resuming, since nothing is in memory yet
 
 ### Inside the steps
 
@@ -377,4 +378,4 @@ output/runs/2026-11-05T10-00/
     report.md
 ```
 
-After a successful run only `dedupe.jsonl`, `report.jsonl`, `manifest.json` and `report.md` remain. After a failed run everything stays.
+After a successful run only `manifest.json` and `report.md` remain. After a failed run everything stays, ready to resume.

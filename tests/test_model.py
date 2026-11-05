@@ -1,28 +1,27 @@
-from datetime import UTC, date, datetime
+from datetime import date
 from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
 
-from job_radar.config import local_now
+from job_radar.clock import Clock
 from job_radar.model import (
+    CandidateProfile,
     Classification,
-    Decision,
     Extraction,
     Job,
     Location,
     Match,
     Period,
     Posting,
+    RawPage,
+    Recommendation,
+    Report,
     Requirement,
     RequirementType,
-    Run,
-    RunStatus,
     Salary,
-    Search,
-    SearchCriteria,
     Seniority,
-    SourceResult,
+    StepCount,
     Window,
     WorkMode,
 )
@@ -86,29 +85,29 @@ EXTRACTION = Extraction(
 
 MATCH = Match(job_id="getro:123", searches=("remote-us", "onsite-ny"))
 
-RUN = Run(
-    id="2026-11-03T14-05",
-    started_at=datetime(2026, 11, 3, 14, 5, tzinfo=UTC),
-    finished_at=None,
-    status=RunStatus.RUNNING,
-    window=Window(start=date(2026, 10, 20), end=date(2026, 11, 3)),
-    criteria=SearchCriteria(searches=(Search(name="remote-us", roles=("Software Engineer",)),)),
-    sources=(
-        SourceResult(source="getro", queries=({"board": "ffwd"},), fetched=1500),
-        SourceResult(
-            source="jobspipe",
-            queries=({"title": "Software Engineer", "page": 1},),
-            fetched=20,
-            estimate=22,
-            credits_before=3200,
-            credits_after=3180,
-            credits_spent=20,
-            decision=Decision.APPROVED,
-        ),
-    ),
-)
+RAW_PAGE = RawPage(source="getro", page=1, body='{"jobs": []}')
 
-SAMPLES = [POSTING, SPARSE_POSTING, JOB, CLASSIFICATION, EXTRACTION, MATCH, RUN]
+PROFILE = CandidateProfile(cv="Ten years of Python.", preferences="Small team, remote.")
+
+RECOMMENDATION = Recommendation(job=JOB, score=87, reason="Python and remote, as preferred.")
+
+REPORT = Report(location="output/runs/2026-11-05T10-00/report.md", summary="12 from 340")
+
+STEP_COUNT = StepCount(step="convert", count=340)
+
+SAMPLES = [
+    RAW_PAGE,
+    POSTING,
+    SPARSE_POSTING,
+    JOB,
+    CLASSIFICATION,
+    EXTRACTION,
+    MATCH,
+    PROFILE,
+    RECOMMENDATION,
+    REPORT,
+    STEP_COUNT,
+]
 
 
 @pytest.mark.parametrize("model", SAMPLES, ids=lambda m: type(m).__name__)
@@ -143,5 +142,10 @@ def test_posting_key():
     assert POSTING.key == "getro:123"
 
 
+def test_recommendation_score_out_of_range_rejected():
+    with pytest.raises(ValidationError, match="score"):
+        Recommendation(job=JOB, score=101, reason="")
+
+
 def test_now_is_timezone_aware():
-    assert local_now().tzinfo is not None
+    assert Clock().now().tzinfo is not None

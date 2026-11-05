@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-job-radar = "job_radar.cli:main"
+job-radar = "job_radar.cli:Cli.start"
 
 [build-system]
 requires = ["hatchling"]

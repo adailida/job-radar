@@ -1,70 +1,30 @@
-"""The interface every job source implements, and the types a source exchanges with a run."""
+"""The two interfaces every job board brings: one to fetch, one to parse."""
 
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol, runtime_checkable
 
-from job_radar.model import Posting, Search, Window
+from job_radar.model import Posting, RawPage, Search, Window
 
 
-@dataclass(frozen=True)
-class FetchPlan:
-    """What a source will request in one run: one query per search, limited to the run's dates.
+@runtime_checkable
+class JobBoardSource(Protocol):
+    """Talks to one job board's API (Adapter).
 
-    Made before anything is fetched, so paid sources can be costed and approved first.
+    Stateless: holds only its configuration and HTTP client.
     """
 
-    source: str
-    window: Window
-    queries: tuple[dict[str, Any], ...]
+    name: str  # "getro", "jobspipe"; also the name of its parser's source
 
-
-@dataclass(frozen=True)
-class RawPage:
-    """One page of a source's response, exactly as received.
-
-    Kept so postings can be parsed again after a parser fix, without fetching
-    (or paying) again.
-    """
-
-    source: str
-    page: int
-    body: bytes
-
-
-SavePage = Callable[[RawPage], None]
-"""A function the source calls with each raw page as soon as it arrives.
-
-The run supplies it. The source only hands pages over; where and how they are
-kept is not its concern.
-"""
-
-
-class Source(Protocol):
-    """A job board or API that postings come from.
-
-    Turns the user's searches into its own queries, fetches the results, and
-    converts them into Postings.
-
-    Stateless: holds only its configuration (board, HTTP client, request delay)
-    and keeps nothing between calls. The plan is data the caller holds between
-    `plan` and `fetch`, so all paid sources can be approved before any fetch.
-    """
-
-    name: str
-
-    def plan(self, searches: Sequence[Search], window: Window) -> FetchPlan:
-        """Turn the searches and the run's dates into this source's queries. Sends no requests."""
+    def fetch(self, search: Search, window: Window) -> list[RawPage]:
+        """Query the board for the search and window, page by page, unparsed."""
         ...
 
-    def fetch(self, plan: FetchPlan, save_page: SavePage) -> list[Posting]:
-        """Run the plan's queries page by page and return every posting found.
 
-        Each raw page goes to `save_page` as it arrives. If any page fails, raises
-        instead of returning, so a source's results are complete or absent, never partial.
-        """
-        ...
+@runtime_checkable
+class JobBoardParser(Protocol):
+    """Turns one job board's records into postings (Adapter). Stateless."""
 
-    def parse(self, raw: RawPage) -> list[Posting]:
-        """Convert one raw page into postings. Sends no requests, so it works on saved pages."""
+    source: str  # the board whose pages it parses
+
+    def parse(self, page: RawPage) -> list[Posting]:
+        """Convert one raw page into postings."""
         ...
