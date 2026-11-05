@@ -3,17 +3,19 @@
 from datetime import date, datetime, timedelta, timezone
 
 from job_radar.clock import Clock
-from job_radar.model import Job, Location, Posting, Report, StepCount, WorkMode
+from job_radar.model import Job, Location, Posting, Report, StepCount, Window, WorkMode
 
 
 class FixedClock(Clock):
     """A clock stopped at one moment, so run folders and dates are predictable."""
 
-    NOW = datetime(2026, 11, 5, 10, 0, 0, tzinfo=timezone(timedelta(hours=-5)))
+    def __init__(self, hour: int = 10, day: int = 5):
+        """Stop the clock at that hour of that day in November 2026."""
+        self._now = datetime(2026, 11, day, hour, 0, 0, tzinfo=timezone(timedelta(hours=-5)))
 
     def now(self) -> datetime:
         """Always the same moment."""
-        return self.NOW
+        return self._now
 
 
 class FakeStep:
@@ -81,3 +83,35 @@ def job(source_id: str, title: str = "Data Engineer") -> Job:
 
 
 REPORT = Report(location="out/report.md", summary="3 jobs recommended")
+WINDOW = Window(start=date(2026, 10, 22), end=date(2026, 11, 5))
+
+
+class FakePrompter:
+    """A user who gives set answers, and a record of everything said to them."""
+
+    def __init__(self, *answers: bool):
+        """Keep the answers to give, in order."""
+        self._answers = list(answers)
+        self.told: list[str] = []
+        self.asked: list[str] = []
+
+    def tell(self, message: str) -> None:
+        """Remember the message."""
+        self.told.append(message)
+
+    def confirm(self, question: str) -> bool:
+        """Remember the question and give the next answer."""
+        self.asked.append(question)
+        return self._answers.pop(0)
+
+
+class FakeHistory:
+    """Run history with a set last window."""
+
+    def __init__(self, last: Window | None):
+        """Keep the last completed run's window."""
+        self._last = last
+
+    def last_window(self) -> Window | None:
+        """The set window."""
+        return self._last

@@ -81,9 +81,18 @@ def test_dedupe_merges_postings_with_the_same_key():
     assert all(j.first_seen == date(2026, 11, 5) for j in jobs)
 
 
-def test_filter_keeps_every_job_for_now():
+def test_filter_keeps_every_job_in_the_window_for_now():
     jobs = [job("1"), job("2")]
-    assert FilterStep(SEARCH).run(jobs) == jobs
+    assert FilterStep(SEARCH, WINDOW).run(jobs) == jobs
+
+
+def test_filter_drops_jobs_posted_before_the_window():
+    def dated(source_id: str, posted: date | None) -> Job:
+        p = posting(source_id).model_copy(update={"posted_at": posted})
+        return Job(id=p.key, keys=(p.key,), postings=(p,), first_seen=WINDOW.end)
+
+    jobs = [dated("old", date(2026, 10, 28)), dated("first", WINDOW.start), dated("none", None)]
+    assert [j.id for j in FilterStep(SEARCH, WINDOW).run(jobs)] == ["demo:first", "demo:none"]
 
 
 def test_recommend_keeps_top_n_best_first():
@@ -97,14 +106,15 @@ def test_report_lists_top_jobs_and_funnel():
     writer = MemoryWriter()
     stats = FakeStats([StepCount(step="fetch", count=2), StepCount(step="convert", count=12)])
     recs = [Recommendation(job=job("1", "Data Engineer"), score=90, reason="Fits well")]
-    reports = ReportStep(stats, writer).run(recs)
+    reports = ReportStep(stats, writer, WINDOW).run(recs)
     assert reports == [Report(location="memory/report.md", summary="1 job recommended")]
     assert "1. **Data Engineer**, Example Org (score 90)" in writer.text
     assert "Fits well" in writer.text
     assert "- fetch: 2\n- convert: 12" in writer.text
+    assert "Postings from 2026-10-29 to 2026-11-05." in writer.text
 
 
 def test_report_says_when_nothing_is_recommended():
     writer = MemoryWriter()
-    ReportStep(FakeStats([]), writer).run([])
+    ReportStep(FakeStats([]), writer, WINDOW).run([])
     assert "No jobs to recommend this run." in writer.text

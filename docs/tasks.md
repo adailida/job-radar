@@ -45,9 +45,15 @@ Goal: `job-radar run` fetches Fast Forward, recommends the top N jobs against th
   - Tests: a demo run end to end; a failing step keeps its files; funnel counts per step; exit codes 0, 1 and 2
   - Acceptance: Runs: a new source is added without changes downstream (the demo board)
 
-- [ ] **4. Time window, agreed before the run**
-  - Moved up from tasks 12 to 14 (Nov 5), so runs build on each other early
-  - Detail when it starts
+- [x] **4. Time window, agreed before the run**
+  - Moved up from tasks 12 to 14 on Nov 5, so runs build on each other early
+  - `WindowPlanner`: a first run fetches the lookback (14 days); a later run starts one day before the last completed run's last day; never further back than the lookback. Whole days only
+  - `WindowChooser` says which dates and why; it asks to continue on a first run or after a long break, and goes ahead after a recent run. "n" runs nothing
+  - `Prompter` (`tell`, `confirm`) and `TerminalPrompter`: `(y/n, Enter for y)`; with no input to read, the default
+  - `FileRunHistory` reads the last completed run's window; `manifest.json` records the window and whether the run completed; failed runs don't count
+  - `FilterStep` drops jobs posted before the window; `ReportStep` shows the window; demo runs keep their own history under `output/demo/`
+  - Tests: each window case; asking only when needed; a cancelled run leaves nothing; a second run starts from the first; failed and unreadable runs skipped
+  - Acceptance: Job search: a run never looks further back than the lookback cap (the report note on the gap is task 14). Runs: a failed run doesn't count toward the next run's window
 
 - [ ] **5. Fast Forward**
   - Find the Getro search API endpoint; check whether it filters by date
@@ -81,9 +87,9 @@ One line each for now; each task gets its detail, against the class names in arc
 
 - [ ] **10. Settings file:** YAML with defaults, unknown keys rejected, an example file
 - [ ] **11. Full search criteria:** locations, work mode, keywords, excluded titles, salary, `if_missing`
-- [ ] **12. Terminal prompts:** ask for missing or invalid profile fields
+- [ ] **12. Terminal prompts:** ask for missing or invalid profile fields (`Prompter` exists since task 4)
 - [ ] **13. Run history:** `job-radar runs` and `job-radar delete`; choosing to resume a failed run, and `Pipeline` resuming after the last finished step (moved from task 4 on Nov 5: nothing can choose a failed run before this task)
-- [ ] **14. Time window:** start from the last completed run, lookback cap noted in the report
+- [ ] **14. Time window in the report:** when the lookback cap cut a gap, the report says so and which dates it covers (the window itself is task 4)
 - [ ] **15. Smarter dedupe:** ATS and fuzzy keys; across runs, so only new jobs by default
 - [ ] **16. JobsPipe:** `JobsPipeSource` and `JobsPipeParser`, fixtures recorded with a few credits
 - [ ] **17. Cost checks:** estimate, limits, ask before spending, monthly spend

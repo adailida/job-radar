@@ -31,8 +31,9 @@ class Pipeline:
     Saves every step's output and passes it to the next step in memory. When
     resuming, skips the steps an earlier attempt saved and loads the last saved
     output from disk, since nothing is in memory yet. Turns an error into
-    `RunFailed` and the final report into `RunSucceeded`, and deletes the
-    checkpoints on success. Stateless: a run's progress lives in its checkpoints.
+    `RunFailed` and the final report into `RunSucceeded`, and on success marks
+    the run completed, which deletes the checkpoints. Stateless: a run's
+    progress lives in its checkpoints.
     """
 
     def __init__(self, steps: Sequence[Step], checkpoints: Checkpoints) -> None:
@@ -52,7 +53,7 @@ class Pipeline:
                 return RunFailed(step=step.name, reason=str(error) or type(error).__name__)
         match data:
             case [Report() as report]:
-                self._checkpoints.discard_all()
+                self._checkpoints.complete()
                 return RunSucceeded(location=report.location, summary=report.summary)
             case _:
                 last = self._steps[-1].name if self._steps else "none"

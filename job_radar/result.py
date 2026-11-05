@@ -54,3 +54,16 @@ class RunFailed(RunResult):
     def exit_code(self) -> int:
         """Exit code for a failed run."""
         return 1
+
+
+@dataclass(frozen=True)
+class RunCancelled(RunResult):
+    """A run the user called off before it started: nothing was fetched or saved."""
+
+    def message(self) -> str:
+        """Say that nothing ran."""
+        return "Cancelled. Nothing was fetched."
+
+    def exit_code(self) -> int:
+        """Exit code for a run the user called off: not an error."""
+        return 0

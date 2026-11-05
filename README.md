@@ -33,6 +33,8 @@ Works now:
 
     job-radar run --demo   # a run on made-up postings: no network, no LLM, no CV needed
 
+Each run says which dates it fetches: the last 14 days on a first run, since the last run after that. On a first run, or after a long break, it asks before going ahead.
+
 Planned:
 
     job-radar run          # one run; writes output/runs/<run-id>/report.md

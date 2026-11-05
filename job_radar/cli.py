@@ -6,6 +6,7 @@ import sys
 from job_radar import __version__
 from job_radar.clock import Clock
 from job_radar.factory import AppFactory, Settings
+from job_radar.prompter import TerminalPrompter
 
 
 class Cli:
@@ -17,7 +18,7 @@ class Cli:
     @staticmethod
     def start() -> int:
         """Entry point of the `job-radar` command. Returns the exit code."""
-        return Cli(AppFactory(Settings(), Clock())).main(sys.argv[1:])
+        return Cli(AppFactory(Settings(), Clock(), TerminalPrompter())).main(sys.argv[1:])
 
     def __init__(self, factory: AppFactory) -> None:
         """Keep the factory that builds the app for each command."""
@@ -26,8 +27,8 @@ class Cli:
     def main(self, argv: list[str]) -> int:
         """Parse the command line, run the chosen command, and return the exit code.
 
-        Exit codes: 0 when the run succeeded, 1 when a step failed, 2 when the
-        run could not be set up.
+        Exit codes: 0 when the run succeeded or the user called it off, 1 when
+        a step failed, 2 when the run could not be set up.
         """
         # TODO(task 13): add the runs and delete commands.
         parser = argparse.ArgumentParser(
