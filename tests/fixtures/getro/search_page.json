@@ -1,0 +1,301 @@
+{
+  "results": {
+    "jobs": [
+      {
+        "compensation_public": true,
+        "featured": false,
+        "compensation_amount_max_cents": 14000000,
+        "searchable_locations": [
+          "Remote"
+        ],
+        "created_at": 1793875448,
+        "weight": 0,
+        "compensation_amount_min_cents": 12500000,
+        "source": "career_page",
+        "title": "Digital Strategy Project Manager",
+        "work_mode": "remote",
+        "url": "https://www.plancpills.org/jobs#jobs_digital-strategy-project-manager",
+        "skills": [
+          "Search Engine Optimization",
+          "Website Management",
+          "Analytics",
+          "User Experience",
+          "Digital Communications",
+          "Software Project Management"
+        ],
+        "location_details": [
+          {
+            "name": "Remote",
+            "area_type": "global",
+            "point": null
+          }
+        ],
+        "compensation_offers_equity": false,
+        "compensation_currency": "USD",
+        "compensation_period": "year",
+        "organization": {
+          "stage": "pre_seed",
+          "logo_url": "https://cdn.getro.com/companies/6a29f9ec-dcd8-4598-ad3d-8463354a19fd-1762134328",
+          "topics": [
+            "Health"
+          ],
+          "name": "Plan C",
+          "head_count": 1,
+          "id": 711718,
+          "industry_tags": [
+            "Fitness",
+            "Health Care",
+            "Health, Wellness and Fitness",
+            "Sports",
+            "Wellness"
+          ],
+          "slug": "plan-c"
+        },
+        "locations": [
+          "Remote"
+        ],
+        "has_description": true,
+        "slug": "99005045-digital-strategy-project-manager",
+        "seniority": "director",
+        "id": 99005045
+      },
+      {
+        "compensation_public": true,
+        "featured": false,
+        "compensation_amount_max_cents": 3400,
+        "searchable_locations": [],
+        "created_at": 1793797223,
+        "weight": 0,
+        "compensation_amount_min_cents": 2800,
+        "source": "career_page",
+        "title": "PERINATAL PEER COACH JOB DESCRIPTION",
+        "work_mode": "on_site",
+        "url": "https://www.ourroots.community/join-us",
+        "skills": [
+          "Life Coaching",
+          "Active Listening",
+          "Organizational Skills",
+          "Empathy",
+          "Intercultural Competence"
+        ],
+        "location_details": [],
+        "compensation_offers_equity": false,
+        "compensation_currency": "USD",
+        "compensation_period": "hour",
+        "organization": {
+          "stage": "pre_seed",
+          "logo_url": "https://cdn.getro.com/companies/03ad5c08-01aa-4f8d-8691-f9ef41fd9603-1761442577",
+          "topics": [
+            "Fast Forward portfolio",
+            "Health"
+          ],
+          "name": "Our Roots",
+          "head_count": 1,
+          "id": 1057668,
+          "industry_tags": [
+            "Health Care",
+            "Mental Health",
+            "Non-Profit",
+            "Social Impact"
+          ],
+          "slug": "our-roots"
+        },
+        "locations": [],
+        "has_description": true,
+        "slug": "98960032-perinatal-peer-coach-job-description",
+        "seniority": "associate",
+        "id": 98960032
+      },
+      {
+        "compensation_public": true,
+        "featured": false,
+        "compensation_amount_max_cents": 8500000,
+        "searchable_locations": [
+          "Oxford, UK",
+          "Oxfordshire, UK",
+          "England, UK",
+          "United Kingdom",
+          "Europe"
+        ],
+        "created_at": 1793770419,
+        "weight": 0,
+        "compensation_amount_min_cents": 6500000,
+        "source": "manual",
+        "title": "Research Software Engineer [UK-2026-RSE-1",
+        "work_mode": "on_site",
+        "url": "https://topos.institute/community/jobs/uk-2026-rse-1/",
+        "skills": [],
+        "location_details": [
+          {
+            "name": "Oxford, UK",
+            "area_type": "locality",
+            "point": "POINT (-1.2577263 51.7520209)"
+          }
+        ],
+        "compensation_offers_equity": null,
+        "compensation_currency": "EUR",
+        "compensation_period": "year",
+        "organization": {
+          "stage": "other",
+          "logo_url": "https://cdn.getro.com/companies/6238131e-1227-455a-b38a-008a949c2c63-1766367289",
+          "topics": [],
+          "name": "Topos Institute",
+          "head_count": 2,
+          "id": 34395,
+          "industry_tags": [
+            "Education",
+            "Non-Profit",
+            "Non-profit Organizations",
+            "Social Impact"
+          ],
+          "slug": "topos-institute"
+        },
+        "locations": [
+          "Oxford, UK"
+        ],
+        "has_description": false,
+        "slug": "98883130-research-software-engineer-uk-2026-rse-1",
+        "seniority": null,
+        "id": 98883130
+      },
+      {
+        "compensation_public": true,
+        "featured": false,
+        "compensation_amount_max_cents": null,
+        "searchable_locations": [],
+        "created_at": 1793876412,
+        "weight": 0,
+        "compensation_amount_min_cents": null,
+        "source": "career_page",
+        "title": "Responsable de proyectos de estrategia digital",
+        "work_mode": "on_site",
+        "url": "https://form.jotform.com/263035760701047",
+        "skills": [],
+        "location_details": [],
+        "compensation_offers_equity": null,
+        "compensation_currency": null,
+        "compensation_period": "period_not_defined",
+        "organization": {
+          "stage": "pre_seed",
+          "logo_url": "https://cdn.getro.com/companies/6a29f9ec-dcd8-4598-ad3d-8463354a19fd-1762134328",
+          "topics": [
+            "Health"
+          ],
+          "name": "Plan C",
+          "head_count": 1,
+          "id": 711718,
+          "industry_tags": [
+            "Fitness",
+            "Health Care",
+            "Health, Wellness and Fitness",
+            "Sports",
+            "Wellness"
+          ],
+          "slug": "plan-c"
+        },
+        "locations": [],
+        "has_description": false,
+        "slug": "99009773-responsable-de-proyectos-de-estrategia-digital",
+        "seniority": null,
+        "id": 99009773
+      },
+      {
+        "compensation_public": true,
+        "featured": false,
+        "compensation_amount_max_cents": null,
+        "searchable_locations": [
+          "California, USA",
+          "United States",
+          "North America",
+          "Oregon, USA",
+          "New York, USA",
+          "Rhode Island, USA",
+          "Chicago, IL, USA",
+          "Cook County, IL, USA",
+          "Illinois, USA",
+          "Seattle, WA, USA",
+          "King County, WA, USA",
+          "Washington, USA"
+        ],
+        "created_at": 1793798849,
+        "weight": 0,
+        "compensation_amount_min_cents": null,
+        "source": "career_page",
+        "title": "Director of Strategic Initiatives and Enablement",
+        "work_mode": "on_site",
+        "url": "https://recruiting2.ultipro.com/SEI1003SEIB/JobBoard/a67b6b36-d87c-4b5f-aef3-7a2f2b683702/OpportunityDetail?opportunityId=bfcd1226-f714-409f-8d6f-53b6b60a2b66",
+        "skills": [],
+        "location_details": [
+          {
+            "name": "California, USA",
+            "area_type": "administrative_area_level_1",
+            "point": "POINT (-119.4179324 36.778261)"
+          },
+          {
+            "name": "Oregon, USA",
+            "area_type": "administrative_area_level_1",
+            "point": "POINT (-120.5542012 43.8041334)"
+          },
+          {
+            "name": "New York, USA",
+            "area_type": "administrative_area_level_1",
+            "point": "POINT (-74.2179326 43.2994285)"
+          },
+          {
+            "name": "Rhode Island, USA",
+            "area_type": "administrative_area_level_1",
+            "point": "POINT (-71.4774291 41.5800945)"
+          },
+          {
+            "name": "Chicago, IL, USA",
+            "area_type": "locality",
+            "point": "POINT (-87.6297982 41.8781136)"
+          },
+          {
+            "name": "Seattle, WA, USA",
+            "area_type": "locality",
+            "point": "POINT (-122.3320708 47.6062095)"
+          }
+        ],
+        "compensation_offers_equity": null,
+        "compensation_currency": null,
+        "compensation_period": "period_not_defined",
+        "organization": {
+          "stage": "pre_seed",
+          "logo_url": "https://cdn.getro.com/companies/2b7e7007-a6bd-44cb-ab9d-fed0598bc228-1761356468",
+          "topics": [
+            "Economic empowerment",
+            "Health"
+          ],
+          "name": "Carina",
+          "head_count": 3,
+          "id": 1362227,
+          "industry_tags": [
+            "Child Care",
+            "Health Care",
+            "Home Care",
+            "Home Health Care",
+            "Hospitals and Health Care",
+            "Medicaid",
+            "Product Development",
+            "Technology"
+          ],
+          "slug": "carina-2"
+        },
+        "locations": [
+          "California, USA",
+          "Oregon, USA",
+          "New York, USA",
+          "Rhode Island, USA",
+          "Chicago, IL, USA",
+          "Seattle, WA, USA"
+        ],
+        "has_description": false,
+        "slug": "98973638-director-of-strategic-initiatives-and-enablement",
+        "seniority": null,
+        "id": 98973638
+      }
+    ],
+    "count": 1452
+  }
+}

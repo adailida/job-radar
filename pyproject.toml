@@ -28,7 +28,8 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--disable-socket"
+addopts = "--disable-socket -m 'not live'"
+markers = ["live: calls a real job board; run with `uv run pytest -m live`"]
 
 [tool.ruff]
 line-length = 100

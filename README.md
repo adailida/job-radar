@@ -11,7 +11,7 @@ Each person runs their own copy. Everything about you (CV, searches, settings) s
 
 ## Status
 
-Design is complete; building Phase 1 (the first real run). The whole run already works end to end on made-up data: try `uv run job-radar run --demo`. See the docs below.
+Design is complete; building Phase 1 (the first real run). The whole run already works end to end, on made-up data (`uv run job-radar run --demo`) and on real Fast Forward jobs (`uv run job-radar run`). See the docs below.
 
 ## How it works
 
@@ -32,6 +32,7 @@ Each run fetches postings, merges duplicates across sources, drops ones you've a
 Works now:
 
     job-radar run --demo   # a run on made-up postings: no network, no LLM, no CV needed
+    job-radar run          # real Fast Forward jobs, ranked by keyword against a sample profile until your CV and the LLM are wired in
 
 Each run says which dates it fetches: the last 14 days on a first run, since the last run after that. On a first run, or after a long break, it asks before going ahead.
 

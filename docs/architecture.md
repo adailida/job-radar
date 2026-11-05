@@ -2,7 +2,7 @@
 
 How the code is put together: which classes exist, what each one is responsible for, which others it knows, and where state lives. Every box is a real class, named as in the code. The reasons behind each part are in [design.md](design.md).
 
-**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
+**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs; until task 7 a real run ranks them by keyword against the demo profile. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
 
 The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, a made-up profile and keyword scoring in place of the LLM.
 
@@ -186,7 +186,9 @@ classDiagram
         +fetch(search, window) list~RawPage~
     }
     class GetroSource {
-        -board: str
+        -network: str
+        -http: httpx.Client
+        -delay: float
     }
     class DemoSource
     class ConvertStep {
@@ -290,6 +292,8 @@ classDiagram
     style ReportStep stroke:#2e7d32,stroke-width:3px
     style FileReportWriter stroke:#2e7d32,stroke-width:3px
     style DemoSource stroke:#2e7d32,stroke-width:3px
+    style GetroSource stroke:#2e7d32,stroke-width:3px
+    style GetroParser stroke:#2e7d32,stroke-width:3px
     style DemoParser stroke:#2e7d32,stroke-width:3px
     style KeywordRanker stroke:#2e7d32,stroke-width:3px
 ```
@@ -337,7 +341,7 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `RunStats` | Interface | Read-only: how many items each finished step produced | models |
 | `FileCheckpoints` | Implements both | One JSON Lines file per step, plus `manifest.json` (the window, each step's count, completed or not), in the run folder | its run folder |
 | `FetchStep` | Step | Fetch raw pages from every configured job board | `JobBoardSource` |
-| `JobBoardSource`, `GetroSource` | Adapter | Query one board's API, page by page | the board's API |
+| `JobBoardSource`, `GetroSource` | Adapter | Query one board's API, page by page; `GetroSource` stops at the page that reaches past the window, waits 1s between requests and retries | the board's API |
 | `ConvertStep` | Step | Send each raw page to the parser for its board | `JobBoardParser` |
 | `JobBoardParser`, `GetroParser` | Adapter | Turn one board's records into `Posting`s | the board's format |
 | `DemoSource`, `DemoParser` | Adapter | A made-up board: the same postings every run, for `--demo` and tests | `Posting` |
@@ -428,7 +432,7 @@ sequenceDiagram
 
 ### Inside the steps
 
-The demo run, opening the black boxes. The save around each step (above) is left out. A real run puts `GetroSource` and `GetroParser` (task 5) and `LlmRanker` over `ClaudeCli` (task 7) where the demo parts are; dedupe and filter get their real rules in task 6.
+The demo run, opening the black boxes. The save around each step (above) is left out. A real run puts `GetroSource` and `GetroParser` where the demo board is (built), and `LlmRanker` over `ClaudeCli` where `KeywordRanker` is (task 7, with a describe step after filter for full descriptions); dedupe and filter get their real rules in task 6.
 
 ```mermaid
 sequenceDiagram

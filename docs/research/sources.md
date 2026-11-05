@@ -32,6 +32,18 @@ Research done on 2026-10-16 to pick the MVP sources. Endpoints were called live 
 - Boards link out to the employer's own ATS (on Fast Forward: Greenhouse, Ashby, iCIMS, Paylocity, own sites). Small orgs use Greenhouse and Ashby too, not only big companies
 - So a board can serve as discovery: find the company, then pull its ATS feed for the full posting
 
+## Fast Forward's API on Getro (checked 2026-11-05)
+
+Found from the board's own page code; called live with a few requests, 1s apart.
+
+- **Board id:** Getro network `997` (in the page's embedded data as `network.id`)
+- **Search:** `POST https://api.getro.com/api/v2/collections/997/search/jobs`, body `{"hits_per_page": 200, "page": 0, "filters": "", "query": ""}`, header `Accept: application/json` (406 without it). No key. Returns `{"results": {"jobs": [...], "count": 1452}}`
+- **Paging:** pages from 0, up to 200 jobs a page, so the whole board is about 8 pages
+- **Order:** newest first by `created_at` (Unix time, UTC; the moment the job was listed on the board, equal to the job's `posted_at`). No date filter, so a run stops paging at the first page that reaches past its window: about 2 pages for 14 days
+- **Fields per job:** id, slug, title, organization (name, slug, topics, industry tags, head count), locations (text list, 18% empty), location details with coordinates, `work_mode` (`on_site`, `remote` seen), compensation (min and max in cents, currency, period `year`/`month`/`hour`/`period_not_defined`, public flag), seniority, skills, url (the employer's own posting), source, `has_description`
+- **Salary:** about 30% of jobs (57 of 200): mostly USD a year, some hourly, a few EUR, GBP and INR. When an amount is set, the currency and period are too
+- **No description in search results.** It comes from `GET https://api.getro.com/api/v1/jobs/{slug}?collection_id=997` (HTML, about 3 in 4 jobs), one request per job, along with `posted_at`, status, employment types and job functions. Fetched only for jobs that pass the filter (task 7)
+
 ## Paid aggregators
 
 | Aggregator | Price (pricing page, 2026-10-16) | Sources | Notes |

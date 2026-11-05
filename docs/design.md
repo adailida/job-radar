@@ -543,7 +543,7 @@ llm:
   timeout_seconds: 120
 store: {backend: files, path: output}
 sources:
-  getro: {enabled: true, board: ffwd, delay_seconds: 1}
+  getro: {enabled: true, network: "997", delay_seconds: 1}   # 997: Fast Forward
   jobspipe:
     enabled: true
     plan: seeker            # sets default monthly_budget and per_run_max
@@ -1030,6 +1030,9 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Cancelling at the prompt exits with 0 | 1, like an error | Calling a run off isn't a failure; nothing was started |
 | Demo runs keep their own history under `output/demo/` | Demo runs among real runs | A demo run must never move a real run's window |
 | Run completion recorded in the manifest, by `Checkpoints.complete()` | Infer it from which files remain; a separate marker file | One place says what a run covered and whether it completed; replaces `discard_all`, which ran at the same moment |
+| Fast Forward paged newest first, stopping at the page that reaches past the window | Fetch the whole board every run | The search has no date filter but sorts by listing time, so a 14-day window takes about 2 requests instead of 8 |
+| Full descriptions fetched after the filter, only for jobs kept, through a describer per board (task 7) | Fetch every description during fetch; no descriptions | Getro needs one request per job at 1s each: about 400 for a first run, mostly for jobs the filter drops. Boards that already send descriptions skip the step |
+| Until task 7, a real run ranks with `KeywordRanker` against the demo profile | Real runs wait for task 7 | Real postings flow end to end now; each later task swaps one part |
 | `Clock.now()` returns local time with its UTC offset | UTC; naive local time | Run folders and report dates match the user's clock; saved times stay unambiguous |
 | One `FileCheckpoints` per run, created by `AppFactory` with the run's folder | A store for all runs that starts a writer per run (`RunStore.start` returning a `RunWriter`, the earlier choice) | Born for one run, it never starts or tracks a run and holds no state in memory. Run history gets its own interface with task 13 |
 | Code comments say what a class or function does, never cite design sections; temporary notes are `TODO(task N)` | Section references in docstrings | Code reads on its own; temporary notes are findable and removed by their task |
