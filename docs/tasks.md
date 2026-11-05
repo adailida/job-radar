@@ -45,9 +45,9 @@ Goal: `job-radar run` fetches Fast Forward, recommends the top N jobs against th
   - Tests: a demo run end to end; a failing step keeps its files; funnel counts per step; exit codes 0, 1 and 2
   - Acceptance: Runs: a new source is added without changes downstream (the demo board)
 
-- [ ] **4. Resume**
-  - `Pipeline.run` skips the steps already saved and loads the last saved output once; `RunFailed` says a rerun resumes from there
-  - Tests, with fake steps on a temp folder: a rerun resumes after the last finished step; a run with every step saved only discards
+- [ ] **4. Time window, agreed before the run**
+  - Moved up from tasks 12 to 14 (Nov 5), so runs build on each other early
+  - Detail when it starts
 
 - [ ] **5. Fast Forward**
   - Find the Getro search API endpoint; check whether it filters by date
@@ -82,7 +82,7 @@ One line each for now; each task gets its detail, against the class names in arc
 - [ ] **10. Settings file:** YAML with defaults, unknown keys rejected, an example file
 - [ ] **11. Full search criteria:** locations, work mode, keywords, excluded titles, salary, `if_missing`
 - [ ] **12. Terminal prompts:** ask for missing or invalid profile fields
-- [ ] **13. Run history:** `job-radar runs` and `job-radar delete`; choosing to resume a failed run
+- [ ] **13. Run history:** `job-radar runs` and `job-radar delete`; choosing to resume a failed run, and `Pipeline` resuming after the last finished step (moved from task 4 on Nov 5: nothing can choose a failed run before this task)
 - [ ] **14. Time window:** start from the last completed run, lookback cap noted in the report
 - [ ] **15. Smarter dedupe:** ATS and fuzzy keys; across runs, so only new jobs by default
 - [ ] **16. JobsPipe:** `JobsPipeSource` and `JobsPipeParser`, fixtures recorded with a few credits

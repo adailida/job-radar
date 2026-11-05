@@ -331,7 +331,7 @@ sequenceDiagram
 ```
 
 - `Cli` never checks which result it got; each result knows its own message and exit code
-- A failed run keeps every saved step. Resuming after the last one that finished comes in task 4: the pipeline will skip the saved steps and load the last saved output from disk, once
+- A failed run keeps every saved step. Resuming after the last one that finished comes in task 13: the pipeline will skip the saved steps and load the last saved output from disk, once
 - Outputs pass between steps in memory; the disk is only written, except when resuming
 
 ### Inside the steps
