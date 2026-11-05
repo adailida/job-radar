@@ -62,8 +62,10 @@ Goal: `job-radar run` fetches Fast Forward, recommends the top N jobs against th
   - Tests: `parse` on fixtures; paging, retries and failures with `MockTransport`; live check (opt-in: `uv run pytest -m live`)
   - Also done when: a real `job-radar run` saves Fast Forward postings in its run folder
 
-- [ ] **6. Dedupe and filter**
+- [x] **6. Dedupe and filter**
   - `JobKey` on normalized company, title and location; `FilterStep` on roles, any criterion left empty passes
+  - `Normalizer` shared by both: legal suffixes, abbreviations, accents; an aside in brackets is dropped only when it is about place or work mode ("(Remote, US)" goes, "(Media and Communication)" stays)
+  - Checked on real Fast Forward data: 400 postings became 392 jobs, all 8 merges real duplicates (mostly one job posted through both Wellfound and Greenhouse)
   - Tests: two postings of one job become one `Job`; a role match is kept, others dropped; an empty criterion keeps everything
   - Acceptance: Job search: a run keeps only postings that match the search criteria
 

@@ -162,6 +162,7 @@ job_radar/
   factory.py          AppFactory, Settings
   clock.py            Clock
   model.py            data models
+  normalize.py        Normalizer
   profile.py          ProfileLoader, the demo profile
   pipeline.py         Pipeline, Step
   checkpoints.py      Checkpoints, RunStats, FileCheckpoints, Manifest
@@ -594,8 +595,9 @@ Each posting gets several keys. Two postings are the same job if they share any 
 
 - URLs: lowercase host; strip tracking parameters (`utm_*`, `gh_src`) and trailing slashes; known ATS URL shapes parse into an ATS key
 - Company: lowercase, no punctuation, legal suffixes dropped (Inc, LLC, Ltd, GmbH)
-- Title: lowercase, no punctuation, abbreviations expanded (Sr to senior, Eng to engineer), location text in brackets removed ("Engineer (Remote, US)")
+- Title: lowercase, no punctuation, abbreviations expanded (Sr to senior, Eng to engineer), an aside in brackets removed only when it is about place or work mode ("Engineer (Remote, US)"). Other asides stay: on real data, "Specialist (Media and Communication)" and "Specialist (Media development, journalism...)" are different roles
 - The fuzzy key uses country, not city: sources word cities differently ("NYC", "New York, NY")
+- Built so far (task 6): one key per posting, on company, title and the posting's places as written, since postings carry no country codes before task 11. It merges less than the country key would, never two cities. ATS keys, the country key and keys from earlier runs come with task 15
 
 ### Dedupe stage
 
@@ -1033,6 +1035,8 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Fast Forward paged newest first, stopping at the page that reaches past the window | Fetch the whole board every run | The search has no date filter but sorts by listing time, so a 14-day window takes about 2 requests instead of 8 |
 | Full descriptions fetched after the filter, only for jobs kept, through a describer per board (task 7) | Fetch every description during fetch; no descriptions | Getro needs one request per job at 1s each: about 400 for a first run, mostly for jobs the filter drops. Boards that already send descriptions skip the step |
 | Until task 7, a real run ranks with `KeywordRanker` against the demo profile | Real runs wait for task 7 | Real postings flow end to end now; each later task swaps one part |
+| Title asides in brackets dropped only when about place or work mode | Drop every bracketed aside | Real Fast Forward titles use brackets to tell roles apart ("Specialist (Media and Communication)") |
+| Until country codes exist, the job key compares places as written | Leave places out of the key | Same title in different cities is common on Fast Forward (one org posts a role per district); leaving places out would merge them |
 | `Clock.now()` returns local time with its UTC offset | UTC; naive local time | Run folders and report dates match the user's clock; saved times stay unambiguous |
 | One `FileCheckpoints` per run, created by `AppFactory` with the run's folder | A store for all runs that starts a writer per run (`RunStore.start` returning a `RunWriter`, the earlier choice) | Born for one run, it never starts or tracks a run and holds no state in memory. Run history gets its own interface with task 13 |
 | Code comments say what a class or function does, never cite design sections; temporary notes are `TODO(task N)` | Section references in docstrings | Code reads on its own; temporary notes are findable and removed by their task |

@@ -11,6 +11,7 @@ from job_radar.factory import AppFactory, Settings
 from job_radar.history import FileRunHistory, RunHistory
 from job_radar.llm import ClaudeCli, Llm
 from job_radar.model import CandidateProfile, Search, Window
+from job_radar.normalize import Normalizer
 from job_radar.pipeline import Step
 from job_radar.prompter import Prompter, TerminalPrompter
 from job_radar.ranking import JobRanker, KeywordRanker, LlmRanker
@@ -40,8 +41,8 @@ def steps():
     return [
         FetchStep([GetroSource("board", httpx.Client())], SEARCH, WINDOW),
         ConvertStep({"getro": GetroParser()}),
-        DedupeStep(JobKey(), date(2026, 11, 5)),
-        FilterStep(SEARCH, WINDOW),
+        DedupeStep(JobKey(Normalizer()), date(2026, 11, 5)),
+        FilterStep(SEARCH, WINDOW, Normalizer()),
         RecommendTopJobsStep(RANKER, PROFILE, top_n=10),
         ReportStep(CHECKPOINTS, FileReportWriter(FOLDER), WINDOW),
     ]
