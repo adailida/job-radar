@@ -2,7 +2,7 @@
 
 How the code is put together: which classes exist, what each one is responsible for, which others it knows, and where state lives. Every box is a real class, named as in the code. The reasons behind each part are in [design.md](design.md).
 
-**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs; until task 7 a real run ranks them by keyword against the demo profile. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
+**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs; until task 7 a real run ranks them by keyword against the demo profile. PR #6 merges postings of the same job and filters on roles. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
 
 The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, a made-up profile and keyword scoring in place of the LLM.
 
@@ -206,11 +206,18 @@ classDiagram
         -today: date
     }
     class JobKey {
+        -normalizer: Normalizer
         +of(posting) str
+    }
+    class Normalizer {
+        +company(name) str
+        +title(title, places) str
+        +place(place) str
     }
     class FilterStep {
         -search: Search
         -window: Window
+        -normalizer: Normalizer
         +matches(job) bool
     }
     class RecommendTopJobsStep {
@@ -272,6 +279,8 @@ classDiagram
     JobBoardParser <|.. GetroParser : implements
     JobBoardParser <|.. DemoParser : implements
     DedupeStep o-- JobKey : holds
+    JobKey o-- Normalizer : holds
+    FilterStep o-- Normalizer : holds
     RecommendTopJobsStep o-- JobRanker : holds
     JobRanker <|.. LlmRanker : implements
     JobRanker <|.. KeywordRanker : implements
@@ -287,6 +296,7 @@ classDiagram
     style ConvertStep stroke:#2e7d32,stroke-width:3px
     style DedupeStep stroke:#2e7d32,stroke-width:3px
     style JobKey stroke:#2e7d32,stroke-width:3px
+    style Normalizer stroke:#2e7d32,stroke-width:3px
     style FilterStep stroke:#2e7d32,stroke-width:3px
     style RecommendTopJobsStep stroke:#2e7d32,stroke-width:3px
     style ReportStep stroke:#2e7d32,stroke-width:3px
@@ -346,8 +356,9 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `JobBoardParser`, `GetroParser` | Adapter | Turn one board's records into `Posting`s | the board's format |
 | `DemoSource`, `DemoParser` | Adapter | A made-up board: the same postings every run, for `--demo` and tests | `Posting` |
 | `DedupeStep` | Step | Group postings of the same job into one `Job` | `JobKey` |
-| `JobKey` | | Decide which postings are the same job | `Posting` |
-| `FilterStep` | Step | Keep the jobs that match every criterion set in the search and were posted in the window | `Search`, `Window` |
+| `JobKey` | | Decide which postings are the same job: same company, title and places, in canonical form | `Posting`, `Normalizer` |
+| `Normalizer` | | Put company names, titles and places in canonical form for comparing | nothing |
+| `FilterStep` | Step | Keep the jobs posted in the window whose title contains one of the search's roles (all, when none are set) | `Search`, `Window`, `Normalizer` |
 | `RecommendTopJobsStep` | Step | Keep the N best-scored jobs | `JobRanker`, `CandidateProfile` |
 | `JobRanker`, `LlmRanker` | Strategy | Score jobs against the CV and preferences, in batches | `Llm` |
 | `KeywordRanker` | Strategy | Score a job by the share of its title words found in the profile, for `--demo` and tests | models |
@@ -432,7 +443,7 @@ sequenceDiagram
 
 ### Inside the steps
 
-The demo run, opening the black boxes. The save around each step (above) is left out. A real run puts `GetroSource` and `GetroParser` where the demo board is (built), and `LlmRanker` over `ClaudeCli` where `KeywordRanker` is (task 7, with a describe step after filter for full descriptions); dedupe and filter get their real rules in task 6.
+The demo run, opening the black boxes. The save around each step (above) is left out. A real run puts `GetroSource` and `GetroParser` where the demo board is (built), and `LlmRanker` over `ClaudeCli` where `KeywordRanker` is (task 7, with a describe step after filter for full descriptions); dedupe gets stronger keys in task 15, and filter the full criteria in task 11.
 
 ```mermaid
 sequenceDiagram
@@ -465,10 +476,10 @@ sequenceDiagram
     end
     conv-->>p: Postings
     p->>dd: run(Postings)
-    dd->>dd: group by JobKey.of(posting), for now the posting's own key
+    dd->>dd: group by JobKey.of(posting): company, title and places, normalized
     dd-->>p: Jobs
     p->>fl: run(Jobs)
-    fl->>fl: matches(job), for now every job
+    fl->>fl: matches(job): in the window, and a role in the title
     fl-->>p: Jobs
     p->>rec: run(Jobs)
     rec->>rk: score(jobs, profile)

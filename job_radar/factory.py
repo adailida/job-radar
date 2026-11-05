@@ -11,6 +11,7 @@ from job_radar.checkpoints import FileCheckpoints
 from job_radar.clock import Clock
 from job_radar.history import FileRunHistory
 from job_radar.model import CandidateProfile, Model, Search, Window
+from job_radar.normalize import Normalizer
 from job_radar.pipeline import Pipeline, Step
 from job_radar.profile import DEMO_PROFILE
 from job_radar.prompter import Prompter
@@ -87,11 +88,12 @@ class AppFactory:
         folder.mkdir(parents=True)
         checkpoints = FileCheckpoints(folder, window)
         search = self._settings.search
+        normalizer = Normalizer()
         steps: list[Step] = [
             FetchStep(parts.sources, search, window),
             ConvertStep({parser.source: parser for parser in parts.parsers}),
-            DedupeStep(JobKey(), window.end),
-            FilterStep(search, window),
+            DedupeStep(JobKey(normalizer), window.end),
+            FilterStep(search, window, normalizer),
             RecommendTopJobsStep(parts.ranker, parts.profile, self._settings.top_n),
             ReportStep(checkpoints, FileReportWriter(folder), window),
         ]

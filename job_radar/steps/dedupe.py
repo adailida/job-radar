@@ -3,15 +3,31 @@
 from datetime import date
 
 from job_radar.model import Job, Posting
+from job_radar.normalize import Normalizer
 
 
 class JobKey:
-    """Decides which postings describe the same job. Stateless."""
+    """Decides which postings describe the same job: same company, title and places.
+
+    Compares names in canonical form, so "Acme, Inc." and "ACME" are one
+    company. Places are compared as written, which merges less than comparing
+    countries would, but never merges two cities. Stateless: holds only the
+    normalizer.
+    """
+
+    # TODO(task 15): ATS keys from the URL, a fuzzy key on country, and keys from earlier runs.
+
+    def __init__(self, normalizer: Normalizer) -> None:
+        """Keep how names are put in canonical form."""
+        self._normalize = normalizer
 
     def of(self, posting: Posting) -> str:
-        """The key shared by every posting of the same job."""
-        # TODO(task 6): normalize company, title and location; for now only exact repeats merge.
-        return posting.key
+        """The key shared by every posting of the same job: "acme|senior data engineer|remote"."""
+        texts = [place.text for place in posting.locations]
+        places = sorted({self._normalize.place(text) for text in texts})
+        company = self._normalize.company(posting.company)
+        title = self._normalize.title(posting.title, texts)
+        return f"{company}|{title}|{';'.join(places)}"
 
 
 class DedupeStep:
@@ -33,7 +49,14 @@ class DedupeStep:
         groups: dict[str, list[Posting]] = {}
         for posting in data:
             groups.setdefault(self._key.of(posting), []).append(posting)
-        return [
-            Job(id=key, keys=(key,), postings=tuple(group), first_seen=self._today)
-            for key, group in groups.items()
-        ]
+        return [self._job(key, group) for key, group in groups.items()]
+
+    def _job(self, key: str, group: list[Posting]) -> Job:
+        """One job from its postings, the most complete posting first.
+
+        Most complete: the longest description, then one with a salary. The
+        job keeps every posting's own key, so a merge can be traced.
+        """
+        postings = sorted(group, key=lambda p: (-len(p.description), p.salary is None))
+        keys = (key, *(posting.key for posting in postings))
+        return Job(id=key, keys=keys, postings=tuple(postings), first_seen=self._today)

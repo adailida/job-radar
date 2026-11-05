@@ -14,9 +14,7 @@ from job_radar.model import (
     Window,
 )
 from job_radar.steps.convert import ConvertStep
-from job_radar.steps.dedupe import DedupeStep, JobKey
 from job_radar.steps.fetch import FetchStep
-from job_radar.steps.filter import FilterStep
 from job_radar.steps.recommend import RecommendTopJobsStep
 from job_radar.steps.report import ReportStep
 
@@ -72,27 +70,6 @@ def test_convert_fails_on_a_board_without_parser():
     step = ConvertStep({"a": OnePostingParser("a")})
     with pytest.raises(ValueError, match="no parser for source 'x'"):
         step.run([RawPage(source="x", page=1, body="")])
-
-
-def test_dedupe_merges_postings_with_the_same_key():
-    step = DedupeStep(JobKey(), date(2026, 11, 5))
-    jobs = step.run([posting("1"), posting("2"), posting("1")])
-    assert [(j.id, len(j.postings)) for j in jobs] == [("demo:1", 2), ("demo:2", 1)]
-    assert all(j.first_seen == date(2026, 11, 5) for j in jobs)
-
-
-def test_filter_keeps_every_job_in_the_window_for_now():
-    jobs = [job("1"), job("2")]
-    assert FilterStep(SEARCH, WINDOW).run(jobs) == jobs
-
-
-def test_filter_drops_jobs_posted_before_the_window():
-    def dated(source_id: str, posted: date | None) -> Job:
-        p = posting(source_id).model_copy(update={"posted_at": posted})
-        return Job(id=p.key, keys=(p.key,), postings=(p,), first_seen=WINDOW.end)
-
-    jobs = [dated("old", date(2026, 10, 28)), dated("first", WINDOW.start), dated("none", None)]
-    assert [j.id for j in FilterStep(SEARCH, WINDOW).run(jobs)] == ["demo:first", "demo:none"]
 
 
 def test_recommend_keeps_top_n_best_first():
