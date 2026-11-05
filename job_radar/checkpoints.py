@@ -1,5 +1,7 @@
 """Where a run's step outputs are kept, so a failed run can be resumed."""
 
+import json
+import os
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol, runtime_checkable
@@ -48,31 +50,54 @@ class FileCheckpoints:
     and its count. Holds only its folder; the files are the state.
     """
 
+    MANIFEST = "manifest.json"
+    SCHEMA = 1  # bumped when the saved models change shape
+
     def __init__(self, folder: Path) -> None:
         """Keep the run folder this run's files go in."""
         self._folder = folder
 
     def has(self, step: str) -> bool:
         """Whether the manifest lists this step as finished."""
-        # TODO(task 3): read the manifest.
-        raise NotImplementedError
+        return any(count.step == step for count in self.funnel())
 
     def save(self, step: str, items: Sequence[Model]) -> None:
-        """Write the step's items to its file and add its count to the manifest."""
-        # TODO(task 3): write JSON Lines and update the manifest.
-        raise NotImplementedError
+        """Write the step's items to its file and add its count to the manifest.
+
+        The manifest is updated last, so a step counts as finished only once
+        its file is complete.
+        """
+        lines = "".join(item.model_dump_json() + "\n" for item in items)
+        self._write(self._step_file(step), lines)
+        funnel = [count for count in self.funnel() if count.step != step]
+        funnel.append(StepCount(step=step, count=len(items)))
+        manifest = {"schema": self.SCHEMA, "steps": [c.model_dump() for c in funnel]}
+        self._write(self._folder / self.MANIFEST, json.dumps(manifest, indent=2) + "\n")
 
     def load[M: Model](self, step: str, kind: type[M]) -> list[M]:
         """Read the step's file back, one item per line."""
-        # TODO(task 3): read JSON Lines.
-        raise NotImplementedError
+        with self._step_file(step).open(encoding="utf-8") as lines:
+            return [kind.model_validate_json(line) for line in lines]
 
     def discard_all(self) -> None:
         """Delete every step file; the manifest and the report stay."""
-        # TODO(task 3): delete the step files.
-        raise NotImplementedError
+        for count in self.funnel():
+            self._step_file(count.step).unlink(missing_ok=True)
 
     def funnel(self) -> list[StepCount]:
         """Every finished step and its count, from the manifest."""
-        # TODO(task 3): read the manifest.
-        raise NotImplementedError
+        path = self._folder / self.MANIFEST
+        if not path.exists():
+            return []
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        return [StepCount.model_validate(count) for count in manifest["steps"]]
+
+    def _step_file(self, step: str) -> Path:
+        """The file a step's output is saved in."""
+        return self._folder / f"{step}.jsonl"
+
+    def _write(self, path: Path, text: str) -> None:
+        """Write a whole file, so a crash never leaves half of one behind."""
+        temp = path.with_name(path.name + ".tmp")
+        temp.write_text(text, encoding="utf-8")
+        os.replace(temp, path)

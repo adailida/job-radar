@@ -20,6 +20,11 @@ class ConvertStep:
         self._parsers = parsers
 
     def run(self, data: list[RawPage]) -> list[Posting]:
-        """Parse every page into postings."""
-        # TODO(task 5): pick the parser by page.source.
-        raise NotImplementedError
+        """Parse every page into postings. A page from a board with no parser is an error."""
+        postings: list[Posting] = []
+        for page in data:
+            parser = self._parsers.get(page.source)
+            if parser is None:
+                raise ValueError(f"no parser for source '{page.source}'")
+            postings.extend(parser.parse(page))
+        return postings

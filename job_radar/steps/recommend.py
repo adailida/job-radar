@@ -21,6 +21,6 @@ class RecommendTopJobsStep:
         self._top_n = top_n
 
     def run(self, data: list[Job]) -> list[Recommendation]:
-        """Score every job and keep the best N, best first."""
-        # TODO(task 7): score, sort, cut.
-        raise NotImplementedError
+        """Score every job and keep the best N, best first. Ties keep the order of the jobs."""
+        scored = self._ranker.score(data, self._profile)
+        return sorted(scored, key=lambda rec: rec.score, reverse=True)[: self._top_n]

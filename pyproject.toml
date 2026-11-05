@@ -39,3 +39,7 @@ exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# One made-up posting per line reads as a table
+"job_radar/sources/demo.py" = ["E501"]

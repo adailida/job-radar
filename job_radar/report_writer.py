@@ -25,5 +25,6 @@ class FileReportWriter:
 
     def write(self, text: str) -> str:
         """Write `report.md` and return its path."""
-        # TODO(task 8): write the file.
-        raise NotImplementedError
+        path = self._folder / "report.md"
+        path.write_text(text, encoding="utf-8")
+        return str(path)

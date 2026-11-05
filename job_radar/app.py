@@ -17,5 +17,4 @@ class JobRadarApp:
 
     def run(self) -> RunResult:
         """Launch the pipeline and return how the run ended."""
-        # TODO(task 4): launch the pipeline.
-        raise NotImplementedError
+        return self._pipeline.run()

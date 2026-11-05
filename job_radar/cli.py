@@ -24,16 +24,36 @@ class Cli:
         self._factory = factory
 
     def main(self, argv: list[str]) -> int:
-        """Parse the command line, run the chosen command, and return the exit code."""
-        # TODO(task 4): add the run command.
+        """Parse the command line, run the chosen command, and return the exit code.
+
+        Exit codes: 0 when the run succeeded, 1 when a step failed, 2 when the
+        run could not be set up.
+        """
         # TODO(task 13): add the runs and delete commands.
         parser = argparse.ArgumentParser(
             prog="job-radar", description="Job search and job-market trends."
         )
         parser.add_argument("--version", action="version", version=f"job-radar {__version__}")
-        parser.parse_args(argv)
-        parser.print_help()
-        return 0
+        commands = parser.add_subparsers(dest="command", title="commands")
+        run = commands.add_parser("run", help="fetch jobs, recommend the best, write a report")
+        run.add_argument(
+            "--demo",
+            action="store_true",
+            help="use made-up postings and a made-up profile: no network, no LLM",
+        )
+        args = parser.parse_args(argv)
+        if args.command != "run":
+            parser.print_help()
+            return 0
+        try:
+            app = self._factory.create(demo=args.demo)
+        except Exception as error:
+            # TODO(task 24): name the setting or file at fault, with how to fix it.
+            print(f"Could not set up the run: {str(error) or type(error).__name__}")
+            return 2
+        result = app.run()
+        print(result.message())
+        return result.exit_code()
 
 
 if __name__ == "__main__":

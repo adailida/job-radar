@@ -4,7 +4,8 @@ from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
 from job_radar.checkpoints import Checkpoints
-from job_radar.result import RunResult
+from job_radar.model import Report
+from job_radar.result import RunFailed, RunResult, RunSucceeded
 
 
 @runtime_checkable
@@ -41,5 +42,18 @@ class Pipeline:
 
     def run(self) -> RunResult:
         """Run every step not done yet and return how the run ended."""
-        # TODO(task 3): resume, run, save, wrap errors, discard all on success.
-        raise NotImplementedError
+        # TODO(task 4): skip the steps already saved; load the last saved output.
+        data: list = []
+        for step in self._steps:
+            try:
+                data = step.run(data)
+                self._checkpoints.save(step.name, data)
+            except Exception as error:
+                return RunFailed(step=step.name, reason=str(error) or type(error).__name__)
+        match data:
+            case [Report() as report]:
+                self._checkpoints.discard_all()
+                return RunSucceeded(location=report.location, summary=report.summary)
+            case _:
+                last = self._steps[-1].name if self._steps else "none"
+                return RunFailed(step=last, reason="the last step gave no report")

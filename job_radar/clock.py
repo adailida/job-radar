@@ -11,6 +11,5 @@ class Clock:
         return datetime.now().astimezone()
 
     def stamp(self) -> str:
-        """The current time as a folder name, e.g. "2026-11-05T10-00"."""
-        # TODO(task 4): format now() for folder names.
-        raise NotImplementedError
+        """The current time as a folder name, to the second, e.g. "2026-11-05T10-00-00"."""
+        return self.now().strftime("%Y-%m-%dT%H-%M-%S")
