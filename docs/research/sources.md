@@ -42,7 +42,7 @@ Found from the board's own page code; called live with a few requests, 1s apart.
 - **Order:** newest first by `created_at` (Unix time, UTC; the moment the job was listed on the board, equal to the job's `posted_at`). No date filter, so a run stops paging at the first page that reaches past its window: about 2 pages for 14 days
 - **Fields per job:** id, slug, title, organization (name, slug, topics, industry tags, head count), locations (text list, 18% empty), location details with coordinates, `work_mode` (`on_site`, `remote` seen), compensation (min and max in cents, currency, period `year`/`month`/`hour`/`period_not_defined`, public flag), seniority, skills, url (the employer's own posting), source, `has_description`
 - **Salary:** about 30% of jobs (57 of 200): mostly USD a year, some hourly, a few EUR, GBP and INR. When an amount is set, the currency and period are too
-- **No description in search results.** It comes from `GET https://api.getro.com/api/v1/jobs/{slug}?collection_id=997` (HTML, about 3 in 4 jobs), one request per job, along with `posted_at`, status, employment types and job functions. Fetched only for jobs that pass the filter (task 7)
+- **No description in search results.** It comes from `GET https://api.getro.com/api/v1/jobs/{slug}?collection_id=997` (HTML, about 3 in 4 jobs), one request per job, along with `posted_at`, status, employment types and job functions. The bare id works in place of the slug (checked 2026-11-06); a job that doesn't exist gets 404 `{"error": "Job not found"}`; a job with no description has `"description": null`. Fetched only for jobs that pass the filter (task 7a)
 
 ## Paid aggregators
 

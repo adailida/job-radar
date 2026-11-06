@@ -28,5 +28,5 @@ class ProfileLoader:
 
     def load(self) -> CandidateProfile:
         """Read the CV text and the preferences into a profile."""
-        # TODO(task 7): read cv.pdf and preferences.md; fail clearly if missing.
+        # TODO(task 7b): read cv.pdf and preferences.md; fail clearly if missing.
         raise NotImplementedError

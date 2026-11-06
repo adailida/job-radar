@@ -69,6 +69,7 @@ def test_new_source_plugs_in_without_changes_downstream(tmp_path):
         "convert": 12,
         "dedupe": 12,
         "filter": 12,
+        "describe": 12,
         "recommend": 3,
         "report": 1,
     }

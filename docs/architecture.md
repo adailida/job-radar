@@ -2,9 +2,9 @@
 
 How the code is put together: which classes exist, what each one is responsible for, which others it knows, and where state lives. Every box is a real class, named as in the code. The reasons behind each part are in [design.md](design.md).
 
-**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs; until task 7 a real run ranks them by keyword against the demo profile. PR #6 merges postings of the same job and filters on roles. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
+**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs; until task 7b a real run ranks them by keyword against the demo profile. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
 
-The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, a made-up profile and keyword scoring in place of the LLM.
+The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, fetches their full descriptions, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, a made-up profile and keyword scoring in place of the LLM.
 
 ## Rules the design follows
 
@@ -187,8 +187,14 @@ classDiagram
     }
     class GetroSource {
         -network: str
+        -client: BoardClient
+    }
+    class BoardClient {
         -http: httpx.Client
         -delay: float
+        +pause()
+        +get(url) Response
+        +post(url) Response
     }
     class DemoSource
     class ConvertStep {
@@ -219,6 +225,24 @@ classDiagram
         -window: Window
         -normalizer: Normalizer
         +matches(job) bool
+    }
+    class DescribeStep {
+        -describers: dict~str, JobDescriber~
+        -prompter: Prompter
+    }
+    class JobDescriber {
+        <<Adapter>>
+        +source: str
+        +pace: float
+        +describe(posting) str
+    }
+    class GetroDescriber {
+        -network: str
+        -client: BoardClient
+        -html: HtmlText
+    }
+    class HtmlText {
+        +text(html) str
     }
     class RecommendTopJobsStep {
         -ranker: JobRanker
@@ -270,17 +294,23 @@ classDiagram
     Step <|.. ConvertStep : implements
     Step <|.. DedupeStep : implements
     Step <|.. FilterStep : implements
+    Step <|.. DescribeStep : implements
     Step <|.. RecommendTopJobsStep : implements
     Step <|.. ReportStep : implements
     FetchStep o-- JobBoardSource : holds, one per board
     JobBoardSource <|.. GetroSource : implements
     JobBoardSource <|.. DemoSource : implements
+    GetroSource o-- BoardClient : holds
     ConvertStep o-- JobBoardParser : holds, one per board
     JobBoardParser <|.. GetroParser : implements
     JobBoardParser <|.. DemoParser : implements
     DedupeStep o-- JobKey : holds
     JobKey o-- Normalizer : holds
     FilterStep o-- Normalizer : holds
+    DescribeStep o-- JobDescriber : holds, one per board that needs it
+    JobDescriber <|.. GetroDescriber : implements
+    GetroDescriber o-- BoardClient : holds, shared with GetroSource
+    GetroDescriber o-- HtmlText : holds
     RecommendTopJobsStep o-- JobRanker : holds
     JobRanker <|.. LlmRanker : implements
     JobRanker <|.. KeywordRanker : implements
@@ -298,6 +328,10 @@ classDiagram
     style JobKey stroke:#2e7d32,stroke-width:3px
     style Normalizer stroke:#2e7d32,stroke-width:3px
     style FilterStep stroke:#2e7d32,stroke-width:3px
+    style DescribeStep stroke:#2e7d32,stroke-width:3px
+    style GetroDescriber stroke:#2e7d32,stroke-width:3px
+    style BoardClient stroke:#2e7d32,stroke-width:3px
+    style HtmlText stroke:#2e7d32,stroke-width:3px
     style RecommendTopJobsStep stroke:#2e7d32,stroke-width:3px
     style ReportStep stroke:#2e7d32,stroke-width:3px
     style FileReportWriter stroke:#2e7d32,stroke-width:3px
@@ -328,6 +362,7 @@ The pipeline saves each step's output and passes it to the next step in memory. 
 | `ConvertStep` | `convert` | `RawPage`s | `Posting`s |
 | `DedupeStep` | `dedupe` | `Posting`s | `Job`s, one per real job |
 | `FilterStep` | `filter` | `Job`s | `Job`s that match the search |
+| `DescribeStep` | `describe` | `Job`s | the same `Job`s, each primary posting with its full description |
 | `RecommendTopJobsStep` | `recommend` | `Job`s | the top N `Recommendation`s, each with its `Job`, a score and a reason |
 | `ReportStep` | `report` | `Recommendation`s | `Report`: where it is and a one-line summary |
 
@@ -351,7 +386,8 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `RunStats` | Interface | Read-only: how many items each finished step produced | models |
 | `FileCheckpoints` | Implements both | One JSON Lines file per step, plus `manifest.json` (the window, each step's count, completed or not), in the run folder | its run folder |
 | `FetchStep` | Step | Fetch raw pages from every configured job board | `JobBoardSource` |
-| `JobBoardSource`, `GetroSource` | Adapter | Query one board's API, page by page; `GetroSource` stops at the page that reaches past the window, waits 1s between requests and retries | the board's API |
+| `JobBoardSource`, `GetroSource` | Adapter | Query one board's API, page by page; `GetroSource` stops at the page that reaches past the window | `BoardClient` |
+| `BoardClient` | | Send one board's requests at its pace (1s for Getro), retrying timeouts, server errors and rate limits | the board's API |
 | `ConvertStep` | Step | Send each raw page to the parser for its board | `JobBoardParser` |
 | `JobBoardParser`, `GetroParser` | Adapter | Turn one board's records into `Posting`s | the board's format |
 | `DemoSource`, `DemoParser` | Adapter | A made-up board: the same postings every run, for `--demo` and tests | `Posting` |
@@ -359,6 +395,9 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `JobKey` | | Decide which postings are the same job: same company, title and places, in canonical form | `Posting`, `Normalizer` |
 | `Normalizer` | | Put company names, titles and places in canonical form for comparing | nothing |
 | `FilterStep` | Step | Keep the jobs posted in the window whose title contains one of the search's roles (all, when none are set) | `Search`, `Window`, `Normalizer` |
+| `DescribeStep` | Step | Fill in the full description of each kept job's primary posting, through the describer for its board; say first how long it takes. Jobs that have one, or whose board has no describer, pass through | `JobDescriber`, `Prompter` |
+| `JobDescriber`, `GetroDescriber` | Adapter | Fetch one posting's description as plain text; `GetroDescriber` makes one request per job and gives nothing for a job the board no longer has or lists | `BoardClient`, `HtmlText` |
+| `HtmlText` | | Turn HTML into plain text that keeps paragraphs, line breaks and lists | nothing |
 | `RecommendTopJobsStep` | Step | Keep the N best-scored jobs | `JobRanker`, `CandidateProfile` |
 | `JobRanker`, `LlmRanker` | Strategy | Score jobs against the CV and preferences, in batches | `Llm` |
 | `KeywordRanker` | Strategy | Score a job by the share of its title words found in the profile, for `--demo` and tests | models |
@@ -443,7 +482,7 @@ sequenceDiagram
 
 ### Inside the steps
 
-The demo run, opening the black boxes. The save around each step (above) is left out. A real run puts `GetroSource` and `GetroParser` where the demo board is (built), and `LlmRanker` over `ClaudeCli` where `KeywordRanker` is (task 7, with a describe step after filter for full descriptions); dedupe gets stronger keys in task 15, and filter the full criteria in task 11.
+The demo run, opening the black boxes. The save around each step (above) is left out. A real run puts `GetroSource` and `GetroParser` where the demo board is (built), `GetroDescriber` in the describe step (built: one request per kept job, 1s apart), and `LlmRanker` over `ClaudeCli` where `KeywordRanker` is (task 7b); dedupe gets stronger keys in task 15, and filter the full criteria in task 11.
 
 ```mermaid
 sequenceDiagram
@@ -455,6 +494,7 @@ sequenceDiagram
     participant dp as DemoParser
     participant dd as DedupeStep
     participant fl as FilterStep
+    participant de as DescribeStep
     participant rec as RecommendTopJobsStep
     participant rk as KeywordRanker
     participant rep as ReportStep
@@ -481,6 +521,10 @@ sequenceDiagram
     p->>fl: run(Jobs)
     fl->>fl: matches(job): in the window, and a role in the title
     fl-->>p: Jobs
+    p->>de: run(Jobs)
+    de->>de: no describer for the demo board: its postings have descriptions
+    Note right of de: a real run: GetroDescriber.describe(posting) per job, 1s apart
+    de-->>p: Jobs
     p->>rec: run(Jobs)
     rec->>rk: score(jobs, profile)
     rk-->>rec: Recommendations, by title words found in the profile
@@ -500,7 +544,7 @@ Each run gets its own folder, named by its start time, to the second. Demo runs 
 
 ```
 output/runs/2026-11-05T10-00-00/
-    fetch.jsonl  convert.jsonl  dedupe.jsonl  filter.jsonl  recommend.jsonl  report.jsonl
+    fetch.jsonl  convert.jsonl  dedupe.jsonl  filter.jsonl  describe.jsonl  recommend.jsonl  report.jsonl
     manifest.json     # the window, each finished step and its count, completed or not
     report.md
 ```

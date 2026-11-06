@@ -6,12 +6,16 @@ from pathlib import Path
 import httpx
 import pytest
 
+from job_radar.html_text import HtmlText
 from job_radar.model import Location, Period, RawPage, Salary, Search, Window, WorkMode
-from job_radar.sources.getro import GetroParser, GetroSource
+from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
+from job_radar.sources.http import BoardClient
 
-FIXTURE = Path(__file__).parent / "fixtures" / "getro" / "search_page.json"
+FIXTURES = Path(__file__).parent / "fixtures" / "getro"
+FIXTURE = FIXTURES / "search_page.json"
 SEARCH = Search(name="default", roles=())
 URL = "https://api.getro.com/api/v2/collections/997/search/jobs"
+JOB_URL = "https://api.getro.com/api/v1/jobs/{id}?collection_id=997"
 
 
 def fixture_page() -> RawPage:
@@ -95,7 +99,7 @@ class Board:
 
 def source(board: Board, sleeps: list[float]) -> GetroSource:
     http = httpx.Client(transport=httpx.MockTransport(board))
-    return GetroSource("997", http, delay=1.0, sleep=sleeps.append)
+    return GetroSource("997", BoardClient(http, delay=1.0, sleep=sleeps.append))
 
 
 def window(start: date) -> Window:
@@ -160,13 +164,110 @@ def test_fetch_fails_as_a_whole_when_a_later_page_fails():
         source(SecondPageDown(pages), []).fetch(SEARCH, window(date(2026, 1, 1)))
 
 
+class JobPages:
+    """A fake Getro job endpoint: set answers by id, after a set number of failures."""
+
+    def __init__(self, answers: dict[str, httpx.Response], failures: list[int] | None = None):
+        self._answers = answers
+        self._failures = list(failures or [])
+        self.asked: list[str] = []
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        job_id = request.url.path.rsplit("/", 1)[-1]
+        assert str(request.url) == JOB_URL.format(id=job_id)
+        assert request.headers["Accept"] == "application/json"
+        if self._failures:
+            return httpx.Response(self._failures.pop(0))
+        self.asked.append(job_id)
+        return self._answers.get(job_id, httpx.Response(404, json={"error": "Job not found"}))
+
+
+def detail(name: str, **changes) -> httpx.Response:
+    """A recorded job response, with any fields changed."""
+    body = json.loads((FIXTURES / name).read_text(encoding="utf-8")) | changes
+    return httpx.Response(200, json=body)
+
+
+def describer(pages: JobPages, sleeps: list[float]) -> GetroDescriber:
+    http = httpx.Client(transport=httpx.MockTransport(pages))
+    return GetroDescriber("997", BoardClient(http, delay=1.0, sleep=sleeps.append), HtmlText())
+
+
+def search_posting(index: int = 0):
+    return GetroParser().parse(fixture_page())[index]
+
+
+def test_describe_gives_the_description_as_plain_text():
+    pages = JobPages({"99005045": detail("job_detail.json")})
+    text = describer(pages, []).describe(search_posting(0))
+    assert text.startswith("Department: Digital\nReports to: Executive Director\n")
+    assert "\n\nJob Summary\n\n" in text
+    assert "\n- Oversee organic search visibility, including SEO and AEO" in text
+    assert "<" not in text
+
+
+def test_describe_pauses_before_every_request():
+    pages, sleeps = JobPages({"99005045": detail("job_detail.json")}), []
+    getro = describer(pages, sleeps)
+    getro.describe(search_posting(0))
+    getro.describe(search_posting(0))
+    assert sleeps == [1.0, 1.0]
+    assert getro.pace == 1.0
+
+
+def test_describe_gives_nothing_when_the_board_has_no_description():
+    pages = JobPages({"98883130": detail("job_no_description.json")})
+    assert describer(pages, []).describe(search_posting(2)) == ""
+
+
+def test_describe_gives_nothing_for_a_job_the_board_no_longer_has():
+    assert describer(JobPages({}), []).describe(search_posting(0)) == ""
+
+
+def test_describe_gives_nothing_for_a_job_no_longer_active():
+    pages = JobPages({"99005045": detail("job_detail.json", status="closed")})
+    assert describer(pages, []).describe(search_posting(0)) == ""
+
+
+def test_describe_retries_server_errors_with_backoff():
+    pages, sleeps = JobPages({"99005045": detail("job_detail.json")}, [503, 429]), []
+    assert describer(pages, sleeps).describe(search_posting(0))
+    assert sleeps == [1.0, 2.0, 4.0]  # the pause, then two backoffs
+
+
+def test_describe_fails_after_the_last_retry():
+    pages = JobPages({}, [500, 500, 500, 500])
+    with pytest.raises(httpx.HTTPStatusError):
+        describer(pages, []).describe(search_posting(0))
+
+
+def test_describe_fails_at_once_on_other_client_errors():
+    pages, sleeps = JobPages({}, [403]), []
+    with pytest.raises(httpx.HTTPStatusError):
+        describer(pages, sleeps).describe(search_posting(0))
+    assert sleeps == [1.0]  # the pause only
+
+
 @pytest.mark.live
 @pytest.mark.enable_socket
 def test_live_fast_forward_search_still_parses():
     """Opt-in: `uv run pytest -m live`. One request to the real board."""
     http = httpx.Client(headers={"User-Agent": "job-radar tests"}, timeout=20)
     today = date.today()
-    pages = GetroSource("997", http).fetch(SEARCH, Window(start=today, end=today))
+    pages = GetroSource("997", BoardClient(http)).fetch(SEARCH, Window(start=today, end=today))
     postings = GetroParser().parse(pages[0])
     assert postings, "the board returned no jobs"
     assert all(p.title and p.company and p.url for p in postings)
+
+
+@pytest.mark.live
+@pytest.mark.enable_socket
+def test_live_fast_forward_job_still_describes():
+    """Opt-in: `uv run pytest -m live`. Two requests to the real board: one search, one job."""
+    http = httpx.Client(headers={"User-Agent": "job-radar tests"}, timeout=20)
+    client = BoardClient(http)
+    today = date.today()
+    pages = GetroSource("997", client).fetch(SEARCH, Window(start=today, end=today))
+    postings = GetroParser().parse(pages[0])
+    text = GetroDescriber("997", client, HtmlText()).describe(postings[0])
+    assert "<p>" not in text

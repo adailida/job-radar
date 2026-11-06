@@ -1,4 +1,4 @@
-"""The two interfaces every job board brings: one to fetch, one to parse."""
+"""The interfaces a job board brings: one to fetch, one to parse, and one to describe."""
 
 from typing import Protocol, runtime_checkable
 
@@ -27,4 +27,19 @@ class JobBoardParser(Protocol):
 
     def parse(self, page: RawPage) -> list[Posting]:
         """Convert one raw page into postings."""
+        ...
+
+
+@runtime_checkable
+class JobDescriber(Protocol):
+    """Fetches the full description of one posting, for boards whose search leaves it out.
+
+    Adapter. Stateless: holds only its configuration and client.
+    """
+
+    source: str  # the board whose postings it describes
+    pace: float  # seconds each description takes at least, for telling the user how long
+
+    def describe(self, posting: Posting) -> str:
+        """The posting's description as plain text; empty when the board has none."""
         ...

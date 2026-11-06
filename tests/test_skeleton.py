@@ -9,6 +9,7 @@ from job_radar.cli import Cli
 from job_radar.clock import Clock
 from job_radar.factory import AppFactory, Settings
 from job_radar.history import FileRunHistory, RunHistory
+from job_radar.html_text import HtmlText
 from job_radar.llm import ClaudeCli, Llm
 from job_radar.model import CandidateProfile, Search, Window
 from job_radar.normalize import Normalizer
@@ -17,11 +18,13 @@ from job_radar.prompter import Prompter, TerminalPrompter
 from job_radar.ranking import JobRanker, KeywordRanker, LlmRanker
 from job_radar.report_writer import FileReportWriter, ReportWriter
 from job_radar.result import RunCancelled, RunFailed, RunResult, RunSucceeded
-from job_radar.sources.base import JobBoardParser, JobBoardSource
+from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber
 from job_radar.sources.demo import DemoParser, DemoSource
-from job_radar.sources.getro import GetroParser, GetroSource
+from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
+from job_radar.sources.http import BoardClient
 from job_radar.steps.convert import ConvertStep
 from job_radar.steps.dedupe import DedupeStep, JobKey
+from job_radar.steps.describe import DescribeStep
 from job_radar.steps.fetch import FetchStep
 from job_radar.steps.filter import FilterStep
 from job_radar.steps.recommend import RecommendTopJobsStep
@@ -34,23 +37,26 @@ CHECKPOINTS = FileCheckpoints(FOLDER, WINDOW)
 LLM = ClaudeCli("haiku")
 RANKER = LlmRanker(LLM, batch_size=20)
 PROFILE = CandidateProfile(cv="", preferences="")
+CLIENT = BoardClient(httpx.Client())
 
 
 def steps():
     """One of each step, in run order."""
     return [
-        FetchStep([GetroSource("board", httpx.Client())], SEARCH, WINDOW),
+        FetchStep([GetroSource("board", CLIENT)], SEARCH, WINDOW),
         ConvertStep({"getro": GetroParser()}),
         DedupeStep(JobKey(Normalizer()), date(2026, 11, 5)),
         FilterStep(SEARCH, WINDOW, Normalizer()),
+        DescribeStep({"getro": GetroDescriber("board", CLIENT, HtmlText())}, TerminalPrompter()),
         RecommendTopJobsStep(RANKER, PROFILE, top_n=10),
         ReportStep(CHECKPOINTS, FileReportWriter(FOLDER), WINDOW),
     ]
 
 
 IMPLEMENTATIONS = [
-    (GetroSource("board", httpx.Client()), JobBoardSource),
+    (GetroSource("board", CLIENT), JobBoardSource),
     (GetroParser(), JobBoardParser),
+    (GetroDescriber("board", CLIENT, HtmlText()), JobDescriber),
     (DemoSource(), JobBoardSource),
     (DemoParser(), JobBoardParser),
     (CHECKPOINTS, Checkpoints),

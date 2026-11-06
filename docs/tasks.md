@@ -69,8 +69,16 @@ Goal: `job-radar run` fetches Fast Forward, recommends the top N jobs against th
   - Tests: two postings of one job become one `Job`; a role match is kept, others dropped; an empty criterion keeps everything
   - Acceptance: Job search: a run keeps only postings that match the search criteria
 
-- [ ] **7. Recommend**
-  - A describe step after filter: fetches full descriptions only for the jobs kept, through a describer per board picked by the posting's source (Getro: one request per job, 1s apart); boards whose postings already have one pass through
+- Task 7 split in two on Nov 6: the describe step first, then the LLM ranker
+
+- [x] **7a. Describe step**
+  - `DescribeStep` after filter: fills in the full description of each kept job's primary posting, through a `JobDescriber` picked by the posting's source; postings that have one, and boards with no describer, pass through. Says first how many jobs and roughly how long
+  - `GetroDescriber`: one request per job by id (`GET api.getro.com/api/v1/jobs/{id}?collection_id=997`), paused 1s before each; a 404 or a job no longer active gets an empty description, other errors fail the step
+  - `BoardClient`: pacing and retries, moved out of `GetroSource` and shared with the describer; `HtmlText`: HTML to plain text keeping paragraphs, line breaks and lists
+  - Fixtures: two recorded job responses, one without a description
+  - Tests: `HtmlText` cases; the describer on fixtures, with 404, inactive, retries and failures; the step describes, passes through, keeps order and says how long; live check (opt-in)
+
+- [ ] **7b. Recommend**
   - `ProfileLoader` (CV PDF, preferences Markdown); `ClaudeCli` (verify the `claude -p` flags); `LlmRanker` with batches, JSON checks, one retry; real runs switch from `KeywordRanker` and the demo profile
   - Tests, with a fake `Llm`: batching; a bad answer retried, then the step fails; top N kept; missing CV is a setup error
   - Acceptance: Runs: only filtered postings go to the LLM, in batches
