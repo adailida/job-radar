@@ -1,4 +1,4 @@
-"""Step 6: write the report."""
+"""Step 7: write the report."""
 
 from job_radar.checkpoints import RunStats
 from job_radar.model import Recommendation, Report, Window

@@ -123,11 +123,12 @@ Every class depends on interfaces only; `AppFactory` is the only class that know
 
 | Interface | Pattern | Implementations |
 |---|---|---|
-| `Step` | Pipeline step | `FetchStep`, `ConvertStep`, `DedupeStep`, `FilterStep`, `RecommendTopJobsStep`, `ReportStep` |
+| `Step` | Pipeline step | `FetchStep`, `ConvertStep`, `DedupeStep`, `FilterStep`, `DescribeStep`, `RecommendTopJobsStep`, `ReportStep` |
 | `Checkpoints`, `RunStats` | Repository, with a read-only view | `FileCheckpoints` (a database later) |
 | `RunHistory` | Repository, read-only | `FileRunHistory` |
 | `Prompter` | | `TerminalPrompter` |
 | `JobBoardSource`, `JobBoardParser` | Adapter | `GetroSource`, `GetroParser` (JobsPipe later); `DemoSource`, `DemoParser` |
+| `JobDescriber` | Adapter, only for boards whose postings come without descriptions | `GetroDescriber` |
 | `JobRanker` | Strategy | `LlmRanker`; `KeywordRanker` |
 | `Llm` | | `ClaudeCli` (per-token API later) |
 | `ReportWriter` | | `FileReportWriter` |
@@ -163,15 +164,17 @@ job_radar/
   clock.py            Clock
   model.py            data models
   normalize.py        Normalizer
+  html_text.py        HtmlText
   profile.py          ProfileLoader, the demo profile
   pipeline.py         Pipeline, Step
   checkpoints.py      Checkpoints, RunStats, FileCheckpoints, Manifest
   ranking.py          JobRanker, LlmRanker, KeywordRanker
   llm.py              Llm, ClaudeCli
   report_writer.py    ReportWriter, FileReportWriter
-  sources/            base.py (JobBoardSource, JobBoardParser), getro.py (GetroSource, GetroParser),
-                      demo.py (DemoSource, DemoParser)
-  steps/              fetch.py, convert.py, dedupe.py (DedupeStep, JobKey), filter.py, recommend.py, report.py
+  sources/            base.py (JobBoardSource, JobBoardParser, JobDescriber), http.py (BoardClient),
+                      getro.py (GetroSource, GetroParser, GetroDescriber), demo.py (DemoSource, DemoParser)
+  steps/              fetch.py, convert.py, dedupe.py (DedupeStep, JobKey), filter.py, describe.py,
+                      recommend.py, report.py
 ```
 
 ## 3. Data model
@@ -355,6 +358,7 @@ output/                        (setting; default ./output, gitignored)
       convert.jsonl            postings
       dedupe.jsonl             jobs
       filter.jsonl             jobs that match the search
+      describe.jsonl           the same jobs, with full descriptions
       recommend.jsonl          the top N recommendations
       report.jsonl             the Report: where it is, one-line summary
       manifest.json            schema version; each finished step and its count, in order
@@ -1033,8 +1037,12 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Demo runs keep their own history under `output/demo/` | Demo runs among real runs | A demo run must never move a real run's window |
 | Run completion recorded in the manifest, by `Checkpoints.complete()` | Infer it from which files remain; a separate marker file | One place says what a run covered and whether it completed; replaces `discard_all`, which ran at the same moment |
 | Fast Forward paged newest first, stopping at the page that reaches past the window | Fetch the whole board every run | The search has no date filter but sorts by listing time, so a 14-day window takes about 2 requests instead of 8 |
-| Full descriptions fetched after the filter, only for jobs kept, through a describer per board (task 7) | Fetch every description during fetch; no descriptions | Getro needs one request per job at 1s each: about 400 for a first run, mostly for jobs the filter drops. Boards that already send descriptions skip the step |
-| Until task 7, a real run ranks with `KeywordRanker` against the demo profile | Real runs wait for task 7 | Real postings flow end to end now; each later task swaps one part |
+| Full descriptions fetched after the filter, only for jobs kept, through a describer per board (task 7a) | Fetch every description during fetch; no descriptions | Getro needs one request per job at 1s each: about 400 for a first run, mostly for jobs the filter drops. Boards that already send descriptions skip the step |
+| One description request per job, for its primary posting only | Describe every posting of a merged job | Merged postings are the same job, so one text is enough for ranking; a second copy costs another second |
+| A job the board no longer has (404) or no longer lists as active keeps an empty description | Drop it; fail the run | Dropping is the filter's job, and one closed job shouldn't fail a run; the ranker still sees the title |
+| Pacing and retries in one `BoardClient`, shared by a board's source and describer | Each class retries on its own | One retry rule per board, written once |
+| HTML turned into text with the standard library's `html.parser` | BeautifulSoup, html2text | No new dependency; job descriptions use a handful of tags |
+| Until task 7b, a real run ranks with `KeywordRanker` against the demo profile | Real runs wait for task 7b | Real postings flow end to end now; each later task swaps one part |
 | Title asides in brackets dropped only when about place or work mode | Drop every bracketed aside | Real Fast Forward titles use brackets to tell roles apart ("Specialist (Media and Communication)") |
 | Until country codes exist, the job key compares places as written | Leave places out of the key | Same title in different cities is common on Fast Forward (one org posts a role per district); leaving places out would merge them |
 | `Clock.now()` returns local time with its UTC offset | UTC; naive local time | Run folders and report dates match the user's clock; saved times stay unambiguous |

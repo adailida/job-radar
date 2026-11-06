@@ -10,6 +10,7 @@ from job_radar.app import JobRadarApp
 from job_radar.checkpoints import FileCheckpoints
 from job_radar.clock import Clock
 from job_radar.history import FileRunHistory
+from job_radar.html_text import HtmlText
 from job_radar.model import CandidateProfile, Model, Search, Window
 from job_radar.normalize import Normalizer
 from job_radar.pipeline import Pipeline, Step
@@ -17,11 +18,13 @@ from job_radar.profile import DEMO_PROFILE
 from job_radar.prompter import Prompter
 from job_radar.ranking import JobRanker, KeywordRanker
 from job_radar.report_writer import FileReportWriter
-from job_radar.sources.base import JobBoardParser, JobBoardSource
+from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber
 from job_radar.sources.demo import DemoParser, DemoSource
-from job_radar.sources.getro import GetroParser, GetroSource
+from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
+from job_radar.sources.http import BoardClient
 from job_radar.steps.convert import ConvertStep
 from job_radar.steps.dedupe import DedupeStep, JobKey
+from job_radar.steps.describe import DescribeStep
 from job_radar.steps.fetch import FetchStep
 from job_radar.steps.filter import FilterStep
 from job_radar.steps.recommend import RecommendTopJobsStep
@@ -50,6 +53,7 @@ class Parts:
 
     sources: list[JobBoardSource]
     parsers: list[JobBoardParser]
+    describers: list[JobDescriber]  # only for boards whose postings come without descriptions
     ranker: JobRanker
     profile: CandidateProfile
 
@@ -94,6 +98,7 @@ class AppFactory:
             ConvertStep({parser.source: parser for parser in parts.parsers}),
             DedupeStep(JobKey(normalizer), window.end),
             FilterStep(search, window, normalizer),
+            DescribeStep({d.source: d for d in parts.describers}, self._prompter),
             RecommendTopJobsStep(parts.ranker, parts.profile, self._settings.top_n),
             ReportStep(checkpoints, FileReportWriter(folder), window),
         ]
@@ -101,15 +106,18 @@ class AppFactory:
 
     def _demo(self) -> Parts:
         """The boards, ranker and profile of a demo run."""
-        return Parts([DemoSource()], [DemoParser()], KeywordRanker(), DEMO_PROFILE)
+        return Parts([DemoSource()], [DemoParser()], [], KeywordRanker(), DEMO_PROFILE)
 
     def _real(self) -> Parts:
         """The boards, ranker and profile of a real run: Fast Forward, from the settings."""
         http = httpx.Client(headers={"User-Agent": self.USER_AGENT}, timeout=20)
-        # TODO(task 7): LlmRanker over ClaudeCli, and the profile from ProfileLoader.
+        getro = BoardClient(http)
+        network = self._settings.getro_network
+        # TODO(task 7b): LlmRanker over ClaudeCli, and the profile from ProfileLoader.
         return Parts(
-            [GetroSource(self._settings.getro_network, http)],
+            [GetroSource(network, getro)],
             [GetroParser()],
+            [GetroDescriber(network, getro, HtmlText())],
             KeywordRanker(),
             DEMO_PROFILE,
         )

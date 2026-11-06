@@ -1,0 +1,75 @@
+{
+  "application_method": "method_not_defined",
+  "application_path": null,
+  "compensation_currency": "EUR",
+  "compensation_period": "year",
+  "compensation_amount_min_cents": 6500000,
+  "compensation_amount_max_cents": 8500000,
+  "compensation_offers_equity": null,
+  "compensation_public": true,
+  "description": null,
+  "description_last_updated_at": null,
+  "employment_types": [
+    "full_time"
+  ],
+  "expires_at": null,
+  "id": 98883130,
+  "locations": [
+    {
+      "id": 18022,
+      "name": "Oxford, UK",
+      "place_id": "ChIJrx_ErYAzcUgRAnRUy6jbIMg",
+      "description": "Oxford, UK"
+    }
+  ],
+  "organization": {
+    "id": 34395,
+    "domain": "topos.institute",
+    "name": "Topos Institute",
+    "logo_url": "https://cdn.getro.com/companies/6238131e-1227-455a-b38a-008a949c2c63-1766367289",
+    "slug": "topos-institute",
+    "job_board_collections_count": 3,
+    "pmktp_enabled": false,
+    "approx_employees": 17,
+    "description": "Topos Institute works to shape technology for public benefit by advancing the sciences of connection and integration.",
+    "stage": "other",
+    "industry_tags": [
+      {
+        "description": "Education"
+      },
+      {
+        "description": "Non-Profit"
+      },
+      {
+        "description": "Non-profit Organizations"
+      },
+      {
+        "description": "Social Impact"
+      }
+    ],
+    "locations": [
+      {
+        "id": 14,
+        "name": "Berkeley, CA, USA",
+        "place_id": "ChIJ00mFOjZ5hYARk-l1ppUV6pQ",
+        "description": "Berkeley, CA, USA"
+      }
+    ]
+  },
+  "posted_at": "2026-11-04T05:33:39.597Z",
+  "slug": "98883130-research-software-engineer-uk-2026-rse-1",
+  "source": "manual",
+  "status": "active",
+  "title": "Research Software Engineer [UK-2026-RSE-1",
+  "url": "https://topos.institute/community/jobs/uk-2026-rse-1/",
+  "deactivated_at": null,
+  "closed_at": null,
+  "passes_filter": true,
+  "visibility": "visible",
+  "job_functions": [
+    {
+      "id": 1064993784,
+      "name": "Software Engineering"
+    }
+  ]
+}

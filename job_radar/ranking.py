@@ -29,7 +29,7 @@ class LlmRanker:
 
     def score(self, jobs: list[Job], profile: CandidateProfile) -> list[Recommendation]:
         """Ask the model to score each batch of jobs against the profile."""
-        # TODO(task 7): build prompts, check the JSON answers, retry once.
+        # TODO(task 7b): build prompts, check the JSON answers, retry once.
         raise NotImplementedError
 
 

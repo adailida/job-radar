@@ -24,5 +24,5 @@ class ClaudeCli:
 
     def complete(self, system: str, prompt: str) -> str:
         """Run `claude -p` with the prompt and return its answer."""
-        # TODO(task 7): verify the flags; run the command with a timeout.
+        # TODO(task 7b): verify the flags; run the command with a timeout.
         raise NotImplementedError
