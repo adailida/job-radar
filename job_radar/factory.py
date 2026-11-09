@@ -18,6 +18,7 @@ from job_radar.pipeline import Pipeline, Step
 from job_radar.profile import DEMO_PROFILE, ProfileLoader
 from job_radar.prompter import Prompter
 from job_radar.ranking import JobRanker, KeywordRanker, LlmRanker
+from job_radar.report_renderer import MarkdownRenderer
 from job_radar.report_writer import FileReportWriter
 from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber
 from job_radar.sources.demo import DemoParser, DemoSource
@@ -48,6 +49,7 @@ class Settings(Model):
     llm_timeout: float = 120.0  # seconds to wait for one LLM answer
     description_chars: int = 4000  # how much of each description the LLM sees
     top_n: int = 10
+    min_score: int = 40  # a lower score is a poor fit: not recommended
 
 
 @dataclass(frozen=True)
@@ -102,8 +104,17 @@ class AppFactory:
             DedupeStep(JobKey(normalizer), window.end),
             FilterStep(search, window, normalizer),
             DescribeStep({d.source: d for d in parts.describers}, self._prompter),
-            RecommendTopJobsStep(parts.ranker, parts.profile, self._settings.top_n),
-            ReportStep(checkpoints, FileReportWriter(folder), window),
+            RecommendTopJobsStep(
+                parts.ranker, parts.profile, self._settings.top_n, self._settings.min_score
+            ),
+            ReportStep(
+                checkpoints,
+                MarkdownRenderer(),
+                FileReportWriter(folder),
+                folder.name,
+                window,
+                self._settings.min_score,
+            ),
         ]
         return Pipeline(steps, checkpoints)
 

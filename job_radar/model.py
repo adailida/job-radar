@@ -212,3 +212,17 @@ class StepCount(Model):
 
     step: str
     count: int
+
+
+class ReportContent(Model):
+    """Everything a report says, decided before it is formatted.
+
+    The renderer only formats it, so another format is a new renderer and
+    the content logic is tested without Markdown.
+    """
+
+    run: str  # the run's folder name, e.g. "2026-11-09T13-58-11"
+    window: Window
+    min_score: int  # the lowest score a recommended job may have
+    recommendations: tuple[Recommendation, ...]  # best first
+    funnel: tuple[StepCount, ...]  # each finished step and its count, in run order

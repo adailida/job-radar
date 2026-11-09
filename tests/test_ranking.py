@@ -148,6 +148,6 @@ def test_only_filtered_postings_go_to_the_llm_in_batches():
     ]
     kept = FilterStep(search, window, Normalizer()).run(found)
     llm = FakeLlm()
-    RecommendTopJobsStep(LlmRanker(llm, batch_size=2), PROFILE, top_n=10).run(kept)
+    RecommendTopJobsStep(LlmRanker(llm, batch_size=2), PROFILE, top_n=10, min_score=0).run(kept)
     titles = [re.findall(r"Title: (.+)", prompt) for prompt in llm.prompts]
     assert titles == [["Data Engineer", "Senior Data Engineer"], ["Data Engineer II"]]

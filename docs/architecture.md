@@ -2,7 +2,7 @@
 
 How the code is put together: which classes exist, what each one is responsible for, which others it knows, and where state lives. Every box is a real class, named as in the code. The reasons behind each part are in [design.md](design.md).
 
-**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
+**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
 
 The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, fetches their full descriptions, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, a made-up profile and keyword scoring in place of the LLM.
 
@@ -279,8 +279,24 @@ classDiagram
     }
     class ReportStep {
         -stats: RunStats
+        -renderer: ReportRenderer
         -writer: ReportWriter
+        -run_id: str
         -window: Window
+        -min_score: int
+    }
+    class ReportRenderer {
+        <<interface>>
+        +render(content) str
+    }
+    class MarkdownRenderer
+    class ReportContent {
+        <<immutable data>>
+        +run: str
+        +window: Window
+        +min_score: int
+        +recommendations: tuple~Recommendation~
+        +funnel: tuple~StepCount~
     }
     class RunStats {
         <<interface>>
@@ -323,6 +339,9 @@ classDiagram
     RecommendTopJobsStep o-- CandidateProfile : holds
     ProfileLoader ..> CandidateProfile : creates
     ReportStep o-- RunStats : holds
+    ReportStep o-- ReportRenderer : holds
+    ReportStep ..> ReportContent : creates
+    ReportRenderer <|.. MarkdownRenderer : implements
     ReportStep o-- ReportWriter : holds
     ReportWriter <|.. FileReportWriter : implements
 
@@ -339,6 +358,7 @@ classDiagram
     style RecommendTopJobsStep stroke:#2e7d32,stroke-width:3px
     style ReportStep stroke:#2e7d32,stroke-width:3px
     style FileReportWriter stroke:#2e7d32,stroke-width:3px
+    style MarkdownRenderer stroke:#2e7d32,stroke-width:3px
     style DemoSource stroke:#2e7d32,stroke-width:3px
     style GetroSource stroke:#2e7d32,stroke-width:3px
     style GetroParser stroke:#2e7d32,stroke-width:3px
@@ -370,7 +390,7 @@ The pipeline saves each step's output and passes it to the next step in memory. 
 | `DedupeStep` | `dedupe` | `Posting`s | `Job`s, one per real job |
 | `FilterStep` | `filter` | `Job`s | `Job`s that match the search |
 | `DescribeStep` | `describe` | `Job`s | the same `Job`s, each primary posting with its full description |
-| `RecommendTopJobsStep` | `recommend` | `Job`s | the top N `Recommendation`s, each with its `Job`, a score and a reason |
+| `RecommendTopJobsStep` | `recommend` | `Job`s | the top N `Recommendation`s at or above the minimum score, each with its `Job`, a score and a reason |
 | `ReportStep` | `report` | `Recommendation`s | `Report`: where it is and a one-line summary |
 
 ## Responsibilities and neighbours
@@ -405,12 +425,13 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `DescribeStep` | Step | Fill in the full description of each kept job's primary posting, through the describer for its board; say first how long it takes. Jobs that have one, or whose board has no describer, pass through | `JobDescriber`, `Prompter` |
 | `JobDescriber`, `GetroDescriber` | Adapter | Fetch one posting's description as plain text; `GetroDescriber` makes one request per job and gives nothing for a job the board no longer has or lists | `BoardClient`, `HtmlText` |
 | `HtmlText` | | Turn HTML into plain text that keeps paragraphs, line breaks and lists | nothing |
-| `RecommendTopJobsStep` | Step | Keep the N best-scored jobs | `JobRanker`, `CandidateProfile` |
+| `RecommendTopJobsStep` | Step | Keep the N best-scored jobs that reach the minimum score (40 by default) | `JobRanker`, `CandidateProfile` |
 | `JobRanker`, `LlmRanker` | Strategy | Score jobs against the CV and preferences, 20 to a prompt, with a JSON schema; check the answer scores every job once, ask again once if not | `Llm` |
 | `KeywordRanker` | Strategy | Score a job by the share of its title words found in the profile, for `--demo` and tests | models |
 | `Llm`, `ClaudeCli` | Interface | Send one prompt to a language model; `ClaudeCli` runs `claude -p` on the subscription, one plain turn from an empty folder, and checks the login before a run | `claude` |
 | `ProfileLoader` | | Read the CV (`cv.pdf`, `cv.md` or `cv.txt`) and `preferences.md` from `local/` into a `CandidateProfile`; say what's missing | `local/` |
-| `ReportStep` | Step | Build the Markdown report: the funnel and the top N | `RunStats`, `ReportWriter` |
+| `ReportStep` | Step | Put together what the report says (`ReportContent`: the run, its window, the recommended jobs, the funnel), then have it formatted and written | `RunStats`, `ReportRenderer`, `ReportWriter` |
+| `ReportRenderer`, `MarkdownRenderer` | Interface | Format a report's content and decide nothing about it; `MarkdownRenderer` writes YAML front matter, then Markdown | models |
 | `ReportWriter`, `FileReportWriter` | Interface | Store the finished report and say where it is | its run folder |
 | `Clock` | | The current time, so tests can fix it | the system clock |
 | Models | Immutable data | Passed between classes | nothing |
@@ -535,11 +556,13 @@ sequenceDiagram
     p->>rec: run(Jobs)
     rec->>rk: score(jobs, profile)
     rk-->>rec: Recommendations, by title words found in the profile
-    rec->>rec: sort, keep the top N
+    rec->>rec: drop scores under the minimum, sort, keep the top N
     rec-->>p: top N Recommendations
     p->>rep: run(Recommendations)
     rep->>cp: funnel()
     cp-->>rep: count per finished step
+    rep->>rep: ReportContent(run, window, min score, Recommendations, funnel)
+    rep->>rep: MarkdownRenderer.render(content)
     rep->>rw: write(markdown)
     rw-->>rep: location
     rep-->>p: Report(location, summary)

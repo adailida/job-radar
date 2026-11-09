@@ -55,8 +55,21 @@ def test_demo_run_end_to_end(tmp_path, capsys):
     report = (folder / "report.md").read_text()
     assert "## Recommended jobs (3)" in report
     assert "1. **Senior Data Engineer**, Brightwater Trust (score 100)" in report
-    assert "Postings from 2026-10-22 to 2026-11-05." in report
+    assert "Covers postings from 22 Oct to 5 Nov 2026." in report
     assert "- convert: 12" in report
+
+
+def test_each_run_writes_one_report_and_saves_its_run_data(tmp_path):
+    demo_cli(tmp_path, FakePrompter(True)).main(["run", "--demo"])
+    demo_cli(tmp_path, FakePrompter(), hour=15).main(["run", "--demo"])
+    folders = sorted((tmp_path / "demo").iterdir())
+    assert [f.name for f in folders] == [FIRST_RUN, "2026-11-05T15-00-00"]
+    for folder in folders:
+        assert sorted(p.name for p in folder.iterdir()) == ["manifest.json", "report.md"]
+        manifest = json.loads((folder / "manifest.json").read_text())
+        assert manifest["completed"] is True
+        assert [step["step"] for step in manifest["steps"]][-1] == "report"
+        assert f"run: {folder.name}\n" in (folder / "report.md").read_text()
 
 
 def test_new_source_plugs_in_without_changes_downstream(tmp_path):

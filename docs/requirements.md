@@ -40,7 +40,7 @@ After the MVP
 - **Report**: one per run, with a section for each MVP capability. Openings are grouped by domain, job type, or both, as set in the settings
 - **Run data**: each run saves what it collected and derived, and later runs use it. The volume is small and nothing in it is critical
 - **New data only**: by default a run covers only postings not seen in earlier runs, so duplicates and old postings are skipped and trends count each posting once. A setting turns this off so a run covers everything. A lookback cap (2 weeks by default) keeps a run from reaching far back when the last run was long ago
-- **Deleting runs**: a failed run never counts: it doesn't mark postings as seen or add to trends, and is kept only for inspection until deleted. Any run can also be deleted by hand. Deleting asks for confirmation first
+- **Deleting runs**: a failed run never counts: it doesn't mark postings as seen or add to trends, and is kept for inspection and to resume until deleted. Any run can also be deleted by hand. Deleting asks for confirmation first
 - **Problem alerts**: anything that goes wrong (no data, credits used up, a failing source) is reported in the terminal and at the top of the report
 - **Format**: plain text that both people and an LLM can read. The report is Markdown by default. The report and run data formats sit behind a format layer, so either can change without touching the rest. The data model underneath is defined in `design.md`
 

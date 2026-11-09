@@ -1,48 +1,49 @@
 """Step 7: write the report."""
 
 from job_radar.checkpoints import RunStats
-from job_radar.model import Recommendation, Report, Window
+from job_radar.model import Recommendation, Report, ReportContent, Window
+from job_radar.report_renderer import ReportRenderer
 from job_radar.report_writer import ReportWriter
 
 
 class ReportStep:
-    """Builds the run's report: the funnel of counts and the recommended jobs.
+    """Puts together what the run's report says, then has it formatted and written.
 
-    Stateless: holds only where it reads counts from, where the report goes,
-    and the run's window.
+    The content is the recommended jobs, the run's window and the funnel of
+    counts; the renderer decides only how it looks. Stateless: holds only
+    where it reads counts from, the renderer, where the report goes, and
+    what it needs to know about the run.
     """
 
     name = "report"
     output = Report
 
-    def __init__(self, stats: RunStats, writer: ReportWriter, window: Window) -> None:
-        """Keep the run's counts, the writer the report goes to, and the run's window."""
+    def __init__(
+        self,
+        stats: RunStats,
+        renderer: ReportRenderer,
+        writer: ReportWriter,
+        run_id: str,
+        window: Window,
+        min_score: int,
+    ) -> None:
+        """Keep the run's counts, how the report is formatted and stored, and the run's facts."""
         self._stats = stats
+        self._renderer = renderer
         self._writer = writer
+        self._run_id = run_id
         self._window = window
+        self._min_score = min_score
 
     def run(self, data: list[Recommendation]) -> list[Report]:
-        """Build the Markdown report, write it, and say where it is."""
-        # TODO(task 8): add work mode and salary; settle the layout with a golden file.
-        lines = ["# job-radar report", "", f"## Recommended jobs ({len(data)})", ""]
-        if not data:
-            lines.append("No jobs to recommend this run.")
-        for rank, rec in enumerate(data, start=1):
-            lines.extend(self._job(rank, rec))
-        window = f"{self._window.start.isoformat()} to {self._window.end.isoformat()}"
-        lines.extend(["", "## About this run", "", f"Postings from {window}.", ""])
-        lines.extend(["Items each step produced:", ""])
-        lines.extend(f"- {count.step}: {count.count}" for count in self._stats.funnel())
-        location = self._writer.write("\n".join(lines) + "\n")
+        """Build the report's content, write it, and say where it is."""
+        content = ReportContent(
+            run=self._run_id,
+            window=self._window,
+            min_score=self._min_score,
+            recommendations=tuple(data),
+            funnel=tuple(self._stats.funnel()),
+        )
+        location = self._writer.write(self._renderer.render(content))
         jobs = "job" if len(data) == 1 else "jobs"
         return [Report(location=location, summary=f"{len(data)} {jobs} recommended")]
-
-    def _job(self, rank: int, rec: Recommendation) -> list[str]:
-        """One recommended job as a numbered list item, from its primary posting."""
-        posting = rec.job.postings[0]
-        places = ", ".join(location.text for location in posting.locations)
-        return [
-            f"{rank}. **{posting.title}**, {posting.company} (score {rec.score})",
-            f"   {places}. {posting.url}",
-            f"   {rec.reason}",
-        ]

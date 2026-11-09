@@ -16,6 +16,7 @@ from job_radar.normalize import Normalizer
 from job_radar.pipeline import Step
 from job_radar.prompter import Prompter, TerminalPrompter
 from job_radar.ranking import JobRanker, KeywordRanker, LlmRanker
+from job_radar.report_renderer import MarkdownRenderer, ReportRenderer
 from job_radar.report_writer import FileReportWriter, ReportWriter
 from job_radar.result import RunCancelled, RunFailed, RunResult, RunSucceeded
 from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber
@@ -48,8 +49,8 @@ def steps():
         DedupeStep(JobKey(Normalizer()), date(2026, 11, 5)),
         FilterStep(SEARCH, WINDOW, Normalizer()),
         DescribeStep({"getro": GetroDescriber("board", CLIENT, HtmlText())}, TerminalPrompter()),
-        RecommendTopJobsStep(RANKER, PROFILE, top_n=10),
-        ReportStep(CHECKPOINTS, FileReportWriter(FOLDER), WINDOW),
+        RecommendTopJobsStep(RANKER, PROFILE, top_n=10, min_score=40),
+        ReportStep(CHECKPOINTS, MarkdownRenderer(), FileReportWriter(FOLDER), "run", WINDOW, 40),
     ]
 
 
@@ -65,6 +66,7 @@ IMPLEMENTATIONS = [
     (KeywordRanker(), JobRanker),
     (LLM, Llm),
     (FileReportWriter(FOLDER), ReportWriter),
+    (MarkdownRenderer(), ReportRenderer),
     (RunSucceeded(location="report.md", summary=""), RunResult),
     (RunFailed(step="fetch", reason=""), RunResult),
     (RunCancelled(), RunResult),

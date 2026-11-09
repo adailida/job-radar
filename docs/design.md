@@ -359,7 +359,7 @@ output/                        (setting; default ./output, gitignored)
       03-dedupe.jsonl          jobs
       04-filter.jsonl          jobs that match the search
       05-describe.jsonl        the same jobs, with full descriptions
-      06-recommend.jsonl       the top N recommendations
+      06-recommend.jsonl       the top N recommendations at or above the minimum score
       07-report.jsonl          the Report: where it is, one-line summary
       manifest.json            schema version; each finished step and its count, in order
       report.md                this run's report
@@ -753,11 +753,12 @@ The CV's requirements and coverage judgments are cached by CV content hash plus 
 
 ### A renderer that only formats
 
-All numbers, sort orders, grouping and wording choices are made before the renderer. A `ReportBuilder` in the Report stage assembles a `Report` (plain dataclass) from the stage outputs; the renderer only formats it. A second format (JSON, HTML) is then a short file, logic is tested in the builder, and the Markdown is tested with golden files.
+All numbers, sort orders, grouping and wording choices are made before the renderer. The report step assembles a `ReportContent` (immutable model) from the stage outputs; the renderer only formats it. A second format (JSON, HTML) is then a short file, logic is tested without Markdown, and the Markdown is tested with golden files. While the content is only the run, its window, the recommended jobs and the funnel, `ReportStep` assembles it itself; a `ReportBuilder` takes that over once sections need real logic (trends, requirements).
+
+The full content, section by section as later tasks add them:
 
 ```python
-@dataclass
-class Report:
+class ReportContent(Model):
     header: Header                # date, window covered, lookback note, sources with counts and credits
     alerts: list[Alert]
     openings: list[OpeningGroup]  # headings from group_by, jobs inside
@@ -766,16 +767,15 @@ class Report:
     gaps: GapSection              # missing and partly covered rows, covered list
     funnel: Funnel                # counts per stage
 
-class Renderer(Protocol):
-    extension: str                # ".md"
-    def render(self, report: Report) -> str: ...
+class ReportRenderer(Protocol):
+    def render(self, content: ReportContent) -> str: ...
 ```
 
 ### Format layer
 
 One interface per format the requirements put behind a format layer:
 
-- Report format: `Renderer`. MVP: Markdown
+- Report format: `ReportRenderer`. MVP: Markdown (`MarkdownRenderer`)
 - Run data format: `RunStore` (section 5). MVP: JSON and JSONL files
 
 ### Layout rules
@@ -990,7 +990,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Sockets blocked in tests (`pytest-socket`) | Rely on discipline | A test that reaches the network fails instead of spending credits |
 | Fixtures recorded with neutral queries, scrubbed, reviewed | Record with the user's settings; hand-written fixtures | Public repo: no search strategy or personal data. Recorded pages catch real API quirks |
 | Acceptance criteria as the test list | Coverage percentage target | "Done" means the criteria pass |
-| `now()` callable injected | A `Clock` interface; freezing time with a library | Deterministic tests with no extra abstraction or dependency |
+| A `Clock` class injected | A `now()` callable; freezing time with a library | Deterministic tests with no dependency; the same clock stamps run folders and report dates |
 | All personal files in one gitignored `local/` folder | Named files in .gitignore (`config.yaml`, ...) | Public repo: one rule covers files added later |
 | CV as PDF, Markdown or text; PDF read locally with `pypdf` | Text only; let the LLM read the PDF | PDF is the standard CV format; local extraction is free and deterministic |
 | Profile as named searches: AND within, OR across | One flat criteria set; an expression language | Covers real combinations ("remote in US, or onsite in NY") without a parser |
@@ -1067,4 +1067,6 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | On success, delete every checkpoint; keep the manifest and the report | Keep every step's output; keep chosen outputs such as the deduped jobs | Checkpoints are only for resuming, which a successful run no longer needs. Jobs kept for history get their own storage with task 13 |
 | Files for checkpoints; SQLite considered again at task 13 | SQLite now; MySQL | Plain text is a requirement and lets you read a step's output directly while building. SQLite wins once data spans runs (history, seen jobs, trends); `Checkpoints` is an interface, so switching is one class. A database server is too much for a local tool |
 | Step files are numbered by their place in the manifest, the order the steps finished in; a step saved again keeps its number | `AppFactory` passes the step order to `FileCheckpoints`; `Pipeline` passes each step's position | `ReportStep` needs the checkpoints before the step list exists, so the factory would have to write the order twice. Steps run in order, so the manifest already holds it, and nothing outside `FileCheckpoints` changes. Two digits keep the order past 9 steps |
+| Recommend only jobs scoring at least `min_score` (40 by default, the bottom of "partial fit" in the ranker's guide); with none, the report says so | Always list the top N; list them all and mark the weak ones | A list of poor fits looks like advice. The first real run's best job scored 18 |
+| Places in the report are separated by "; " | ", " | Places contain commas ("Amsterdam, Netherlands"), so commas between them were ambiguous |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |

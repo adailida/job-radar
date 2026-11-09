@@ -1,22 +1,19 @@
 from datetime import date
 
 import pytest
-from fakes import FakeStats, MemoryWriter, job, posting
+from fakes import job, posting
 
 from job_radar.model import (
     CandidateProfile,
     Job,
     RawPage,
     Recommendation,
-    Report,
     Search,
-    StepCount,
     Window,
 )
 from job_radar.steps.convert import ConvertStep
 from job_radar.steps.fetch import FetchStep
 from job_radar.steps.recommend import RecommendTopJobsStep
-from job_radar.steps.report import ReportStep
 
 SEARCH = Search(name="default", roles=())
 WINDOW = Window(start=date(2026, 10, 29), end=date(2026, 11, 5))
@@ -75,23 +72,17 @@ def test_convert_fails_on_a_board_without_parser():
 def test_recommend_keeps_top_n_best_first():
     jobs = [job("1"), job("2"), job("3"), job("4")]
     ranker = ScoreByIdRanker({"demo:1": 40, "demo:2": 90, "demo:3": 70, "demo:4": 70})
-    top = RecommendTopJobsStep(ranker, PROFILE, top_n=3).run(jobs)
+    top = RecommendTopJobsStep(ranker, PROFILE, top_n=3, min_score=0).run(jobs)
     assert [(r.job.id, r.score) for r in top] == [("demo:2", 90), ("demo:3", 70), ("demo:4", 70)]
 
 
-def test_report_lists_top_jobs_and_funnel():
-    writer = MemoryWriter()
-    stats = FakeStats([StepCount(step="fetch", count=2), StepCount(step="convert", count=12)])
-    recs = [Recommendation(job=job("1", "Data Engineer"), score=90, reason="Fits well")]
-    reports = ReportStep(stats, writer, WINDOW).run(recs)
-    assert reports == [Report(location="memory/report.md", summary="1 job recommended")]
-    assert "1. **Data Engineer**, Example Org (score 90)" in writer.text
-    assert "Fits well" in writer.text
-    assert "- fetch: 2\n- convert: 12" in writer.text
-    assert "Postings from 2026-10-29 to 2026-11-05." in writer.text
+def test_recommend_leaves_out_jobs_below_the_minimum_score():
+    jobs = [job("1"), job("2"), job("3")]
+    ranker = ScoreByIdRanker({"demo:1": 39, "demo:2": 40, "demo:3": 85})
+    top = RecommendTopJobsStep(ranker, PROFILE, top_n=10, min_score=40).run(jobs)
+    assert [(r.job.id, r.score) for r in top] == [("demo:3", 85), ("demo:2", 40)]
 
 
-def test_report_says_when_nothing_is_recommended():
-    writer = MemoryWriter()
-    ReportStep(FakeStats([]), writer, WINDOW).run([])
-    assert "No jobs to recommend this run." in writer.text
+def test_recommend_gives_nothing_when_no_job_reaches_the_minimum():
+    ranker = ScoreByIdRanker({"demo:1": 18})
+    assert RecommendTopJobsStep(ranker, PROFILE, top_n=10, min_score=40).run([job("1")]) == []
