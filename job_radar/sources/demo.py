@@ -3,7 +3,7 @@
 import json
 from datetime import date, timedelta
 
-from job_radar.model import Posting, RawPage, Search, Window
+from job_radar.model import Posting, RawPage, SearchCriteria, Window
 
 
 class DemoSource:
@@ -34,8 +34,8 @@ class DemoSource:
         ("12", "Data Engineer, APIs and Pipelines", "Northstar Climate", "Remote, US", "remote", (125, 145), 1),
     )  # fmt: skip
 
-    def fetch(self, search: Search, window: Window) -> list[RawPage]:
-        """Return the made-up postings as pages of JSON, whatever the search and window."""
+    def fetch(self, criteria: SearchCriteria, window: Window) -> list[RawPage]:
+        """Return the made-up postings as pages of JSON, whatever the searches and window."""
         records = [self._record(*posting, window.end) for posting in self.POSTINGS]
         chunks = [records[i : i + self.PAGE_SIZE] for i in range(0, len(records), self.PAGE_SIZE)]
         return [

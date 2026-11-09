@@ -2,7 +2,7 @@
 
 from typing import Protocol, runtime_checkable
 
-from job_radar.model import Posting, RawPage, Search, Window
+from job_radar.model import Posting, RawPage, SearchCriteria, Window
 
 
 @runtime_checkable
@@ -14,8 +14,8 @@ class JobBoardSource(Protocol):
 
     name: str  # "getro", "jobspipe"; also the name of its parser's source
 
-    def fetch(self, search: Search, window: Window) -> list[RawPage]:
-        """Query the board for the search and window, page by page, unparsed."""
+    def fetch(self, criteria: SearchCriteria, window: Window) -> list[RawPage]:
+        """Query the board for the searches and window, page by page, unparsed."""
         ...
 
 

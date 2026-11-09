@@ -34,7 +34,13 @@ Works now:
     job-radar run --demo   # a run on made-up postings: no network, no LLM, no CV needed
     job-radar run          # real Fast Forward jobs, ranked by Claude against your CV and preferences
 
-A real run needs your CV as `local/cv.pdf` (or `cv.md`, `cv.txt`), your ideal job in your own words in `local/preferences.md`, and Claude Code logged in. The `local/` folder is never committed.
+A real run needs, in `local/` (never committed):
+
+- `profile.yaml`: what you're searching for (roles for now). Start from [examples/profile.example.yaml](examples/profile.example.yaml)
+- `cv.pdf` (or `cv.md`, `cv.txt`), and your ideal job in your own words in `preferences.md`
+- optionally `settings.yaml`, with only the settings you change; [examples/settings.example.yaml](examples/settings.example.yaml) lists every one with its default
+
+and Claude Code logged in.
 
 Each run says which dates it fetches: the last 14 days on a first run, since the last run after that. On a first run, or after a long break, it asks before going ahead.
 

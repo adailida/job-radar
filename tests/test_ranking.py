@@ -6,7 +6,7 @@ from decimal import Decimal
 import pytest
 from fakes import job, posting
 
-from job_radar.model import CandidateProfile, Job, Period, Salary, Search, Window
+from job_radar.model import CandidateProfile, Job, Period, Salary, Search, SearchCriteria, Window
 from job_radar.normalize import Normalizer
 from job_radar.ranking import BadAnswer, LlmRanker
 from job_radar.steps.filter import FilterStep
@@ -132,7 +132,7 @@ def test_no_jobs_asks_nothing():
 def test_only_filtered_postings_go_to_the_llm_in_batches():
     """Acceptance (Runs): only filtered postings go to the LLM, in batches."""
     window = Window(start=date(2026, 10, 22), end=date(2026, 11, 5))
-    search = Search(name="default", roles=("data engineer",))
+    search = SearchCriteria(searches=(Search(name="default", roles=("data engineer",)),))
     found = [
         job(str(n), title)
         for n, title in enumerate(

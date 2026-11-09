@@ -2,11 +2,14 @@
 
 import argparse
 import sys
+from pathlib import Path
 
 from job_radar import __version__
 from job_radar.clock import Clock
-from job_radar.factory import AppFactory, Settings
+from job_radar.factory import AppFactory
 from job_radar.prompter import TerminalPrompter
+from job_radar.settings import SettingsFile
+from job_radar.yaml_file import ConfigError
 
 
 class Cli:
@@ -15,10 +18,18 @@ class Cli:
     Stateless: holds only the factory that builds the app.
     """
 
+    LOCAL = Path("local")  # the user's folder: CV, preferences, profile and settings
+
     @staticmethod
     def start() -> int:
-        """Entry point of the `job-radar` command. Returns the exit code."""
-        return Cli(AppFactory(Settings(), Clock(), TerminalPrompter())).main(sys.argv[1:])
+        """Entry point of the `job-radar` command: reads the settings, then runs. The exit code."""
+        try:
+            settings = SettingsFile(Cli.LOCAL / "settings.yaml").load()
+        except ConfigError as error:
+            print(f"Could not set up the run: {error}")
+            return 2
+        factory = AppFactory(settings, Cli.LOCAL, Clock(), TerminalPrompter())
+        return Cli(factory).main(sys.argv[1:])
 
     def __init__(self, factory: AppFactory) -> None:
         """Keep the factory that builds the app for each command."""

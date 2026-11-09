@@ -9,13 +9,14 @@ from job_radar.model import (
     RawPage,
     Recommendation,
     Search,
+    SearchCriteria,
     Window,
 )
 from job_radar.steps.convert import ConvertStep
 from job_radar.steps.fetch import FetchStep
 from job_radar.steps.recommend import RecommendTopJobsStep
 
-SEARCH = Search(name="default", roles=())
+SEARCH = SearchCriteria(searches=(Search(name="default", roles=()),))
 WINDOW = Window(start=date(2026, 10, 29), end=date(2026, 11, 5))
 PROFILE = CandidateProfile(cv="", preferences="")
 

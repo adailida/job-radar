@@ -12,7 +12,7 @@ from job_radar.clock import Clock
 from job_radar.history import FileRunHistory
 from job_radar.html_text import HtmlText
 from job_radar.llm import ClaudeCli
-from job_radar.model import CandidateProfile, Model, Search, Window
+from job_radar.model import CandidateProfile, SearchCriteria, Window
 from job_radar.normalize import Normalizer
 from job_radar.pipeline import Pipeline, Step
 from job_radar.profile import DEMO_PROFILE, ProfileLoader
@@ -20,6 +20,8 @@ from job_radar.prompter import Prompter
 from job_radar.ranking import JobRanker, KeywordRanker, LlmRanker
 from job_radar.report_renderer import MarkdownRenderer
 from job_radar.report_writer import FileReportWriter
+from job_radar.searches import DEMO_SEARCHES, SearchesFile
+from job_radar.settings import Settings
 from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber
 from job_radar.sources.demo import DemoParser, DemoSource
 from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
@@ -35,33 +37,14 @@ from job_radar.window import WindowPlanner
 from job_radar.window_chooser import WindowChooser
 
 
-class Settings(Model):
-    """Everything a run can be configured with."""
-
-    # TODO(task 10): load from a settings file.
-    output: Path = Path("output")  # run folders go under output/runs/, demo runs under output/demo/
-    local: Path = Path("local")  # the user's CV and preferences
-    getro_network: str = "997"  # Fast Forward's job board on Getro
-    # TODO(task 10): roles come from the user's settings file.
-    search: Search = Search(
-        name="default", roles=("engineer", "engineering", "developer", "tech lead", "architect")
-    )
-    lookback_days: int = 14  # how far back a run may reach: a first run, or after a long break
-    model: str = "haiku"
-    batch_size: int = 20  # jobs per LLM prompt
-    llm_timeout: float = 120.0  # seconds to wait for one LLM answer
-    description_chars: int = 4000  # how much of each description the LLM sees
-    top_n: int = 10
-    min_score: int = 40  # a lower score is a poor fit: not recommended
-
-
 @dataclass(frozen=True)
 class Parts:
-    """What differs between a real run and a demo run: the boards, the ranker and the profile."""
+    """What differs between a real run and a demo run: boards, searches, ranker and profile."""
 
     sources: list[JobBoardSource]
     parsers: list[JobBoardParser]
     describers: list[JobDescriber]  # only for boards whose postings come without descriptions
+    criteria: SearchCriteria
     ranker: JobRanker
     profile: CandidateProfile
 
@@ -70,14 +53,16 @@ class AppFactory:
     """Builds the app and everything it uses for one command (Factory).
 
     Wires concrete classes together, so every other class depends only on
-    interfaces. Stateless: holds only the settings, the clock and the prompter.
+    interfaces. Stateless: holds only the settings, the user's folder, the
+    clock and the prompter.
     """
 
     USER_AGENT = "job-radar (+https://github.com/adailida/job-radar)"
 
-    def __init__(self, settings: Settings, clock: Clock, prompter: Prompter) -> None:
-        """Keep the settings, the clock and the prompter the app is built from."""
+    def __init__(self, settings: Settings, local: Path, clock: Clock, prompter: Prompter) -> None:
+        """Keep the settings, the user's folder, the clock and the prompter to build from."""
         self._settings = settings
+        self._local = local
         self._clock = clock
         self._prompter = prompter
 
@@ -99,16 +84,18 @@ class AppFactory:
         folder = runs / self._clock.stamp()
         folder.mkdir(parents=True)
         checkpoints = FileCheckpoints(folder, window)
-        search = self._settings.search
         normalizer = Normalizer()
         steps: list[Step] = [
-            FetchStep(parts.sources, search, window),
+            FetchStep(parts.sources, parts.criteria, window),
             ConvertStep({parser.source: parser for parser in parts.parsers}),
             DedupeStep(JobKey(normalizer), window.end),
-            FilterStep(search, window, normalizer),
+            FilterStep(parts.criteria, window, normalizer),
             DescribeStep({d.source: d for d in parts.describers}, self._prompter),
             RecommendTopJobsStep(
-                parts.ranker, parts.profile, self._settings.top_n, self._settings.min_score
+                parts.ranker,
+                parts.profile,
+                self._settings.recommend.top_n,
+                self._settings.recommend.min_score,
             ),
             ReportStep(
                 checkpoints,
@@ -116,32 +103,38 @@ class AppFactory:
                 FileReportWriter(folder),
                 folder.name,
                 window,
-                self._settings.min_score,
+                self._settings.recommend.min_score,
             ),
         ]
         return Pipeline(steps, checkpoints)
 
     def _demo(self) -> Parts:
-        """The boards, ranker and profile of a demo run."""
-        return Parts([DemoSource()], [DemoParser()], [], KeywordRanker(), DEMO_PROFILE)
+        """The boards, searches, ranker and profile of a demo run."""
+        return Parts(
+            [DemoSource()], [DemoParser()], [], DEMO_SEARCHES, KeywordRanker(), DEMO_PROFILE
+        )
 
     def _real(self) -> Parts:
         """The boards, ranker and profile of a real run: Fast Forward, Claude and the user's files.
 
-        Reads the CV and preferences and checks `claude` is logged in first, so
-        a missing file or login stops the run before anything is fetched.
+        Reads the searches, the CV and the preferences and checks `claude` is
+        logged in first, so a missing file or login stops the run before
+        anything is fetched.
         """
-        profile = ProfileLoader(self._settings.local).load()
-        llm = ClaudeCli(self._settings.model, self._settings.llm_timeout)
+        criteria = SearchesFile(self._local / "profile.yaml").load()
+        profile = ProfileLoader(self._local).load()
+        llm_settings = self._settings.llm
+        llm = ClaudeCli(llm_settings.model, llm_settings.timeout_seconds)
         llm.check()
-        ranker = LlmRanker(llm, self._settings.batch_size, self._settings.description_chars)
+        ranker = LlmRanker(llm, llm_settings.batch_size, llm_settings.max_description_chars)
         http = httpx.Client(headers={"User-Agent": self.USER_AGENT}, timeout=20)
         getro = BoardClient(http)
-        network = self._settings.getro_network
+        network = self._settings.sources.getro.network
         return Parts(
             [GetroSource(network, getro)],
             [GetroParser()],
             [GetroDescriber(network, getro, HtmlText())],
+            criteria,
             ranker,
             profile,
         )
