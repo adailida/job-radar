@@ -110,7 +110,7 @@ One line each for now; each task gets its detail, against the class names in arc
 - [ ] **11c. Keywords:** "the description mentions any", checked after the describe step
 - [ ] **12. Terminal prompts:** ask for missing or invalid profile fields (`Prompter` exists since task 4)
 - [x] **13a. Run history:** `job-radar runs` lists runs; `job-radar delete <id>...` and `--all` delete after asking, Enter meaning no; `--demo` for demo runs
-- [ ] **13b. Resume:** when the newest run failed, `job-radar run` offers to resume it; `Pipeline` skips the finished steps and loads the last saved output (moved from task 4 on Nov 5: nothing can choose a failed run before this task)
+- [x] **13b. Resume:** when the newest run failed, `job-radar run` offers to resume it; `Pipeline` skips the finished steps and loads the last saved output (moved from task 4 on Nov 5: nothing can choose a failed run before this task)
 - [ ] **14. Time window in the report:** when the lookback cap cut a gap, the report says so and which dates it covers (the window itself is task 4)
 - [ ] **15. Smarter dedupe:** ATS and fuzzy keys; across runs, so only new jobs by default
 - [ ] **16. JobsPipe:** `JobsPipeSource` and `JobsPipeParser`, fixtures recorded with a few credits

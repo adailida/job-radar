@@ -42,10 +42,22 @@ class Pipeline:
         self._checkpoints = checkpoints
 
     def run(self) -> RunResult:
-        """Run every step not done yet and return how the run ended."""
-        # TODO(task 13b): skip the steps already saved; load the last saved output.
+        """Run every step not done yet and return how the run ended.
+
+        The steps an earlier attempt saved, from the first one on, are skipped;
+        the last of them is read back from disk as the next step's input.
+        """
+        start = 0
+        while start < len(self._steps) and self._checkpoints.has(self._steps[start].name):
+            start += 1
         data: list = []
-        for step in self._steps:
+        if start:
+            last = self._steps[start - 1]
+            try:
+                data = self._checkpoints.load(last.name, last.output)
+            except Exception as error:
+                return RunFailed(step=last.name, reason=f"can't read its saved output: {error}")
+        for step in self._steps[start:]:
             try:
                 data = step.run(data)
                 self._checkpoints.save(step.name, data)

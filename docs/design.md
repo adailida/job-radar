@@ -395,7 +395,7 @@ The CV cache and the spend ledger are not part of any run: deleting runs leaves 
 
 - After each step, the pipeline saves its output and adds the step and its count to `manifest.json`. A step listed there is finished
 - The manifest also records the run's window, and once every step has finished, that the run completed. Run history reads both: the next run's window starts from the last completed one
-- A failed run keeps every file. A rerun of it skips the finished steps and starts at the step that failed. For the first run every command starts a new folder; choosing which failed run to resume comes with run history (task 13)
+- A failed run keeps every file. When the newest run failed, the next `job-radar run` (or `run --demo`) asks "Resume it?" (Enter for yes): yes reruns it in its folder with its window, skipping the finished steps and starting at the step that failed; no starts a new run and leaves the failed one, which never counts toward the next window. Only the newest run is offered
 - Outputs pass between steps in memory. A resumed run starts with nothing in memory, so it loads the last saved output from disk once, then carries on in memory
 - Writes go to a temp file, then rename, so a crash never leaves half a file
 
@@ -959,7 +959,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 ### Failed run
 
 - `run.json` gets status `failed` with the error code and message. No report is written
-- The user is asked "Run failed: <message>. Delete its data? [y/N]". Default no: a kept failed run can be resumed (section 5). It still never counts toward seen postings, trends or the next window
+- Nothing is asked when a run fails: the message says the same command resumes it, and the next run offers to (section 5). `job-radar delete` removes it. It never counts toward seen postings, trends or the next window
 - Exit codes: 0 completed (with or without warnings), 1 error, 2 stopped by the user. Useful for scheduled runs later
 
 ## 14. Decisions and alternatives
@@ -1087,4 +1087,6 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | The filter hands the jobs it dropped, with why, to a `DropLog`, which writes `dropped.md` next to the report | The report rebuilds the list from the dedupe and filter outputs; dropped jobs in the report itself | The report would need other steps' outputs by name and the matcher again. The list is long (329 titles in two weeks), so it gets its own file; the report links it. Jobs dated before the window are only counted, since a board like Fast Forward sends everything it has |
 | Deleting a run asks with no as the default, also when there's no input to read | Yes as the default, like the other questions | A stray Enter or a script must never delete runs; the other questions only start or skip work |
 | Deleting runs lives in `RunFolders`, apart from the read-only `RunHistory` | One repository that reads and deletes | Most users of the history only read it (the window chooser); only the delete command gets the power to delete |
+| The next run offers to resume a failed run; nothing is asked when it fails | Ask "Delete its data?" when it fails (the earlier design) | One question instead of two, asked when the user wants to go on; `job-radar delete` covers the rest |
+| Only the newest run is offered for resuming | A list of failed runs to pick from | A failed run followed by another run is stale; its window has been fetched again |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |

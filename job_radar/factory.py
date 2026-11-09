@@ -23,6 +23,7 @@ from job_radar.prompter import Prompter
 from job_radar.ranking import JobRanker, KeywordRanker, LlmRanker
 from job_radar.report_renderer import MarkdownRenderer
 from job_radar.report_writer import FileReportWriter
+from job_radar.resume import ResumeOffer
 from job_radar.runs_command import RunsCommand
 from job_radar.searches import DEMO_SEARCHES, SearchesFile
 from job_radar.settings import Settings
@@ -81,8 +82,10 @@ class AppFactory:
         parts = self._demo() if demo else self._real()
         runs = self._runs(demo)
         planner = WindowPlanner(self._settings.lookback_days)
-        chooser = WindowChooser(FileRunHistory(runs), planner, self._prompter, self._clock)
-        return JobRadarApp(chooser, partial(self._pipeline, parts, runs))
+        history = FileRunHistory(runs)
+        chooser = WindowChooser(history, planner, self._prompter, self._clock)
+        offer = ResumeOffer(history, self._prompter, Words())
+        return JobRadarApp(offer, chooser, partial(self._pipeline, parts, runs))
 
     def runs_command(self, demo: bool = False) -> RunsCommand:
         """Build the `runs` and `delete` commands, for real runs or demo runs."""
@@ -93,10 +96,10 @@ class AppFactory:
         """The folder that holds one folder per run: demo runs keep their own."""
         return self._settings.output / ("demo" if demo else "runs")
 
-    def _pipeline(self, parts: Parts, runs: Path, window: Window) -> Pipeline:
-        """Make the run's folder and build the steps in order, for the agreed window."""
-        folder = runs / self._clock.stamp()
-        folder.mkdir(parents=True)
+    def _pipeline(self, parts: Parts, runs: Path, window: Window, run_id: str | None) -> Pipeline:
+        """Build the steps in order for the run's window, in a new folder or the resumed one."""
+        folder = runs / (run_id or self._clock.stamp())
+        folder.mkdir(parents=True, exist_ok=run_id is not None)
         checkpoints = FileCheckpoints(folder, window)
         normalizer = Normalizer()
         words = Words()

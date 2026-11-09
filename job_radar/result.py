@@ -44,11 +44,11 @@ class RunFailed(RunResult):
     reason: str
 
     def message(self) -> str:
-        """Say which step failed and why, and that the finished steps are kept."""
-        # TODO(task 13b): say that a rerun resumes after the last finished step.
+        """Say which step failed and why, and that the same command resumes it."""
         return (
             f"Run failed at step '{self.step}': {self.reason}\n"
-            "The steps that finished are kept in the run folder."
+            "The steps that finished are kept. Run the same command again to resume "
+            "after the last one."
         )
 
     def exit_code(self) -> int:

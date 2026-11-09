@@ -9,6 +9,7 @@ from job_radar.factory import AppFactory
 from job_radar.pipeline import Pipeline
 from job_radar.result import RunCancelled, RunFailed, RunSucceeded
 from job_radar.settings import RecommendSettings, Settings
+from job_radar.steps.recommend import RecommendTopJobsStep
 
 FIRST_RUN = "2026-11-05T10-00-00"
 
@@ -28,7 +29,14 @@ class FailingFactory:
     def create(self, demo: bool = False) -> JobRadarApp:
         step = FakeStep("fetch", error=RuntimeError("board down"))
         pipeline = Pipeline([step], FileCheckpoints(self._folder, WINDOW))
-        return JobRadarApp(FixedWindow(), lambda window: pipeline)
+        return JobRadarApp(NoResume(), FixedWindow(), lambda window, run_id: pipeline)
+
+
+class NoResume:
+    """Never offers to resume a run."""
+
+    def offer(self):
+        return None
 
 
 class FixedWindow:
@@ -149,3 +157,25 @@ def test_runs_lists_demo_runs_and_delete_removes_one(tmp_path, capsys):
     deleting = FakePrompter(True)
     assert demo_cli(tmp_path, deleting).main(["delete", "--demo", FIRST_RUN]) == 0
     assert list((tmp_path / "demo").iterdir()) == []
+
+
+def test_a_failed_demo_run_is_resumed_by_the_same_command(tmp_path, capsys, monkeypatch):
+    real_run = RecommendTopJobsStep.run
+
+    def broken(self, data):
+        raise RuntimeError("ranker down")
+
+    monkeypatch.setattr(RecommendTopJobsStep, "run", broken)
+    assert demo_cli(tmp_path, FakePrompter(True)).main(["run", "--demo"]) == 1
+    assert "Run the same command again to resume" in capsys.readouterr().out
+    monkeypatch.setattr(RecommendTopJobsStep, "run", real_run)
+    again = FakePrompter(True)
+    assert demo_cli(tmp_path, again, hour=11).main(["run", "--demo"]) == 0
+    assert again.asked == [
+        f"The last run, {FIRST_RUN} (22 Oct to 5 Nov 2026), stopped after describe. Resume it?"
+    ]
+    folders = list((tmp_path / "demo").iterdir())
+    assert [f.name for f in folders] == [FIRST_RUN]
+    manifest = json.loads((folders[0] / "manifest.json").read_text())
+    assert manifest["completed"] is True
+    assert "## Recommended jobs (3)" in (folders[0] / "report.md").read_text()
