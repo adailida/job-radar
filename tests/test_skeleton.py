@@ -15,7 +15,7 @@ from job_radar.history import FileRunHistory, RunHistory
 from job_radar.html_text import HtmlText
 from job_radar.llm import ClaudeCli, Llm
 from job_radar.matching import JobMatcher
-from job_radar.model import CandidateProfile, Search, SearchCriteria, Window
+from job_radar.model import CandidateProfile, RunConfig, Search, SearchCriteria, Window
 from job_radar.normalize import Normalizer
 from job_radar.pipeline import Step
 from job_radar.places import PlaceCodes
@@ -36,6 +36,7 @@ from job_radar.steps.fetch import FetchStep
 from job_radar.steps.filter import FilterStep
 from job_radar.steps.recommend import RecommendTopJobsStep
 from job_radar.steps.report import ReportStep
+from job_radar.trends import KeptJobs, MarketTrends, TrendBuilder, TrendSource
 from job_radar.usage import FilePendingLog, UsageLimitGuard
 from job_radar.words import Words
 
@@ -48,6 +49,16 @@ LLM = ClaudeCli("haiku")
 RANKER = LlmRanker(LLM, batch_size=20)
 PROFILE = CandidateProfile(cv="", preferences="")
 CLIENT = BoardClient(httpx.Client())
+
+
+TRENDS = MarketTrends(
+    FileRunHistory(FOLDER),
+    FOLDER,
+    CHECKPOINTS,
+    WINDOW,
+    RunConfig(searches=(), sources=()),
+    TrendBuilder("month"),
+)
 
 
 def steps():
@@ -65,6 +76,7 @@ def steps():
             FileReportWriter(FOLDER),
             FileSpendLog(FOLDER),
             FilePendingLog(FOLDER),
+            TRENDS,
             "run",
             WINDOW,
             None,
@@ -81,6 +93,8 @@ IMPLEMENTATIONS = [
     (DemoParser(PlaceCodes()), JobBoardParser),
     (CHECKPOINTS, Checkpoints),
     (CHECKPOINTS, RunStats),
+    (CHECKPOINTS, KeptJobs),
+    (TRENDS, TrendSource),
     (RANKER, JobRanker),
     (KeywordRanker(), JobRanker),
     (LLM, Llm),

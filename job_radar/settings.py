@@ -69,6 +69,7 @@ class Settings(Model):
     # how far back a run may reach: a first run, or after a long break
     lookback_days: int = Field(ge=1)
     new_only: bool  # drop jobs an earlier run already found
+    trend_period: Literal["week", "month", "quarter"]  # what market trends compare
     llm: LlmSettings
     job_types: dict[str, str] = Field(min_length=1)  # name: what the LLM is told it means
     domains: dict[str, str] = Field(min_length=1)  # name: what the LLM is told it means

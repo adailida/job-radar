@@ -45,7 +45,7 @@ class FileSeenJobs:
             if not run.completed:
                 continue
             fuzzy_counts = run.window.end >= recent
-            for job in self._jobs(self._folder / run.id / self.FILE):
+            for job in self.read(self._folder / run.id / self.FILE):
                 found.update(key for key in job.keys if fuzzy_counts or not self.is_fuzzy(key))
         return frozenset(found)
 
@@ -55,7 +55,7 @@ class FileSeenJobs:
         return "|" in key
 
     @staticmethod
-    def _jobs(path: Path) -> list[Job]:
+    def read(path: Path) -> list[Job]:
         """The jobs in one run's kept file; none if it has none or it can't be read."""
         if not path.is_file():
             return []

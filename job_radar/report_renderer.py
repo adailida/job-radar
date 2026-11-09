@@ -1,9 +1,18 @@
 """Turning a report's content into text."""
 
 from datetime import timedelta
+from decimal import Decimal
 from typing import Protocol, runtime_checkable
 
-from job_radar.model import Recommendation, ReportContent, Spend, SpendDecision
+from job_radar.model import (
+    Recommendation,
+    ReportContent,
+    Seniority,
+    Spend,
+    SpendDecision,
+    TrendPeriod,
+    Trends,
+)
 from job_radar.words import Words
 
 
@@ -51,6 +60,8 @@ class MarkdownRenderer:
             lines.append(f"No job scored {content.min_score} or more this run.")
         for rank, rec in enumerate(recs, start=1):
             lines.extend(self._job(rank, rec))
+        if content.trends is not None:
+            lines.extend(["", *self._trends(content.trends)])
         lines.extend(["", "## About this run", "", "Items each step produced:", ""])
         lines.extend(f"- {count.step}: {count.count}" for count in content.funnel)
         if content.spends:
@@ -82,6 +93,161 @@ class MarkdownRenderer:
             f"Not covered: {self._words.span(gap.start, gap.end)}. The last run was on {last}, "
             f"and a run reaches back at most {days} days.",
         ]
+
+    def _trends(self, trends: Trends) -> list[str]:
+        """The market trends section: notes, then a table of periods, then the change."""
+        lines = [f"## Market trends (by {trends.period})", ""]
+        periods = list(trends.periods)
+        if not periods:
+            return [*lines, "No runs to show trends for yet."]
+        for note in trends.notes:
+            lines.append(f"Note: {self._words.day(note.day)}: {'; '.join(note.changes)}.")
+        if trends.notes:
+            lines.append("")
+        change = trends.change
+        years = len({p.start.year for p in periods}) > 1
+        header = ["", *(self._period_label(trends.period, p, years) for p in periods)]
+        if change:
+            header.append("Change")
+        lines.append("| " + " | ".join(header) + " |")
+        lines.append("|" + "---|" * len(header))
+        low = trends.low_sample
+        rows: list[tuple[str, list[str], str]] = []
+        rows.append(
+            (
+                "New postings per covered day",
+                [self._sample(self._decimal(p.per_day), p.postings, low) for p in periods],
+                self._percent(change.per_day) if change else "",
+            )
+        )
+        rows.append(("Postings", [str(p.postings) for p in periods], ""))
+        for mode, label in (("remote", "Remote"), ("hybrid", "Hybrid"), ("onsite", "On-site")):
+            if any(mode in p.work_modes for p in periods):
+                cells = [
+                    self._sample(self._share(p.work_modes.get(mode, 0.0)), p.work_mode_base, low)
+                    if p.work_mode_base
+                    else "no data"
+                    for p in periods
+                ]
+                rows.append(
+                    (label, cells, self._points(change.work_modes.get(mode)) if change else "")
+                )
+        rows.append(("Work mode not given (jobs)", [str(p.work_mode_unknown) for p in periods], ""))
+        rows.append(
+            (
+                "Salary median, USD a year",
+                [self._sample(self._usd(p.salary_median), p.salary_base, low) for p in periods],
+                self._percent(change.salary_median) if change else "",
+            )
+        )
+        rows.append(
+            (
+                "Salary, 25th to 75th percentile",
+                [
+                    f"{self._usd(p.salary_p25)} to {self._usd(p.salary_p75)}"
+                    if p.salary_base
+                    else "no data"
+                    for p in periods
+                ],
+                "",
+            )
+        )
+        rows.append(
+            (
+                "Listing a salary",
+                [
+                    self._share(p.salary_listed) if p.salary_listed is not None else "no data"
+                    for p in periods
+                ],
+                "",
+            )
+        )
+        for level in (s.value for s in Seniority):
+            if any(level in p.seniority for p in periods):
+                cells = [
+                    self._sample(self._share(p.seniority.get(level, 0.0)), p.seniority_base, low)
+                    if p.seniority_base
+                    else "no data"
+                    for p in periods
+                ]
+                rows.append(
+                    (
+                        f"Seniority: {level}",
+                        cells,
+                        self._points(change.seniority.get(level)) if change else "",
+                    )
+                )
+        rows.append(("Seniority not known (jobs)", [str(p.seniority_unknown) for p in periods], ""))
+        for label, cells, delta in rows:
+            line = [label, *cells, *([delta] if change else [])]
+            lines.append("| " + " | ".join(line) + " |")
+        lines.append("")
+        if change:
+            against = self._period_label(
+                trends.period, self._period_at(periods, change.against), years
+            )
+            lines.append(f"Change: the latest {trends.period} against {against}, per covered day.")
+        else:
+            lines.append(
+                f"Nothing to compare yet: the change needs a complete {trends.period} "
+                "before the latest."
+            )
+        lines.append(f"A figure on fewer than {low} jobs is marked as a low sample.")
+        return lines
+
+    @staticmethod
+    def _period_at(periods: list[TrendPeriod], start) -> TrendPeriod:
+        """The shown period that starts on this day."""
+        return next(p for p in periods if p.start == start)
+
+    def _period_label(self, kind: str, period: TrendPeriod, years: bool) -> str:
+        """A period's name: "Nov", "Nov 2026", "Week of 3 Nov", "Q4 2026", with "partial" if so."""
+        if kind == "week":
+            name = f"Week of {self._words.day(period.start, year=years)}"
+        elif kind == "quarter":
+            name = f"Q{(period.start.month - 1) // 3 + 1}" + (
+                f" {period.start.year}" if years else ""
+            )
+        else:
+            name = f"{period.start:%b}" + (f" {period.start.year}" if years else "")
+        if period.partial:
+            name += f" (partial, {period.covered_days} of {period.days} days)"
+        return name
+
+    @staticmethod
+    def _sample(cell: str, base: int, low: int) -> str:
+        """The cell, marked when the figure rests on too few jobs."""
+        return f"{cell} (low sample)" if base and base < low else cell
+
+    @staticmethod
+    def _decimal(value: float | None) -> str:
+        """A number with one decimal, or "no data"."""
+        return "no data" if value is None else f"{value:.1f}"
+
+    @staticmethod
+    def _share(value: float | None) -> str:
+        """A share as a whole percent, or "no data"."""
+        return "no data" if value is None else f"{value * 100:.0f}%"
+
+    def _usd(self, amount: int | None) -> str:
+        """A yearly USD amount, or "no data"."""
+        return "no data" if amount is None else self._words.money(Decimal(amount), "USD")
+
+    @staticmethod
+    def _percent(value: float | None) -> str:
+        """A percent change in words: "up 16%", "down 4%", "no change", or "no data"."""
+        if value is None:
+            return "no data"
+        if round(value) == 0:
+            return "no change"
+        return f"{'up' if value > 0 else 'down'} {abs(value):.0f}%"
+
+    @staticmethod
+    def _points(value: float | None) -> str:
+        """A change in a share, in points: "up 2 pts", "down 3 pts", "no change"."""
+        if value is None or round(value) == 0:
+            return "no change"
+        return f"{'up' if value > 0 else 'down'} {abs(value):.0f} pts"
 
     @staticmethod
     def _spend(spend: Spend) -> str:

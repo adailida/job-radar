@@ -46,6 +46,8 @@ and Claude Code logged in.
 
 JobsPipe (paid, off by default) adds LinkedIn, Indeed and employers' own ATS. Put `JOBSPIPE_API_KEY=...` in `.env` (never committed) and set `sources.jobspipe.enabled: true` in `settings.yaml`; Before fetching, a run estimates what JobsPipe will cost (for free) and checks it against the per-run max, the monthly budget and the credits left; over a limit, it asks whether to go ahead, skip JobsPipe this run, or stop. The plan (`free` or `seeker`) sets the limits unless `max_jobs_per_run` and `monthly_budget` say otherwise.
 
+The report also has a market trends section: postings per day, work mode, salary and seniority by month (`trend_period` in `settings.yaml`: week, month or quarter), compared with the last complete period.
+
 A run shows only jobs no earlier run found (set `new_only: false` in `settings.yaml` to see them all again). Deleting a run makes its jobs new again.
 
 If your Claude usage limit runs out mid-run, the run asks whether to finish with what's done and carry the rest over to the next run, or stop and resume after the reset.

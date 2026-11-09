@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Literal, Protocol, runtime_checkable
 
-from job_radar.model import Model, StepCount, Window
+from job_radar.model import Model, RunConfig, StepCount, Window
 
 
 @runtime_checkable
@@ -49,6 +49,7 @@ class Manifest(Model):
     version: Literal[2] = 2  # changed when the saved models change shape
     window: Window
     not_covered: Window | None = None  # days a long break left out, before the window
+    config: RunConfig | None = None  # what the run searched for and where; None in older runs
     completed: bool = False
     steps: tuple[StepCount, ...] = ()  # each finished step and its count, in order
 
@@ -59,8 +60,8 @@ class FileCheckpoints:
     One JSON Lines file per step, numbered in the order the steps ran
     (`01-fetch.jsonl`, `02-convert.jsonl`), plus `manifest.json` with the run's
     window, each finished step and its count, and whether the run completed.
-    Holds only its folder, the run's window and the days it didn't cover; the
-    files are the state.
+    Holds only its folder, the run's window, the days it didn't cover, what to
+    keep and what the run searches for; the files are the state.
     """
 
     MANIFEST = "manifest.json"
@@ -71,16 +72,19 @@ class FileCheckpoints:
         window: Window,
         not_covered: Window | None = None,
         keep: Mapping[str, str] | None = None,
+        config: RunConfig | None = None,
     ) -> None:
         """Keep the run folder, its window, the days a long break left out, and what to keep.
 
         `keep` names steps whose output stays after the run completes, and the
-        file it stays as: `{"filter": "jobs.jsonl"}`.
+        file it stays as: `{"filter": "jobs.jsonl"}`. `config` is what the run
+        searches for and where, recorded in the manifest.
         """
         self._folder = folder
         self._window = window
         self._not_covered = not_covered
         self._keep = dict(keep or {})
+        self._config = config
 
     def has(self, step: str) -> bool:
         """Whether the manifest lists this step as finished."""
@@ -114,6 +118,20 @@ class FileCheckpoints:
         with self._step_file(names.index(step), step).open(encoding="utf-8") as lines:
             return [kind.model_validate_json(line) for line in lines]
 
+    def kept[M: Model](self, kind: type[M]) -> list[M]:
+        """The output of the first step to keep, whether still a step file or already kept.
+
+        Empty when that step hasn't finished.
+        """
+        if not self._keep:
+            return []
+        step, name = next(iter(self._keep.items()))
+        path = self._folder / name
+        if not path.is_file():
+            return self.load(step, kind) if self.has(step) else []
+        with path.open(encoding="utf-8") as lines:
+            return [kind.model_validate_json(line) for line in lines if line.strip()]
+
     def complete(self) -> None:
         """Mark the run completed in the manifest, then delete every step file.
 
@@ -136,7 +154,7 @@ class FileCheckpoints:
         """The manifest as saved, or a new one if no step has finished yet."""
         path = self._folder / self.MANIFEST
         if not path.exists():
-            return Manifest(window=self._window, not_covered=self._not_covered)
+            return Manifest(window=self._window, not_covered=self._not_covered, config=self._config)
         return Manifest.model_validate_json(path.read_text(encoding="utf-8"))
 
     def _save_manifest(self, manifest: Manifest) -> None:

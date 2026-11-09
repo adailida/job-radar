@@ -5,6 +5,7 @@
 output: output            # run folders go under output/runs/, demo runs under output/demo/
 lookback_days: 14         # how far back a run may reach: a first run, or after a long break
 new_only: true            # drop jobs an earlier run already found; false ranks them again
+trend_period: month       # week, month or quarter: the periods market trends compare
 
 llm:
   model: haiku            # the Claude model that scores jobs

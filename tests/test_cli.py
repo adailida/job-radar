@@ -244,3 +244,13 @@ def test_jobs_the_usage_limit_stopped_are_ranked_by_the_next_run(tmp_path, monke
     counts = {step["step"]: step["count"] for step in manifest["steps"]}
     assert (counts["filter"], counts["carried_over"]) == (0, 6)
     assert counts["recommend"] == 3
+
+
+def test_a_demo_run_reports_market_trends(tmp_path):
+    demo_cli(tmp_path, FakePrompter(True)).main(["run", "--demo"])
+    report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
+    assert "## Market trends (by month)" in report
+    assert "| New postings per covered day |" in report
+    assert "Nothing to compare yet" in report
+    manifest = json.loads((tmp_path / "demo" / FIRST_RUN / "manifest.json").read_text())
+    assert manifest["config"]["sources"] == ["demo"]

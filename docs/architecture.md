@@ -2,7 +2,7 @@
 
 How the code is put together: which classes exist, what each one is responsible for, which others it knows, and where state lives. Every box is a real class, named as in the code. The reasons behind each part are in [design.md](design.md).
 
-**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads `local/settings.yaml` over the defaults and the searches from `local/profile.yaml`; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. PR #17 notes in the report the days a long break left out. PR #18 merges postings on the employer's own id, read from ATS links, and on company, title and country. PR #19 drops jobs an earlier completed run already found, in `NewJobsFilterStep`. PR #20 adds JobsPipe, a paid API, off by default and capped per run, and moves the default settings into `job_radar/default_settings.yaml`, which the app reads first. PR #21 agrees what paid sources may spend before anything is fetched. PR #22 labels each job (seniority, job type, domain, sector) and adds a match step for the `seniority` and `domains` criteria. PR #23 finds what each matched job asks for: skills, tools, certifications and years. PR #24 carries jobs the LLM's usage limit stopped over to the next run. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
+**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads `local/settings.yaml` over the defaults and the searches from `local/profile.yaml`; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. PR #17 notes in the report the days a long break left out. PR #18 merges postings on the employer's own id, read from ATS links, and on company, title and country. PR #19 drops jobs an earlier completed run already found, in `NewJobsFilterStep`. PR #20 adds JobsPipe, a paid API, off by default and capped per run, and moves the default settings into `job_radar/default_settings.yaml`, which the app reads first. PR #21 agrees what paid sources may spend before anything is fetched. PR #22 labels each job (seniority, job type, domain, sector) and adds a match step for the `seniority` and `domains` criteria. PR #23 finds what each matched job asks for: skills, tools, certifications and years. PR #24 carries jobs the LLM's usage limit stopped over to the next run. PR #25 adds market trends to the report: periods, coverage, figures, the change and notes on changed searches or sources. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
 
 The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, fetches their full descriptions, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, a made-up profile and keyword scoring in place of the LLM.
 
@@ -463,9 +463,23 @@ classDiagram
         -stats: RunStats
         -renderer: ReportRenderer
         -writer: ReportWriter
+        -trends: TrendSource
         -run_id: str
         -window: Window
         -min_score: int
+    }
+    class TrendSource {
+        <<interface>>
+        +trends() Trends
+    }
+    class MarketTrends {
+        -history: RunHistory
+        -this_run: KeptJobs
+        -builder: TrendBuilder
+    }
+    class TrendBuilder {
+        -period: str
+        +build(runs) Trends
     }
     class ReportRenderer {
         <<interface>>
@@ -564,6 +578,10 @@ classDiagram
     RecommendTopJobsStep o-- CandidateProfile : holds
     ProfileLoader ..> CandidateProfile : creates
     ReportStep o-- RunStats : holds
+    ReportStep o-- TrendSource : holds
+    TrendSource <|.. MarketTrends : implements
+    MarketTrends o-- TrendBuilder : holds
+    MarketTrends o-- RunHistory : holds
     ReportStep o-- ReportRenderer : holds
     ReportStep ..> ReportContent : creates
     ReportRenderer <|.. MarkdownRenderer : implements
@@ -602,6 +620,8 @@ classDiagram
     style HtmlText stroke:#2e7d32,stroke-width:3px
     style RecommendTopJobsStep stroke:#2e7d32,stroke-width:3px
     style ReportStep stroke:#2e7d32,stroke-width:3px
+    style TrendBuilder stroke:#2e7d32,stroke-width:3px
+    style MarketTrends stroke:#2e7d32,stroke-width:3px
     style FileReportWriter stroke:#2e7d32,stroke-width:3px
     style MarkdownRenderer stroke:#2e7d32,stroke-width:3px
     style DemoSource stroke:#2e7d32,stroke-width:3px
@@ -707,7 +727,9 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `KeywordRanker` | Strategy | Score a job by the share of its title words found in the profile, for `--demo` and tests | models |
 | `Llm`, `ClaudeCli` | Interface | Send one prompt to a language model; `ClaudeCli` runs `claude -p` on the subscription, one plain turn from an empty folder, and checks the login before a run | `claude` |
 | `ProfileLoader` | | Read the CV (`cv.pdf`, `cv.md` or `cv.txt`) and `preferences.md` from `local/` into a `CandidateProfile`; say what's missing | `local/` |
-| `ReportStep` | Step | Put together what the report says (`ReportContent`: the run, its window, the recommended jobs, the funnel), then have it formatted and written | `RunStats`, `ReportRenderer`, `ReportWriter` |
+| `ReportStep` | Step | Put together what the report says (`ReportContent`: the run, its window, the recommended jobs, the market trends, the funnel), then have it formatted and written | `RunStats`, `TrendSource`, `ReportRenderer`, `ReportWriter` |
+| `TrendSource`, `MarketTrends` | Interface | Gather the completed runs (their `jobs.jsonl`, windows and configs) and this run (its kept output), and have the trends worked out; free | `RunHistory`, `KeptJobs`, `TrendBuilder` |
+| `TrendBuilder` | | Work out the trend periods (week, month or quarter), each one's covered days, figures (postings per covered day, work mode, salary, seniority), the change against the last complete period, and notes on changed searches or sources | models |
 | `ReportRenderer`, `MarkdownRenderer` | Interface | Format a report's content and decide nothing about it; `MarkdownRenderer` writes YAML front matter, then Markdown | `Words` |
 | `DropLog`, `FileDropLog` | Interface | Keep the list of jobs the filter dropped; `FileDropLog` writes `dropped.md`, grouped by why, titles sorted | its run folder, `Words` |
 | `Words` | | Put work modes, places, pay and dates into the same plain words in every file a run writes | models |
@@ -863,7 +885,7 @@ output/runs/2026-11-05T10-00-00/
     01-fetch.jsonl  02-convert.jsonl  03-dedupe.jsonl  04-new_jobs_filter.jsonl  05-filter.jsonl
     06-carried_over.jsonl  07-describe.jsonl  08-classify.jsonl  09-match.jsonl  10-extract.jsonl
     11-recommend.jsonl  12-report.jsonl
-    manifest.json     # the window, days left out after a long break, each finished step and its count, completed or not
+    manifest.json     # the window, days left out after a long break, what the run searched for and where, each finished step and its count, completed or not
     report.md
     dropped.md        # what the filter dropped, by reason
     jobs.jsonl        # after success: the matched jobs, with labels and requirements, read by later runs as seen
