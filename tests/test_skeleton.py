@@ -7,11 +7,11 @@ import pytest
 from job_radar.checkpoints import Checkpoints, FileCheckpoints, RunStats
 from job_radar.cli import Cli
 from job_radar.clock import Clock
-from job_radar.factory import AppFactory, Settings
+from job_radar.factory import AppFactory
 from job_radar.history import FileRunHistory, RunHistory
 from job_radar.html_text import HtmlText
 from job_radar.llm import ClaudeCli, Llm
-from job_radar.model import CandidateProfile, Search, Window
+from job_radar.model import CandidateProfile, Search, SearchCriteria, Window
 from job_radar.normalize import Normalizer
 from job_radar.pipeline import Step
 from job_radar.prompter import Prompter, TerminalPrompter
@@ -19,6 +19,7 @@ from job_radar.ranking import JobRanker, KeywordRanker, LlmRanker
 from job_radar.report_renderer import MarkdownRenderer, ReportRenderer
 from job_radar.report_writer import FileReportWriter, ReportWriter
 from job_radar.result import RunCancelled, RunFailed, RunResult, RunSucceeded
+from job_radar.settings import Settings
 from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber
 from job_radar.sources.demo import DemoParser, DemoSource
 from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
@@ -32,7 +33,7 @@ from job_radar.steps.recommend import RecommendTopJobsStep
 from job_radar.steps.report import ReportStep
 
 FOLDER = Path("unused")
-SEARCH = Search(name="default", roles=("Software Engineer",))
+SEARCH = SearchCriteria(searches=(Search(name="default", roles=("Software Engineer",)),))
 WINDOW = Window(start=date(2026, 10, 29), end=date(2026, 11, 5))
 CHECKPOINTS = FileCheckpoints(FOLDER, WINDOW)
 LLM = ClaudeCli("haiku")
@@ -95,7 +96,7 @@ def test_step_names_are_unique():
 
 
 def test_cli_still_shows_version(capsys):
-    cli = Cli(AppFactory(Settings(), Clock(), TerminalPrompter()))
+    cli = Cli(AppFactory(Settings(), Path("local"), Clock(), TerminalPrompter()))
     with pytest.raises(SystemExit) as exit_:
         cli.main(["--version"])
     assert exit_.value.code == 0

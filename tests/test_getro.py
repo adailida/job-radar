@@ -7,13 +7,22 @@ import httpx
 import pytest
 
 from job_radar.html_text import HtmlText
-from job_radar.model import Location, Period, RawPage, Salary, Search, Window, WorkMode
+from job_radar.model import (
+    Location,
+    Period,
+    RawPage,
+    Salary,
+    Search,
+    SearchCriteria,
+    Window,
+    WorkMode,
+)
 from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
 from job_radar.sources.http import BoardClient
 
 FIXTURES = Path(__file__).parent / "fixtures" / "getro"
 FIXTURE = FIXTURES / "search_page.json"
-SEARCH = Search(name="default", roles=())
+SEARCH = SearchCriteria(searches=(Search(name="default", roles=()),))
 URL = "https://api.getro.com/api/v2/collections/997/search/jobs"
 JOB_URL = "https://api.getro.com/api/v1/jobs/{id}?collection_id=997"
 

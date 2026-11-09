@@ -5,17 +5,18 @@ from fakes import WINDOW, FakePrompter, FakeStep, FixedClock
 from job_radar.app import JobRadarApp
 from job_radar.checkpoints import FileCheckpoints
 from job_radar.cli import Cli
-from job_radar.factory import AppFactory, Settings
+from job_radar.factory import AppFactory
 from job_radar.pipeline import Pipeline
 from job_radar.result import RunCancelled, RunFailed, RunSucceeded
+from job_radar.settings import RecommendSettings, Settings
 
 FIRST_RUN = "2026-11-05T10-00-00"
 
 
 def demo_cli(tmp_path, prompter: FakePrompter, hour: int = 10) -> Cli:
     """The real command, with run folders in a temp folder, a fixed clock and a set user."""
-    settings = Settings(output=tmp_path, top_n=3)
-    return Cli(AppFactory(settings, FixedClock(hour), prompter))
+    settings = Settings(output=tmp_path, recommend=RecommendSettings(top_n=3))
+    return Cli(AppFactory(settings, tmp_path / "local", FixedClock(hour), prompter))
 
 
 class FailingFactory:

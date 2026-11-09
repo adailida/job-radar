@@ -1,0 +1,11 @@
+# What you're looking for. Copy to local/profile.yaml and change it.
+# A job is kept if it matches any search. A field set in a search
+# replaces the same field from `common`.
+
+common:                   # applies to every search
+  roles: [software engineer, data engineer]   # the title contains any, as whole words
+
+searches:
+  engineering: {}         # uses the common roles
+  leadership:
+    roles: [tech lead, engineering manager]

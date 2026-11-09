@@ -2,11 +2,11 @@ from datetime import date
 
 from fakes import job
 
-from job_radar.model import CandidateProfile, Search, Window
+from job_radar.model import CandidateProfile, Search, SearchCriteria, Window
 from job_radar.ranking import KeywordRanker
 from job_radar.sources.demo import DemoParser, DemoSource
 
-SEARCH = Search(name="default", roles=())
+SEARCH = SearchCriteria(searches=(Search(name="default", roles=()),))
 WINDOW = Window(start=date(2026, 10, 29), end=date(2026, 11, 5))
 
 

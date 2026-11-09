@@ -141,7 +141,7 @@ No free functions: every behaviour belongs to a class with one responsibility, o
 
 ### Settings
 
-`Settings` says which board, model and limits to use; `AppFactory` builds the classes from them. The step order stays in code, in `AppFactory`. For the first run the settings are defaults in code; a settings file comes later (task 10).
+`Settings` says which board, model and limits to use; `AppFactory` builds the classes from them. The step order stays in code, in `AppFactory`. The defaults live in the `Settings` model; `local/settings.yaml` overrides them (section 7).
 
 ### CLI
 
@@ -303,7 +303,7 @@ Each job board brings two classes: one fetches, one parses.
 ```python
 class JobBoardSource(Protocol):     # Adapter: talks to one board's API
     name: str
-    def fetch(self, search: Search, window: Window) -> list[RawPage]: ...
+    def fetch(self, criteria: SearchCriteria, window: Window) -> list[RawPage]: ...
 
 class JobBoardParser(Protocol):     # Adapter: turns one board's records into postings
     source: str
@@ -492,6 +492,8 @@ examples/
 
 ### Profile
 
+Built so far (task 10): `common` and `searches` with `roles` only; the other fields come with task 11, and the CV keeps its fixed names in `local/` (no `cv:` key).
+
 ```yaml
 cv: cv.pdf
 common:                                   # applies to every search
@@ -515,7 +517,7 @@ searches:                                 # a job matches if it matches any sear
 
 ### Settings
 
-Every key has a default; the file can be missing.
+Every key has a default; the file can be missing. The sample shows the full design; built so far (task 10): `output`, `lookback_days`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`), `recommend` (`top_n`, `min_score`) and `sources.getro.network`. The others come with their tasks; [examples/settings.example.yaml](../examples/settings.example.yaml) lists what exists.
 
 ```yaml
 domains:                    # cause areas or fields: used by the domains filter and report headings
@@ -542,7 +544,7 @@ llm:
   model: haiku
   classify_batch: 50
   extract_batch: 10
-  max_description_chars: 8000
+  max_description_chars: 4000
   max_jobs_per_run: 1000    # above this, the run asks before Extract
   concurrency: 2
   timeout_seconds: 120
@@ -1068,7 +1070,12 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Files for checkpoints; SQLite considered again at task 13 | SQLite now; MySQL | Plain text is a requirement and lets you read a step's output directly while building. SQLite wins once data spans runs (history, seen jobs, trends); `Checkpoints` is an interface, so switching is one class. A database server is too much for a local tool |
 | Step files are numbered by their place in the manifest, the order the steps finished in; a step saved again keeps its number | `AppFactory` passes the step order to `FileCheckpoints`; `Pipeline` passes each step's position | `ReportStep` needs the checkpoints before the step list exists, so the factory would have to write the order twice. Steps run in order, so the manifest already holds it, and nothing outside `FileCheckpoints` changes. Two digits keep the order past 9 steps |
 | Recommend only jobs scoring at least `min_score` (40 by default, the bottom of "partial fit" in the ranker's guide); with none, the report says so | Always list the top N; list them all and mark the weak ones | A list of poor fits looks like advice. The first real run's best job scored 18 |
-| Until the settings file (task 10), the default search has roles in code: engineer, engineering, developer, tech lead, architect | No roles (every job goes to the LLM) | Without roles, 380 of 391 jobs in 14 days reached the LLM and almost none were software. The roles cut that to 51; construction engineers still pass until excluded titles (task 11) |
+| Roles cut what reaches the LLM (task 9; now set in `profile.yaml`) | No roles (every job goes to the LLM) | Without roles, 380 of 391 jobs in 14 days reached the LLM and almost none were software. Engineer, engineering, developer, tech lead and architect cut that to 51; construction engineers still pass until excluded titles (task 11) |
 | Salaries show whole thousands ("$129k"); a place that only repeats the work mode is left out | The amounts as posted; every place | Boards post salaries to the cent, and Fast Forward gives "Remote" as a place for remote jobs |
 | Places in the report are separated by "; " | ", " | Places contain commas ("Amsterdam, Netherlands"), so commas between them were ambiguous |
+| Settings are nested from the start (`llm`, `recommend`, `sources`), with only the keys that do something today | Flat keys now, nested later; every key in the sample above now | The file format doesn't change as tasks add keys; a key that does nothing would mislead |
+| `profile.yaml` is required for a real run until terminal prompts (task 12); the demo has its own search in code | Default roles in code when the file is missing | A run without the user's searches sends the wrong jobs to the LLM; a clear error costs one copy of the example |
+| The settings are read in `Cli.start`, before the factory | The factory reads them | `AppFactory` keeps taking `Settings`, so tests pass settings directly. A bad file still exits with 2 |
+| Fetch and filter take all the searches (`SearchCriteria`); a job is kept if any search matches | One search until task 11 | `profile.yaml` lists several searches; boards with server-side queries (JobsPipe) will need them all |
+| `--settings` and `--profile` flags wait until something needs another path | Add them now | The fixed files in `local/` are enough for one person |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |

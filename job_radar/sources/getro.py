@@ -5,7 +5,16 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from job_radar.html_text import HtmlText
-from job_radar.model import Location, Period, Posting, RawPage, Salary, Search, Window, WorkMode
+from job_radar.model import (
+    Location,
+    Period,
+    Posting,
+    RawPage,
+    Salary,
+    SearchCriteria,
+    Window,
+    WorkMode,
+)
 from job_radar.sources.http import BoardClient
 
 
@@ -27,10 +36,10 @@ class GetroSource:
         self._network = network
         self._client = client
 
-    def fetch(self, search: Search, window: Window) -> list[RawPage]:
+    def fetch(self, criteria: SearchCriteria, window: Window) -> list[RawPage]:
         """Fetch pages, newest jobs first, until one reaches back past the window's start.
 
-        The search's criteria aren't sent: the whole window is small enough to
+        The searches aren't sent: the whole window is small enough to
         fetch, and the filter step applies the criteria to every board alike.
         """
         pages: list[RawPage] = []
