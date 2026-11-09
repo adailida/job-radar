@@ -62,7 +62,7 @@ def test_the_defaults_file_sets_every_setting_and_the_app_reads_it():
 
 def test_a_nested_change_keeps_its_neighbours_and_a_list_replaces_whole(tmp_path):
     settings = load(tmp_path, "sources:\n  jobspipe:\n    enabled: true\n    filters: {a: [1]}\n")
-    assert settings.sources.jobspipe.enabled and settings.sources.jobspipe.max_jobs_per_run == 25
+    assert settings.sources.jobspipe.enabled and settings.sources.jobspipe.plan == "free"
     assert settings.sources.getro.network == "997"
     assert settings.sources.jobspipe.filters == {"a": [1]}
 

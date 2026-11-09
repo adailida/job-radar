@@ -10,12 +10,13 @@ from job_radar.app import JobRadarApp
 from job_radar.ats import AtsLinks
 from job_radar.checkpoints import FileCheckpoints
 from job_radar.clock import Clock
+from job_radar.cost import CostCheck, FileSpendLog
 from job_radar.drop_log import FileDropLog
 from job_radar.history import FileRunHistory, RunFolders
 from job_radar.html_text import HtmlText
 from job_radar.llm import ClaudeCli
 from job_radar.matching import JobMatcher
-from job_radar.model import CandidateProfile, SearchCriteria, Window
+from job_radar.model import Approval, CandidateProfile, SearchCriteria, Window
 from job_radar.normalize import Normalizer
 from job_radar.pipeline import Pipeline, Step
 from job_radar.places import PlaceCodes
@@ -30,7 +31,7 @@ from job_radar.searches import DEMO_SEARCHES, SearchesFile
 from job_radar.secrets import Secrets
 from job_radar.seen import FileSeenJobs
 from job_radar.settings import Settings
-from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber
+from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber, PaidSource
 from job_radar.sources.demo import DemoParser, DemoSource
 from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
 from job_radar.sources.http import BoardClient
@@ -99,7 +100,9 @@ class AppFactory:
         history = FileRunHistory(runs)
         chooser = WindowChooser(history, planner, self._prompter, self._clock)
         offer = ResumeOffer(history, self._prompter, Words())
-        return JobRadarApp(offer, chooser, partial(self._pipeline, parts, runs))
+        paid = [source for source in parts.sources if isinstance(source, PaidSource)]
+        cost = CostCheck(paid, parts.criteria, self._prompter)
+        return JobRadarApp(offer, chooser, cost, partial(self._pipeline, parts, runs))
 
     def runs_command(self, demo: bool = False) -> RunsCommand:
         """Build the `runs` and `delete` commands, for real runs or demo runs."""
@@ -117,6 +120,7 @@ class AppFactory:
         window: Window,
         not_covered: Window | None,
         run_id: str | None,
+        approvals: list[Approval],
     ) -> Pipeline:
         """Build the steps in order for the run's window, in a new folder or the resumed one."""
         folder = runs / (run_id or self._clock.stamp())
@@ -126,8 +130,9 @@ class AppFactory:
         )
         normalizer = Normalizer()
         words = Words()
+        spend = FileSpendLog(folder)
         steps: list[Step] = [
-            FetchStep(parts.sources, parts.criteria, window),
+            FetchStep(parts.sources, parts.criteria, window, approvals, spend),
             ConvertStep({parser.source: parser for parser in parts.parsers}),
             DedupeStep(JobKey(normalizer, AtsLinks()), window.end),
             NewJobsFilterStep(
@@ -145,6 +150,7 @@ class AppFactory:
                 checkpoints,
                 MarkdownRenderer(words),
                 FileReportWriter(folder),
+                spend,
                 folder.name,
                 window,
                 not_covered,
@@ -166,12 +172,10 @@ class AppFactory:
             headers={"User-Agent": self.USER_AGENT, "Authorization": f"Bearer {key}"}, timeout=60
         )
         client = BoardClient(http, jobspipe.delay_seconds)
+        per_run, budget = JobsPipeSource.PLANS[jobspipe.plan]
+        limits = (jobspipe.max_jobs_per_run or per_run, jobspipe.monthly_budget or budget)
         return JobsPipeSource(
-            client,
-            jobspipe.filters,
-            jobspipe.max_jobs_per_run,
-            self._prompter,
-            jobspipe.match_if_missing,
+            client, jobspipe.filters, limits, self._prompter, jobspipe.match_if_missing
         )
 
     def _demo(self) -> Parts:

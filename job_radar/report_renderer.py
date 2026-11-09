@@ -3,7 +3,7 @@
 from datetime import timedelta
 from typing import Protocol, runtime_checkable
 
-from job_radar.model import Recommendation, ReportContent
+from job_radar.model import Recommendation, ReportContent, Spend, SpendDecision
 from job_radar.words import Words
 
 
@@ -53,6 +53,9 @@ class MarkdownRenderer:
             lines.extend(self._job(rank, rec))
         lines.extend(["", "## About this run", "", "Items each step produced:", ""])
         lines.extend(f"- {count.step}: {count.count}" for count in content.funnel)
+        if content.spends:
+            lines.extend(["", "Paid sources:", ""])
+            lines.extend(f"- {self._spend(spend)}" for spend in content.spends)
         lines.extend(["", "Jobs the filter dropped, by reason: dropped.md"])
         return "\n".join(lines) + "\n"
 
@@ -74,6 +77,20 @@ class MarkdownRenderer:
             f"Not covered: {self._words.span(gap.start, gap.end)}. The last run was on {last}, "
             f"and a run reaches back at most {days} days.",
         ]
+
+    @staticmethod
+    def _spend(spend: Spend) -> str:
+        """One paid source's spend in words: the estimate, how it was agreed, what it cost."""
+        approval = spend.approval
+        agreed = {
+            SpendDecision.AUTO: "within every limit",
+            SpendDecision.APPROVED: "over a limit, approved by you",
+            SpendDecision.SKIPPED: "skipped by you",
+        }[approval.decision]
+        said = f"{approval.source}: estimate {approval.estimate} credits, {agreed}"
+        if approval.decision is SpendDecision.SKIPPED:
+            return said + f". {approval.credits_before} credits left."
+        return said + f". {spend.charged} used, {spend.credits_after} left."
 
     def _job(self, rank: int, rec: Recommendation) -> list[str]:
         """One job as a numbered list item: its primary posting, the reason, a link per posting."""

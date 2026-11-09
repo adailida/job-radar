@@ -296,6 +296,7 @@ class ReportContent(Model):
     min_score: int  # the lowest score a recommended job may have
     recommendations: tuple[Recommendation, ...]  # best first
     funnel: tuple[StepCount, ...]  # each finished step and its count, in run order
+    spends: tuple["Spend", ...] = ()  # what each paid source spent
 
 
 class DroppedJob(Model):
@@ -323,3 +324,48 @@ class RunSummary(Model):
     not_covered: Window | None = None  # days a long break left out, before the window
     completed: bool
     steps: tuple[StepCount, ...]  # each finished step and its count, in run order
+
+
+class SpendPlan(Model):
+    """What a paid source expects a run to cost, and the limits to check it against."""
+
+    source: str
+    estimate: int  # the most the run's searches can cost: their match counts added up
+    estimated: bool  # False when the source couldn't count, and the estimate is the per-run max
+    credits_left: int
+    per_run_max: int
+    budget_left: int  # what the monthly budget still allows; the credits left on a one-time grant
+
+
+class SpendDecision(StrEnum):
+    """How a paid source's spend was agreed."""
+
+    AUTO = "auto"  # within every limit
+    APPROVED = "approved"  # over a limit, and the user said go ahead
+    SKIPPED = "skipped"  # the user chose to leave the source out of this run
+
+
+class Approval(Model):
+    """The spend agreed for one paid source before anything is fetched."""
+
+    source: str
+    estimate: int
+    decision: SpendDecision
+    cap: int  # the most the fetch may spend: the estimate plus 10%, within the credits left
+    credits_before: int
+
+
+class PaidFetch(Model):
+    """What a paid source fetched and what it cost."""
+
+    pages: tuple[RawPage, ...]
+    charged: int
+    credits_left: int
+
+
+class Spend(Model):
+    """One paid source's spend in a run: what was agreed and what it cost."""
+
+    approval: Approval
+    charged: int = 0
+    credits_after: int | None = None  # None when the source was skipped

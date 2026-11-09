@@ -1,6 +1,6 @@
 from datetime import date
 
-from fakes import FakePrompter
+from fakes import FakePrompter, NoCost
 
 from job_radar.app import JobRadarApp
 from job_radar.model import RunSummary, StepCount, Window
@@ -94,7 +94,10 @@ class Built:
 def test_the_app_resumes_the_offered_run_in_its_folder_with_its_window():
     built, calls, chooser = Built(), [], Chooser(None)
     app = JobRadarApp(
-        Offer(FAILED), chooser, lambda w, gap, run_id: calls.append((w, gap, run_id)) or built
+        Offer(FAILED),
+        chooser,
+        NoCost(),
+        lambda w, gap, run_id, ok: calls.append((w, gap, run_id)) or built,
     )
     app.run()
     assert calls == [(WINDOW, None, FAILED.id)]
@@ -105,7 +108,24 @@ def test_the_app_starts_a_new_run_when_nothing_is_resumed():
     plan = WindowPlan(window=WINDOW, reason=WindowReason.FIRST_RUN)
     built, calls, chooser = Built(), [], Chooser(plan)
     app = JobRadarApp(
-        Offer(None), chooser, lambda w, gap, run_id: calls.append((w, gap, run_id)) or built
+        Offer(None),
+        chooser,
+        NoCost(),
+        lambda w, gap, run_id, ok: calls.append((w, gap, run_id)) or built,
     )
     app.run()
     assert calls == [(WINDOW, None, None)] and chooser.asked
+
+
+class Stop:
+    """A cost check where the user chose to stop."""
+
+    def check(self, window):
+        return None
+
+
+def test_stopping_at_the_cost_check_builds_no_run():
+    plan = WindowPlan(window=WINDOW, reason=WindowReason.FIRST_RUN)
+    calls = []
+    app = JobRadarApp(Offer(None), Chooser(plan), Stop(), lambda *args: calls.append(args))
+    assert isinstance(app.run(), RunCancelled) and calls == []

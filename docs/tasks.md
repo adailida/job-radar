@@ -115,7 +115,7 @@ One line each for now; each task gets its detail, against the class names in arc
 - [x] **15a. Stronger keys:** an ATS key from Greenhouse, Lever, Ashby and Workable links, a fuzzy key on company, title and country; postings sharing any key merge, transitively
 - [x] **15b. Only new jobs:** each completed run keeps the jobs its filter passed (`jobs.jsonl`); `NewJobsFilterStep` (`new_jobs_filter`) after dedupe drops jobs an earlier completed run kept (fuzzy keys within 60 days, ATS keys always); `new_only` setting
 - [x] **16. JobsPipe:** `JobsPipeSource` and `JobsPipeParser`, fixtures recorded with a few credits; off by default, key from `.env`, a per-run cap on jobs, JobsPipe-only filters in settings
-- [ ] **17. Cost checks:** estimate, limits, ask before spending, monthly spend
+- [x] **17. Cost checks:** estimate, limits, ask before spending, monthly spend; the estimate and the monthly spend come from free JobsPipe calls; `spend.jsonl` and a report line per paid source
 - [ ] **18. Classify and extract:** seniority, domain and requirements from the LLM, cached
 - [ ] **19. Usage-limit carry-over:** jobs the LLM couldn't reach move to the next run
 - [ ] **20. Trends:** periods, coverage, comparisons, low-sample notes

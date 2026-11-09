@@ -3,9 +3,10 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from fakes import WINDOW, FakeStats, MemoryWriter, job
+from fakes import WINDOW, FakeStats, MemorySpendLog, MemoryWriter, job
 
 from job_radar.model import (
+    Approval,
     Job,
     Location,
     Period,
@@ -14,6 +15,8 @@ from job_radar.model import (
     Report,
     ReportContent,
     Salary,
+    Spend,
+    SpendDecision,
     StepCount,
     Window,
     WorkMode,
@@ -171,7 +174,9 @@ def test_report_step_puts_the_run_into_the_content_and_writes_the_rendered_text(
     renderer, writer = KeepingRenderer(), MemoryWriter()
     funnel = [StepCount(step="fetch", count=2), StepCount(step="convert", count=12)]
     recs = [Recommendation(job=job("1"), score=90, reason="Fits well")]
-    reports = ReportStep(FakeStats(funnel), renderer, writer, RUN, WINDOW, None, 40).run(recs)
+    reports = ReportStep(
+        FakeStats(funnel), renderer, writer, MemorySpendLog(), RUN, WINDOW, None, 40
+    ).run(recs)
     assert renderer.content == ReportContent(
         run=RUN, window=WINDOW, min_score=40, recommendations=tuple(recs), funnel=tuple(funnel)
     )
@@ -196,3 +201,20 @@ def test_a_long_break_is_noted_with_the_days_left_out():
 def test_no_gap_means_no_note():
     text = MarkdownRenderer(Words()).render(content())
     assert "not_covered" not in text and "Not covered" not in text
+
+
+def test_the_report_says_what_each_paid_source_spent():
+    approval = Approval(
+        source="jobspipe", estimate=18, decision=SpendDecision.AUTO, cap=20, credits_before=862
+    )
+    skipped = approval.model_copy(update={"decision": SpendDecision.SKIPPED, "cap": 0})
+    spends = (Spend(approval=approval, charged=18, credits_after=844), Spend(approval=skipped))
+    report = ReportContent(
+        run=RUN, window=NOV, min_score=40, recommendations=(), funnel=(), spends=spends
+    )
+    text = MarkdownRenderer(Words()).render(report)
+    assert (
+        "Paid sources:\n\n"
+        "- jobspipe: estimate 18 credits, within every limit. 18 used, 844 left.\n"
+        "- jobspipe: estimate 18 credits, skipped by you. 862 credits left.\n"
+    ) in text

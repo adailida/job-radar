@@ -44,7 +44,7 @@ A real run needs, in `local/` (never committed):
 
 and Claude Code logged in.
 
-JobsPipe (paid, off by default) adds LinkedIn, Indeed and employers' own ATS. Put `JOBSPIPE_API_KEY=...` in `.env` (never committed) and set `sources.jobspipe.enabled: true` in `settings.yaml`; `max_jobs_per_run` caps the credits a run can spend.
+JobsPipe (paid, off by default) adds LinkedIn, Indeed and employers' own ATS. Put `JOBSPIPE_API_KEY=...` in `.env` (never committed) and set `sources.jobspipe.enabled: true` in `settings.yaml`; Before fetching, a run estimates what JobsPipe will cost (for free) and checks it against the per-run max, the monthly budget and the credits left; over a limit, it asks whether to go ahead, skip JobsPipe this run, or stop. The plan (`free` or `seeker`) sets the limits unless `max_jobs_per_run` and `monthly_budget` say otherwise.
 
 A run shows only jobs no earlier run found (set `new_only: false` in `settings.yaml` to see them all again). Deleting a run makes its jobs new again.
 

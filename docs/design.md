@@ -374,6 +374,7 @@ output/                        (setting; default ./output, gitignored)
       report.md                this run's report
       dropped.md               what the filter dropped, grouped by why
       jobs.jsonl               after success: the filter's output, kept so later runs know these jobs
+      spend.jsonl              what each paid source spent: estimate, decision, credits used and left
 ```
 
 - One JSON Lines file per step, named after the step and numbered in the order the steps ran, so the folder lists them in run order: one record per line, easy to `grep` and hand to an LLM
@@ -867,6 +868,8 @@ Fetched 1,890. Merged 37. Already seen 1,402. Filtered out 389. Classified 62. M
 
 Applies to `PaidSource`s only; free sources skip it.
 
+Built (task 17), with two changes from the plan below, both from the JobsPipe API check: the estimate is free (`POST /v1/jobs/export/estimate` per search, added up), not count queries at 1 credit each; and monthly spend comes from `GET /v1/account` (free), so there is no ledger. The check runs in `JobRadarApp` after the window is agreed and before the run folder exists, so stopping leaves nothing behind; a resumed run checks again (free). When JobsPipe can't count a search (slow phrase searches time out), the estimate is the per-run max. Seen Nov 9: `/v1/account` lagged the credits left that searches report (867 against 844); the fetch records the search's own figure.
+
 ### Limits from the plan
 
 | Plan | Monthly budget | Per-run max (default) |
@@ -1109,4 +1112,6 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | JobsPipe-only narrowing lives in settings (`sources.jobspipe.filters`), passed through as written, not in the profile | Mission phrases as profile keywords | Fast Forward lists only mission orgs; the phrases are needed only to narrow JobsPipe's mainstream feed. Passing filters through needs no code per JobsPipe field |
 | Keys come from the environment, else `.env`, through a `Secrets` interface | `python-dotenv`; settings | No new dependency for a NAME=value file; the environment wins for one-off runs; tests pass a plain dict |
 | Defaults are a real YAML file the app reads (`job_radar/default_settings.yaml`), the user's file merged over it | Defaults in the model, with an example file a test keeps in sync (the earlier choice) | Changed Nov 9 at the owner's ask: the full config you read is the one the app uses. Still one place for defaults: the model has none |
+| The cost check runs in the app, before the run folder exists | Inside the fetch step | Stopping at the check leaves no failed run to resume or delete; the fetch step only spends within the approvals |
+| Enter at a cost question means skip the source | Go ahead; stop | Skipping spends nothing and still gives a report from the free sources |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |

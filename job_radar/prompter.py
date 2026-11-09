@@ -1,6 +1,6 @@
 """Talking to the user in the terminal while a run is set up."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Protocol, runtime_checkable
 
 
@@ -14,6 +14,10 @@ class Prompter(Protocol):
 
     def confirm(self, question: str, default: bool = True) -> bool:
         """Ask a yes or no question; Enter, or no input at all, gives the default."""
+        ...
+
+    def choose(self, question: str, choices: Mapping[str, str], default: str) -> str:
+        """Ask for one of a few one-letter choices; Enter, or no input, gives the default."""
         ...
 
 
@@ -52,3 +56,17 @@ class TerminalPrompter:
             if answer in self.NO:
                 return False
             self._write("Please answer y or n.")
+
+    def choose(self, question: str, choices: Mapping[str, str], default: str) -> str:
+        """Ask until the answer is one of the letters; Enter, or no input, gives the default."""
+        letters = "/".join(choices)
+        while True:
+            try:
+                answer = self._read(f"{question} ({letters}, Enter for {default}) ").strip().lower()
+            except EOFError:
+                return default
+            if answer == "":
+                return default
+            if answer in choices:
+                return answer
+            self._write(f"Please answer {', '.join(f'{k} to {v}' for k, v in choices.items())}.")
