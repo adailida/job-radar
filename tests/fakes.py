@@ -115,3 +115,15 @@ class FakeHistory:
     def last_window(self) -> Window | None:
         """The set window."""
         return self._last
+
+
+class MemoryDropLog:
+    """A drop log that keeps the list instead of writing a file."""
+
+    def __init__(self):
+        """Start with nothing written."""
+        self.drops = None
+
+    def write(self, drops) -> None:
+        """Keep the list."""
+        self.drops = drops

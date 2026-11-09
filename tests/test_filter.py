@@ -1,6 +1,6 @@
 from datetime import date
 
-from fakes import job, posting
+from fakes import MemoryDropLog, job, posting
 
 from job_radar.matching import JobMatcher
 from job_radar.model import Job, Search, SearchCriteria, Window
@@ -16,6 +16,7 @@ def step(*roles: str) -> FilterStep:
         SearchCriteria(searches=(Search(name="default", roles=roles),)),
         WINDOW,
         JobMatcher(Normalizer()),
+        MemoryDropLog(),
     )
 
 
@@ -46,16 +47,18 @@ def test_roles_match_abbreviated_titles():
 
 def test_no_roles_keeps_every_job():
     jobs = [job("1", "Anything"), job("2", "Something else")]
-    assert FilterStep(NO_ROLES, WINDOW, JobMatcher(Normalizer())).run(jobs) == jobs
+    assert FilterStep(NO_ROLES, WINDOW, JobMatcher(Normalizer()), MemoryDropLog()).run(jobs) == jobs
+
+
+def dated(source_id: str, posted: date | None) -> Job:
+    """A job of one posting, posted on this day."""
+    p = posting(source_id).model_copy(update={"posted_at": posted})
+    return Job(id=p.key, keys=(p.key,), postings=(p,), first_seen=WINDOW.end)
 
 
 def test_filter_drops_jobs_posted_before_the_window():
-    def dated(source_id: str, posted: date | None) -> Job:
-        p = posting(source_id).model_copy(update={"posted_at": posted})
-        return Job(id=p.key, keys=(p.key,), postings=(p,), first_seen=WINDOW.end)
-
     jobs = [dated("old", date(2026, 10, 28)), dated("first", WINDOW.start), dated("none", None)]
-    kept = FilterStep(NO_ROLES, WINDOW, JobMatcher(Normalizer())).run(jobs)
+    kept = FilterStep(NO_ROLES, WINDOW, JobMatcher(Normalizer()), MemoryDropLog()).run(jobs)
     assert [j.id for j in kept] == ["demo:first", "demo:none"]
 
 
@@ -67,5 +70,28 @@ def test_a_job_matching_any_search_is_kept():
         )
     )
     jobs = [job("1", "Tech Lead"), job("2", "Designer"), job("3", "Engineer")]
-    kept = FilterStep(criteria, WINDOW, JobMatcher(Normalizer())).run(jobs)
+    kept = FilterStep(criteria, WINDOW, JobMatcher(Normalizer()), MemoryDropLog()).run(jobs)
     assert [j.postings[0].title for j in kept] == ["Tech Lead", "Engineer"]
+
+
+def test_lists_each_dropped_job_with_why_for_every_search():
+    criteria = SearchCriteria(
+        searches=(
+            Search(name="eng", roles=("engineer",)),
+            Search(name="lead", roles=("tech lead",), exclude_titles=("intern",)),
+        )
+    )
+    log = MemoryDropLog()
+    jobs = [
+        job("1", "Engineer"),
+        job("2", "Designer"),
+        dated("old", date(2026, 10, 1)),
+        job("3", "Tech Lead Intern"),
+    ]
+    kept = FilterStep(criteria, WINDOW, JobMatcher(Normalizer()), log).run(jobs)
+    assert [j.id for j in kept] == ["demo:1"]
+    assert (log.drops.checked, log.drops.kept, log.drops.before_window) == (4, 1, 1)
+    assert [(d.job.id, d.reasons) for d in log.drops.dropped] == [
+        ("demo:2", ("eng: roles", "lead: roles")),
+        ("demo:3", ("eng: roles", "lead: excluded title")),
+    ]

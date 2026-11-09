@@ -29,3 +29,5 @@ Items each step produced:
 - fetch: 1
 - convert: 200
 - recommend: 3
+
+Jobs the filter dropped, by reason: dropped.md
