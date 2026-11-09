@@ -11,9 +11,11 @@ from job_radar.factory import AppFactory
 from job_radar.history import FileRunHistory, RunHistory
 from job_radar.html_text import HtmlText
 from job_radar.llm import ClaudeCli, Llm
+from job_radar.matching import JobMatcher
 from job_radar.model import CandidateProfile, Search, SearchCriteria, Window
 from job_radar.normalize import Normalizer
 from job_radar.pipeline import Step
+from job_radar.places import PlaceCodes
 from job_radar.prompter import Prompter, TerminalPrompter
 from job_radar.ranking import JobRanker, KeywordRanker, LlmRanker
 from job_radar.report_renderer import MarkdownRenderer, ReportRenderer
@@ -46,9 +48,9 @@ def steps():
     """One of each step, in run order."""
     return [
         FetchStep([GetroSource("board", CLIENT)], SEARCH, WINDOW),
-        ConvertStep({"getro": GetroParser()}),
+        ConvertStep({"getro": GetroParser(PlaceCodes())}),
         DedupeStep(JobKey(Normalizer()), date(2026, 11, 5)),
-        FilterStep(SEARCH, WINDOW, Normalizer()),
+        FilterStep(SEARCH, WINDOW, JobMatcher(Normalizer())),
         DescribeStep({"getro": GetroDescriber("board", CLIENT, HtmlText())}, TerminalPrompter()),
         RecommendTopJobsStep(RANKER, PROFILE, top_n=10, min_score=40),
         ReportStep(CHECKPOINTS, MarkdownRenderer(), FileReportWriter(FOLDER), "run", WINDOW, 40),
@@ -57,10 +59,10 @@ def steps():
 
 IMPLEMENTATIONS = [
     (GetroSource("board", CLIENT), JobBoardSource),
-    (GetroParser(), JobBoardParser),
+    (GetroParser(PlaceCodes()), JobBoardParser),
     (GetroDescriber("board", CLIENT, HtmlText()), JobDescriber),
     (DemoSource(), JobBoardSource),
-    (DemoParser(), JobBoardParser),
+    (DemoParser(PlaceCodes()), JobBoardParser),
     (CHECKPOINTS, Checkpoints),
     (CHECKPOINTS, RunStats),
     (RANKER, JobRanker),

@@ -12,9 +12,11 @@ from job_radar.clock import Clock
 from job_radar.history import FileRunHistory
 from job_radar.html_text import HtmlText
 from job_radar.llm import ClaudeCli
+from job_radar.matching import JobMatcher
 from job_radar.model import CandidateProfile, SearchCriteria, Window
 from job_radar.normalize import Normalizer
 from job_radar.pipeline import Pipeline, Step
+from job_radar.places import PlaceCodes
 from job_radar.profile import DEMO_PROFILE, ProfileLoader
 from job_radar.prompter import Prompter
 from job_radar.ranking import JobRanker, KeywordRanker, LlmRanker
@@ -89,7 +91,7 @@ class AppFactory:
             FetchStep(parts.sources, parts.criteria, window),
             ConvertStep({parser.source: parser for parser in parts.parsers}),
             DedupeStep(JobKey(normalizer), window.end),
-            FilterStep(parts.criteria, window, normalizer),
+            FilterStep(parts.criteria, window, JobMatcher(normalizer)),
             DescribeStep({d.source: d for d in parts.describers}, self._prompter),
             RecommendTopJobsStep(
                 parts.ranker,
@@ -111,7 +113,12 @@ class AppFactory:
     def _demo(self) -> Parts:
         """The boards, searches, ranker and profile of a demo run."""
         return Parts(
-            [DemoSource()], [DemoParser()], [], DEMO_SEARCHES, KeywordRanker(), DEMO_PROFILE
+            [DemoSource()],
+            [DemoParser(PlaceCodes())],
+            [],
+            DEMO_SEARCHES,
+            KeywordRanker(),
+            DEMO_PROFILE,
         )
 
     def _real(self) -> Parts:
@@ -132,7 +139,7 @@ class AppFactory:
         network = self._settings.sources.getro.network
         return Parts(
             [GetroSource(network, getro)],
-            [GetroParser()],
+            [GetroParser(PlaceCodes())],
             [GetroDescriber(network, getro, HtmlText())],
             criteria,
             ranker,

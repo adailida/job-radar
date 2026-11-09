@@ -1,8 +1,18 @@
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
-from job_radar.model import Search, SearchCriteria
+from job_radar.model import (
+    IfMissing,
+    MinSalary,
+    Period,
+    Places,
+    Search,
+    SearchCriteria,
+    WorkMode,
+    WorkModes,
+)
 from job_radar.searches import SearchesFile
 from job_radar.yaml_file import ConfigError
 
@@ -46,10 +56,59 @@ def test_no_searches_is_an_error(tmp_path):
 
 
 def test_a_criterion_not_supported_yet_is_an_unknown_key(tmp_path):
-    with pytest.raises(ConfigError, match=r"searches.one.exclude_titles: unknown key"):
-        load(tmp_path, "searches:\n  one: {exclude_titles: [intern]}\n")
+    with pytest.raises(ConfigError, match=r"searches.one.keywords: unknown key"):
+        load(tmp_path, "searches:\n  one: {keywords: [python]}\n")
+
+
+def test_reads_every_criterion_in_short_and_full_form(tmp_path):
+    text = """
+common:
+  roles: [engineer]
+  exclude_titles: [civil]
+  min_salary: 150000
+searches:
+  remote-us:
+    work_mode: [remote]
+    locations: {values: [US], if_missing: drop}
+  seattle:
+    locations: [US-WA]
+    min_salary: {amount: 70, period: hour, if_missing: drop}
+"""
+    remote, seattle = load(tmp_path, text).searches
+    assert remote == Search(
+        name="remote-us",
+        roles=("engineer",),
+        exclude_titles=("civil",),
+        work_mode=WorkModes(values=(WorkMode.REMOTE,)),
+        locations=Places(values=("US",), if_missing=IfMissing.DROP),
+        min_salary=MinSalary(amount=Decimal(150000)),
+    )
+    assert seattle.locations == Places(values=("US-WA",))
+    assert seattle.min_salary == MinSalary(
+        amount=Decimal(70), period=Period.HOUR, if_missing=IfMissing.DROP
+    )
+
+
+@pytest.mark.parametrize(
+    ("line", "problem"),
+    [
+        (
+            "locations: [Seattle]",
+            r"searches.one.locations: not ISO codes like US or US-WA: Seattle",
+        ),
+        (
+            "work_mode: [unknown]",
+            r"searches.one.work_mode: work modes are remote, hybrid or onsite",
+        ),
+        ("work_mode: [anywhere]", r"searches.one.work_mode.values.0: input should be"),
+        ("locations: {values: [US], if_missing: maybe}", r"locations.if_missing: input should be"),
+    ],
+)
+def test_a_bad_criterion_names_its_path(tmp_path, line, problem):
+    with pytest.raises(ConfigError, match=problem):
+        load(tmp_path, f"searches:\n  one: {{{line}}}\n")
 
 
 def test_the_example_file_reads():
     names = [search.name for search in SearchesFile(EXAMPLE).load().searches]
-    assert names == ["engineering", "leadership"]
+    assert names == ["remote-us", "nyc-office"]

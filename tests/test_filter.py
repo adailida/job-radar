@@ -2,6 +2,7 @@ from datetime import date
 
 from fakes import job, posting
 
+from job_radar.matching import JobMatcher
 from job_radar.model import Job, Search, SearchCriteria, Window
 from job_radar.normalize import Normalizer
 from job_radar.steps.filter import FilterStep
@@ -12,7 +13,9 @@ NO_ROLES = SearchCriteria(searches=(Search(name="default", roles=()),))
 
 def step(*roles: str) -> FilterStep:
     return FilterStep(
-        SearchCriteria(searches=(Search(name="default", roles=roles),)), WINDOW, Normalizer()
+        SearchCriteria(searches=(Search(name="default", roles=roles),)),
+        WINDOW,
+        JobMatcher(Normalizer()),
     )
 
 
@@ -43,7 +46,7 @@ def test_roles_match_abbreviated_titles():
 
 def test_no_roles_keeps_every_job():
     jobs = [job("1", "Anything"), job("2", "Something else")]
-    assert FilterStep(NO_ROLES, WINDOW, Normalizer()).run(jobs) == jobs
+    assert FilterStep(NO_ROLES, WINDOW, JobMatcher(Normalizer())).run(jobs) == jobs
 
 
 def test_filter_drops_jobs_posted_before_the_window():
@@ -52,7 +55,7 @@ def test_filter_drops_jobs_posted_before_the_window():
         return Job(id=p.key, keys=(p.key,), postings=(p,), first_seen=WINDOW.end)
 
     jobs = [dated("old", date(2026, 10, 28)), dated("first", WINDOW.start), dated("none", None)]
-    kept = FilterStep(NO_ROLES, WINDOW, Normalizer()).run(jobs)
+    kept = FilterStep(NO_ROLES, WINDOW, JobMatcher(Normalizer())).run(jobs)
     assert [j.id for j in kept] == ["demo:first", "demo:none"]
 
 
@@ -64,5 +67,5 @@ def test_a_job_matching_any_search_is_kept():
         )
     )
     jobs = [job("1", "Tech Lead"), job("2", "Designer"), job("3", "Engineer")]
-    kept = FilterStep(criteria, WINDOW, Normalizer()).run(jobs)
+    kept = FilterStep(criteria, WINDOW, JobMatcher(Normalizer())).run(jobs)
     assert [j.postings[0].title for j in kept] == ["Tech Lead", "Engineer"]

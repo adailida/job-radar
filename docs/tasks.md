@@ -105,7 +105,9 @@ One line each for now; each task gets its detail, against the class names in arc
   - `local/settings.yaml` over the defaults (nested: `llm`, `recommend`, `sources`), and the searches from `local/profile.yaml` (`common` and `searches`, roles only); errors name the file and the key's path
   - `examples/settings.example.yaml` (every default; a test checks it matches) and `examples/profile.example.yaml`
   - Fetch and filter take all the searches; a job is kept if any matches. The demo has its own search in code
-- [ ] **11. Full search criteria:** locations, work mode, keywords, excluded titles, salary, `if_missing`; a "Dropped by the filter" list in the report, so silent role misses ("Engineer, Data", "ML Engineer") show
+- [x] **11a. Search criteria:** excluded titles, work mode, locations (ISO codes, read from the place text by `PlaceCodes`), minimum salary, each with `if_missing`; `JobMatcher` names the criterion a job fails
+- [ ] **11b. Dropped by the filter:** a `dropped.md` next to the report, titles by the reason they were dropped, so silent misses show
+- [ ] **11c. Keywords:** "the description mentions any", checked after the describe step
 - [ ] **12. Terminal prompts:** ask for missing or invalid profile fields (`Prompter` exists since task 4)
 - [ ] **13. Run history:** `job-radar runs` and `job-radar delete`; choosing to resume a failed run, and `Pipeline` resuming after the last finished step (moved from task 4 on Nov 5: nothing can choose a failed run before this task)
 - [ ] **14. Time window in the report:** when the lookback cap cut a gap, the report says so and which dates it covers (the window itself is task 4)

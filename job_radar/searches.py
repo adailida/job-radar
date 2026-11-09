@@ -4,7 +4,7 @@ from pathlib import Path
 
 from pydantic import Field
 
-from job_radar.model import Model, Search, SearchCriteria
+from job_radar.model import MinSalary, Model, Places, Search, SearchCriteria, WorkModes
 from job_radar.yaml_file import ConfigError, YamlFile
 
 DEMO_SEARCHES = SearchCriteria(
@@ -20,8 +20,11 @@ DEMO_SEARCHES = SearchCriteria(
 class _Criteria(Model):
     """The criteria of one search, as written in the file. An unset field comes from `common`."""
 
-    # TODO(task 11): locations, work mode, keywords, excluded titles, salary, if_missing.
-    roles: tuple[str, ...] | None = None  # the title contains any of them
+    roles: tuple[str, ...] | None = None
+    exclude_titles: tuple[str, ...] | None = None
+    work_mode: WorkModes | None = None
+    locations: Places | None = None
+    min_salary: MinSalary | None = None
 
 
 class _ProfileFile(Model):
@@ -52,12 +55,20 @@ class SearchesFile:
         profile = self._file.load(_ProfileFile)
         return SearchCriteria(
             searches=tuple(
-                Search(name=name, roles=self._pick(criteria.roles, profile.common.roles))
+                self._search(name, criteria, profile.common)
                 for name, criteria in profile.searches.items()
             )
         )
 
     @staticmethod
-    def _pick(own: tuple[str, ...] | None, common: tuple[str, ...] | None) -> tuple[str, ...]:
-        """The search's own value if set, else the common one, else none."""
-        return own if own is not None else (common or ())
+    def _search(name: str, own: _Criteria, common: _Criteria) -> Search:
+        """One search: each field from the search if set there, else from `common`."""
+        fields = {
+            field: getattr(own, field)
+            if getattr(own, field) is not None
+            else getattr(common, field)
+            for field in _Criteria.model_fields
+        }
+        return Search(
+            name=name, **{key: value for key, value in fields.items() if value is not None}
+        )

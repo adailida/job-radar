@@ -15,6 +15,7 @@ from job_radar.model import (
     Window,
     WorkMode,
 )
+from job_radar.places import PlaceCodes
 from job_radar.sources.http import BoardClient
 
 
@@ -68,11 +69,19 @@ class GetroSource:
 
 
 class GetroParser:
-    """Turns pages of a Getro board's job search into postings. Stateless."""
+    """Turns pages of a Getro board's job search into postings.
+
+    Places get country and region codes when their text names them.
+    Stateless: holds only how places are read.
+    """
 
     source = "getro"
     WORK_MODES = {"on_site": WorkMode.ONSITE, "hybrid": WorkMode.HYBRID, "remote": WorkMode.REMOTE}
     PERIODS = {"year": Period.YEAR, "month": Period.MONTH, "hour": Period.HOUR}
+
+    def __init__(self, places: PlaceCodes) -> None:
+        """Keep how places are read into codes."""
+        self._places = places
 
     def parse(self, page: RawPage) -> list[Posting]:
         """Convert one page of search results into postings."""
@@ -90,7 +99,7 @@ class GetroParser:
             source_id=str(job["id"]),
             title=job["title"].strip(),
             company=job["organization"]["name"],
-            locations=tuple(Location(text=text) for text in job["locations"]),
+            locations=tuple(self._places.locate(Location(text=text)) for text in job["locations"]),
             work_mode=self.WORK_MODES.get(job["work_mode"], WorkMode.UNKNOWN),
             salary=self._salary(job),
             url=job["url"],
