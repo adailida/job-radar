@@ -357,23 +357,27 @@ output/                        (setting; default ./output, gitignored)
       01-fetch.jsonl           raw pages, as the boards returned them
       02-convert.jsonl         postings
       03-dedupe.jsonl          jobs
-      04-filter.jsonl          jobs that match the search
-      05-describe.jsonl        the same jobs, with full descriptions
-      06-recommend.jsonl       the top N recommendations at or above the minimum score
-      07-report.jsonl          the Report: where it is, one-line summary
+      04-new_jobs_filter.jsonl jobs no earlier completed run found
+      05-filter.jsonl          jobs that match the search
+      06-describe.jsonl        the same jobs, with full descriptions
+      07-recommend.jsonl       the top N recommendations at or above the minimum score
+      08-report.jsonl          the Report: where it is, one-line summary
       manifest.json            schema version; the window and any days a long break left out; each finished step and its count, in order
       report.md                this run's report
       dropped.md               what the filter dropped, grouped by why
+      jobs.jsonl               after success: the filter's output, kept so later runs know these jobs
 ```
 
 - One JSON Lines file per step, named after the step and numbered in the order the steps ran, so the folder lists them in run order: one record per line, easy to `grep` and hand to an LLM
-- After a successful run only `manifest.json`, `report.md` and `dropped.md` remain. A failed run keeps everything, ready to resume
+- After a successful run only `manifest.json`, `report.md`, `dropped.md` and `jobs.jsonl` remain. A failed run keeps everything, ready to resume
 - The report sits in the run folder, so deleting a run deletes its report. The terminal prints its path
 - Later, outside any run folder: the CV analysis cache (section 10), the spend ledger if the API lacks monthly usage (section 12), and a lock for one run at a time
 
 ### What a run stores
 
-Once run history is built (task 13), runs also store and read what earlier runs found:
+Built so far (task 15b): a completed run keeps the jobs its filter passed as `jobs.jsonl`, and `NewJobsFilterStep` (after dedupe) drops jobs sharing any key with them: strong keys (ATS, a posting's own key) for good, fuzzy keys for 60 days. `new_only: false` lets every job through. Ids and LLM results aren't reused yet (task 18). The full design:
+
+Once run history is built, runs also store and read what earlier runs found:
 
 - Every job it sent to the LLM, matched or not, with its classification; matched jobs also with their extraction
 - A `Match` for each job it matched that no earlier completed run matched. That run owns the job
@@ -518,7 +522,7 @@ searches:                                 # a job matches if it matches any sear
 
 ### Settings
 
-Every key has a default; the file can be missing. The sample shows the full design; built so far (task 10): `output`, `lookback_days`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`), `recommend` (`top_n`, `min_score`) and `sources.getro.network`. The others come with their tasks; [examples/settings.example.yaml](../examples/settings.example.yaml) lists what exists.
+Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`), `recommend` (`top_n`, `min_score`) and `sources.getro.network`. The others come with their tasks; [examples/settings.example.yaml](../examples/settings.example.yaml) lists what exists.
 
 ```yaml
 domains:                    # cause areas or fields: used by the domains filter and report headings
@@ -1091,4 +1095,6 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Only the newest run is offered for resuming | A list of failed runs to pick from | A failed run followed by another run is stale; its window has been fetched again |
 | The days a long break left out are worked out from the window plan once and saved in the manifest | Work them out again when the report is written | A resumed run (13b) has no plan in memory; the manifest keeps what the report needs. The field is optional, so older manifests still read |
 | A place with no country code counts by its text in the fuzzy key | Leave it out of the key; one "unknown" for every such place | "Remote" and a posting with no place at all are different facts; leaving it out would merge them |
+| Seen jobs are the filter's output of completed runs, kept as `jobs.jsonl` by `FileCheckpoints` on success | A separate writer; a store outside run folders | The output is already saved as a checkpoint, so keeping one file costs nothing; deleting a run makes its jobs unseen with no extra logic |
+| Dropping seen jobs is its own step, `new_jobs_filter`, after dedupe | Inside dedupe | One responsibility each, and the funnel shows how many jobs were new |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |

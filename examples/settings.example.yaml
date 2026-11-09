@@ -4,6 +4,7 @@
 
 output: output            # run folders go under output/runs/, demo runs under output/demo/
 lookback_days: 14         # how far back a run may reach: a first run, or after a long break
+new_only: true            # drop jobs an earlier run already found; false ranks them again
 
 llm:
   model: haiku            # the Claude model that scores jobs

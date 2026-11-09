@@ -1,4 +1,4 @@
-"""Step 4: keep the jobs that match one of the searches."""
+"""Step 5: keep the jobs that match one of the searches."""
 
 from job_radar.drop_log import DropLog
 from job_radar.matching import JobMatcher

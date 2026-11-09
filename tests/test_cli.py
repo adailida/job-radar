@@ -63,7 +63,12 @@ def test_demo_run_end_to_end(tmp_path, capsys):
     out = capsys.readouterr().out
     assert out == f"Run finished: 3 jobs recommended.\nReport: {folder / 'report.md'}\n"
     assert prompter.asked == ["Continue?"]
-    assert sorted(p.name for p in folder.iterdir()) == ["dropped.md", "manifest.json", "report.md"]
+    assert sorted(p.name for p in folder.iterdir()) == [
+        "dropped.md",
+        "jobs.jsonl",
+        "manifest.json",
+        "report.md",
+    ]
     report = (folder / "report.md").read_text()
     assert "## Recommended jobs (3)" in report
     assert "1. **Senior Data Engineer**, Brightwater Trust (score 100)" in report
@@ -79,6 +84,7 @@ def test_each_run_writes_one_report_and_saves_its_run_data(tmp_path):
     for folder in folders:
         assert sorted(p.name for p in folder.iterdir()) == [
             "dropped.md",
+            "jobs.jsonl",
             "manifest.json",
             "report.md",
         ]
@@ -97,6 +103,7 @@ def test_new_source_plugs_in_without_changes_downstream(tmp_path):
         "fetch": 2,
         "convert": 12,
         "dedupe": 12,
+        "new_jobs_filter": 12,
         "filter": 8,
         "describe": 8,
         "recommend": 3,
@@ -113,7 +120,8 @@ def test_next_run_fetches_since_the_last_one_without_asking(tmp_path):
     manifest = json.loads((tmp_path / "demo" / "2026-11-05T15-00-00" / "manifest.json").read_text())
     assert manifest["window"] == {"start": "2026-11-04", "end": "2026-11-05"}
     counts = {step["step"]: step["count"] for step in manifest["steps"]}
-    assert (counts["convert"], counts["filter"]) == (12, 3)
+    # The first run found 8 of the 12 jobs: only the 4 it didn't keep are new.
+    assert (counts["convert"], counts["new_jobs_filter"], counts["filter"]) == (12, 4, 0)
 
 
 def test_saying_no_runs_nothing(tmp_path, capsys):
@@ -193,3 +201,13 @@ def test_a_run_after_a_long_break_says_in_the_report_which_days_it_missed(tmp_pa
     assert demo_cli(tmp_path, FakePrompter(True)).main(["run", "--demo"]) == 0
     report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
     assert "Not covered: 1 Oct to 21 Oct 2026. The last run was on 30 Sep" in report
+
+
+def test_with_new_only_off_a_second_run_sees_every_job_again(tmp_path):
+    settings = Settings(output=tmp_path, new_only=False, recommend=RecommendSettings(top_n=3))
+    for hour in (10, 15):
+        cli = Cli(AppFactory(settings, tmp_path / "local", FixedClock(hour), FakePrompter(True)))
+        assert cli.main(["run", "--demo"]) == 0
+    manifest = json.loads((tmp_path / "demo" / "2026-11-05T15-00-00" / "manifest.json").read_text())
+    counts = {step["step"]: step["count"] for step in manifest["steps"]}
+    assert counts["new_jobs_filter"] == 12

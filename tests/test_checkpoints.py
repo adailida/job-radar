@@ -96,3 +96,12 @@ def test_manifest_records_window_and_completion(tmp_path):
     assert manifest["completed"] is False
     checkpoints.complete()
     assert json.loads((tmp_path / "manifest.json").read_text())["completed"] is True
+
+
+def test_complete_keeps_a_steps_output_under_its_kept_name(tmp_path):
+    checkpoints = FileCheckpoints(tmp_path, WINDOW, keep={"filter": "jobs.jsonl"})
+    checkpoints.save("dedupe", [job("1"), job("2")])
+    checkpoints.save("filter", [job("1")])
+    checkpoints.complete()
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["jobs.jsonl", "manifest.json"]
+    assert (tmp_path / "jobs.jsonl").read_text().count("\n") == 1
