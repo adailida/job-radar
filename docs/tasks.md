@@ -92,9 +92,10 @@ Goal: `job-radar run` fetches Fast Forward, recommends the top N jobs against th
   - Tests: golden-file report; salary and date wording; the step's content; minimum score; `RunSucceeded` shows the report location
   - Acceptance: Runs: each run writes one report and saves its run data
 
-- [ ] **9. First real run, limited**
+- [x] **9. First real run, limited**
   - Fast Forward only, about 20 jobs to the LLM, a short window; check the report and the run folder end to end
   - Also done when: the owner has read the report
+  - Done Nov 9: default roles in code (engineer, engineering, developer, tech lead, architect) until the settings file; Nov 6 to 9, 20 jobs, 1 prompt. Found and fixed: a place that repeats the work mode ("Remote. Remote."), salaries to the cent ("$128.88k")
 
 ## Phase 2: Components to ready
 

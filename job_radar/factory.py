@@ -42,7 +42,10 @@ class Settings(Model):
     output: Path = Path("output")  # run folders go under output/runs/, demo runs under output/demo/
     local: Path = Path("local")  # the user's CV and preferences
     getro_network: str = "997"  # Fast Forward's job board on Getro
-    search: Search = Search(name="default", roles=())
+    # TODO(task 10): roles come from the user's settings file.
+    search: Search = Search(
+        name="default", roles=("engineer", "engineering", "developer", "tech lead", "architect")
+    )
     lookback_days: int = 14  # how far back a run may reach: a first run, or after a long break
     model: str = "haiku"
     batch_size: int = 20  # jobs per LLM prompt

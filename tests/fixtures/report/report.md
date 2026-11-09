@@ -15,7 +15,7 @@ Covers postings from 8 Nov to 9 Nov 2026.
    A hands-on backend role on a small climate team, close to what you want.
    [getro](https://example.org/jobs/101), [jobspipe](https://example.org/jobs/x-7)
 2. **Data Platform Engineer**, Open Grid (score 61)
-   Hybrid. Berlin, Germany. From EUR 52.5k a year. Posted 9 Nov.
+   Hybrid. Berlin, Germany. From EUR 53k a year. Posted 9 Nov.
    A data platform role in Berlin; a good field for you but outside your places.
    [getro](https://example.org/jobs/102)
 3. **Tech Lead**, Civic Signal (score 40)
