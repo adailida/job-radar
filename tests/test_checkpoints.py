@@ -1,5 +1,6 @@
 import json
 
+import pytest
 from fakes import WINDOW, job
 
 from job_radar.checkpoints import FileCheckpoints
@@ -38,11 +39,38 @@ def test_funnel_counts_per_step_in_order(tmp_path):
     ]
 
 
-def test_saving_a_step_again_replaces_its_count(tmp_path):
+def test_saving_a_step_again_replaces_its_count_in_place(tmp_path):
     checkpoints = FileCheckpoints(tmp_path, WINDOW)
     checkpoints.save("dedupe", [job("1"), job("2")])
+    checkpoints.save("filter", [job("1")])
     checkpoints.save("dedupe", [job("1")])
-    assert checkpoints.funnel() == [StepCount(step="dedupe", count=1)]
+    assert checkpoints.funnel() == [
+        StepCount(step="dedupe", count=1),
+        StepCount(step="filter", count=1),
+    ]
+    assert checkpoints.load("dedupe", Job) == [job("1")]
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "01-dedupe.jsonl",
+        "02-filter.jsonl",
+        "manifest.json",
+    ]
+
+
+def test_step_files_are_numbered_in_run_order(tmp_path):
+    checkpoints = FileCheckpoints(tmp_path, WINDOW)
+    for step in ["fetch", "convert", "dedupe", "filter"]:
+        checkpoints.save(step, [])
+    assert sorted(p.name for p in tmp_path.glob("*.jsonl")) == [
+        "01-fetch.jsonl",
+        "02-convert.jsonl",
+        "03-dedupe.jsonl",
+        "04-filter.jsonl",
+    ]
+
+
+def test_loading_a_step_never_saved_fails(tmp_path):
+    with pytest.raises(KeyError, match="dedupe"):
+        FileCheckpoints(tmp_path, WINDOW).load("dedupe", Job)
 
 
 def test_complete_keeps_manifest_and_report(tmp_path):
@@ -57,7 +85,7 @@ def test_complete_keeps_manifest_and_report(tmp_path):
 
 def test_no_temp_files_left(tmp_path):
     FileCheckpoints(tmp_path, WINDOW).save("dedupe", [job("1")])
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["dedupe.jsonl", "manifest.json"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["01-dedupe.jsonl", "manifest.json"]
 
 
 def test_manifest_records_window_and_completion(tmp_path):

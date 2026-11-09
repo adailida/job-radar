@@ -55,9 +55,10 @@ class Manifest(Model):
 class FileCheckpoints:
     """Keeps one run's step outputs as files in the run's folder.
 
-    One JSON Lines file per step, plus `manifest.json` with the run's window,
-    each finished step and its count, and whether the run completed. Holds only
-    its folder and the run's window; the files are the state.
+    One JSON Lines file per step, numbered in the order the steps ran
+    (`01-fetch.jsonl`, `02-convert.jsonl`), plus `manifest.json` with the run's
+    window, each finished step and its count, and whether the run completed.
+    Holds only its folder and the run's window; the files are the state.
     """
 
     MANIFEST = "manifest.json"
@@ -74,20 +75,29 @@ class FileCheckpoints:
     def save(self, step: str, items: Sequence[Model]) -> None:
         """Write the step's items to its file and add its count to the manifest.
 
-        The manifest is updated last, so a step counts as finished only once
-        its file is complete.
+        A new step goes after the steps already saved; a step saved again keeps
+        its place, so its file keeps its number. The manifest is updated last,
+        so a step counts as finished only once its file is complete.
         """
-        lines = "".join(item.model_dump_json() + "\n" for item in items)
-        self._write(self._step_file(step), lines)
         manifest = self._manifest()
-        steps = tuple(count for count in manifest.steps if count.step != step)
-        self._save_manifest(
-            manifest.model_copy(update={"steps": (*steps, StepCount(step=step, count=len(items)))})
-        )
+        steps = list(manifest.steps)
+        names = [count.step for count in steps]
+        position = names.index(step) if step in names else len(steps)
+        lines = "".join(item.model_dump_json() + "\n" for item in items)
+        self._write(self._step_file(position, step), lines)
+        count = StepCount(step=step, count=len(items))
+        if step in names:
+            steps[position] = count
+        else:
+            steps.append(count)
+        self._save_manifest(manifest.model_copy(update={"steps": tuple(steps)}))
 
     def load[M: Model](self, step: str, kind: type[M]) -> list[M]:
         """Read the step's file back, one item per line."""
-        with self._step_file(step).open(encoding="utf-8") as lines:
+        names = [count.step for count in self.funnel()]
+        if step not in names:
+            raise KeyError(f"no saved output for the {step} step")
+        with self._step_file(names.index(step), step).open(encoding="utf-8") as lines:
             return [kind.model_validate_json(line) for line in lines]
 
     def complete(self) -> None:
@@ -97,8 +107,8 @@ class FileCheckpoints:
         """
         manifest = self._manifest()
         self._save_manifest(manifest.model_copy(update={"completed": True}))
-        for count in manifest.steps:
-            self._step_file(count.step).unlink(missing_ok=True)
+        for position, count in enumerate(manifest.steps):
+            self._step_file(position, count.step).unlink(missing_ok=True)
 
     def funnel(self) -> list[StepCount]:
         """Every finished step and its count, from the manifest."""
@@ -116,9 +126,9 @@ class FileCheckpoints:
         text = json.dumps(manifest.model_dump(mode="json"), indent=2) + "\n"
         self._write(self._folder / self.MANIFEST, text)
 
-    def _step_file(self, step: str) -> Path:
-        """The file a step's output is saved in."""
-        return self._folder / f"{step}.jsonl"
+    def _step_file(self, position: int, step: str) -> Path:
+        """The file a step's output is saved in, numbered by its place in the run from 01."""
+        return self._folder / f"{position + 1:02d}-{step}.jsonl"
 
     def _write(self, path: Path, text: str) -> None:
         """Write a whole file, so a crash never leaves half of one behind."""
