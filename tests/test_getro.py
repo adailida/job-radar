@@ -17,6 +17,7 @@ from job_radar.model import (
     Window,
     WorkMode,
 )
+from job_radar.places import PlaceCodes
 from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
 from job_radar.sources.http import BoardClient
 
@@ -32,7 +33,7 @@ def fixture_page() -> RawPage:
 
 
 def test_parse_reads_every_job_on_the_page():
-    postings = GetroParser().parse(fixture_page())
+    postings = GetroParser(PlaceCodes()).parse(fixture_page())
     assert [p.source_id for p in postings] == [
         "99005045",
         "98960032",
@@ -43,7 +44,7 @@ def test_parse_reads_every_job_on_the_page():
 
 
 def test_parse_maps_a_full_record():
-    first = GetroParser().parse(fixture_page())[0]
+    first = GetroParser(PlaceCodes()).parse(fixture_page())[0]
     assert first.key == "getro:99005045"
     assert (first.title, first.company) == ("Digital Strategy Project Manager", "Plan C")
     assert first.locations == (Location(text="Remote"),)
@@ -57,22 +58,33 @@ def test_parse_maps_a_full_record():
 
 
 def test_parse_handles_hourly_pay_other_currencies_and_no_pay():
-    postings = GetroParser().parse(fixture_page())
+    postings = GetroParser(PlaceCodes()).parse(fixture_page())
     assert (postings[1].salary.min, postings[1].salary.period) == (Decimal("28"), Period.HOUR)
     assert postings[2].salary.currency == "EUR"
     assert postings[3].salary is None and postings[4].salary is None
 
 
 def test_parse_handles_no_location_and_several():
-    postings = GetroParser().parse(fixture_page())
+    postings = GetroParser(PlaceCodes()).parse(fixture_page())
     assert postings[3].locations == ()
     assert len(postings[4].locations) == 6
+
+
+def test_parse_reads_place_codes():
+    postings = GetroParser(PlaceCodes()).parse(fixture_page())
+    assert [(p.country, p.region) for p in postings[0].locations] == [(None, None)]
+    assert [(p.country, p.region) for p in postings[2].locations] == [("GB", None)]
+    assert (postings[4].locations[-1].text, postings[4].locations[-1].region) == (
+        "Seattle, WA, USA",
+        "US-WA",
+    )
     assert postings[4].work_mode is WorkMode.ONSITE
 
 
 def test_parse_trims_titles():
     assert (
-        GetroParser().parse(fixture_page())[2].title == "Research Software Engineer [UK-2026-RSE-1"
+        GetroParser(PlaceCodes()).parse(fixture_page())[2].title
+        == "Research Software Engineer [UK-2026-RSE-1"
     )
 
 
@@ -203,7 +215,7 @@ def describer(pages: JobPages, sleeps: list[float]) -> GetroDescriber:
 
 
 def search_posting(index: int = 0):
-    return GetroParser().parse(fixture_page())[index]
+    return GetroParser(PlaceCodes()).parse(fixture_page())[index]
 
 
 def test_describe_gives_the_description_as_plain_text():
@@ -264,7 +276,7 @@ def test_live_fast_forward_search_still_parses():
     http = httpx.Client(headers={"User-Agent": "job-radar tests"}, timeout=20)
     today = date.today()
     pages = GetroSource("997", BoardClient(http)).fetch(SEARCH, Window(start=today, end=today))
-    postings = GetroParser().parse(pages[0])
+    postings = GetroParser(PlaceCodes()).parse(pages[0])
     assert postings, "the board returned no jobs"
     assert all(p.title and p.company and p.url for p in postings)
 
@@ -277,6 +289,6 @@ def test_live_fast_forward_job_still_describes():
     client = BoardClient(http)
     today = date.today()
     pages = GetroSource("997", client).fetch(SEARCH, Window(start=today, end=today))
-    postings = GetroParser().parse(pages[0])
+    postings = GetroParser(PlaceCodes()).parse(pages[0])
     text = GetroDescriber("997", client, HtmlText()).describe(postings[0])
     assert "<p>" not in text

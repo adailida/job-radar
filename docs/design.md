@@ -492,7 +492,7 @@ examples/
 
 ### Profile
 
-Built so far (task 10): `common` and `searches` with `roles` only; the other fields come with task 11, and the CV keeps its fixed names in `local/` (no `cv:` key).
+Built so far (task 11a): `common` and `searches` with `roles`, `exclude_titles`, `work_mode`, `locations` and `min_salary`, each of the last three with `if_missing`. `keywords` comes after the describe step (descriptions aren't there when the filter runs); `seniority` and `domains` with Classify. The CV keeps its fixed names in `local/` (no `cv:` key).
 
 ```yaml
 cv: cv.pdf
@@ -1078,4 +1078,9 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | The settings are read in `Cli.start`, before the factory | The factory reads them | `AppFactory` keeps taking `Settings`, so tests pass settings directly. A bad file still exits with 2 |
 | Fetch and filter take all the searches (`SearchCriteria`); a job is kept if any search matches | One search until task 11 | `profile.yaml` lists several searches; boards with server-side queries (JobsPipe) will need them all |
 | `--settings` and `--profile` flags wait until something needs another path | Add them now | The fixed files in `local/` are enough for one person |
+| Places get ISO codes when parsed, by `PlaceCodes` with `pycountry`; the country is the last part of the text, the region any other part naming a subdivision | A hand-made country table; codes at filter time; a geocoding service | Boards write places as free text in many forms (130 in two weeks of Fast Forward). `pycountry` knows every country and subdivision; a few aliases (UK, DRC) fill its gaps. Done once, every later stage sees codes |
+| A place counts as missing only when the posting names no country, or the wanted country without the wanted region | Any unreadable place makes the posting missing | "India; Remote" names a country, just not a wanted one; counting it missing kept five India-based jobs |
+| A salary meets the minimum when the top of its range does | The bottom; the middle | A range that reaches the minimum is worth a look; the LLM sees the range |
+| `JobMatcher` checks one job against one search and names the first criterion it fails | The checks inside `FilterStep` | One responsibility each; the dropped list (task 11b) needs the reason |
+| `keywords` move after the describe step | Describe every job before the filter | Descriptions take a request per job; the filter cuts 380 jobs to 10 first |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |

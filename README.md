@@ -36,7 +36,7 @@ Works now:
 
 A real run needs, in `local/` (never committed):
 
-- `profile.yaml`: what you're searching for (roles for now). Start from [examples/profile.example.yaml](examples/profile.example.yaml)
+- `profile.yaml`: what you're searching for: roles, excluded titles, work mode, places, minimum salary. Start from [examples/profile.example.yaml](examples/profile.example.yaml)
 - `cv.pdf` (or `cv.md`, `cv.txt`), and your ideal job in your own words in `preferences.md`
 - optionally `settings.yaml`, with only the settings you change; [examples/settings.example.yaml](examples/settings.example.yaml) lists every one with its default
 

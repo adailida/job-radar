@@ -1,11 +1,22 @@
 # What you're looking for. Copy to local/profile.yaml and change it.
-# A job is kept if it matches any search. A field set in a search
-# replaces the same field from `common`.
+#
+# A job is kept if it matches any search; it matches a search when it meets
+# every criterion set there. A criterion set in a search replaces the same one
+# from `common`. Titles compare as whole words in any case.
+#
+# work_mode, locations and min_salary can be written short, as a list (or an
+# amount), or in full with `if_missing: keep | drop`, which says what to do with
+# a job that doesn't say. Short means keep.
 
 common:                   # applies to every search
-  roles: [software engineer, data engineer]   # the title contains any, as whole words
+  roles: [software engineer, data engineer]   # the title contains any
+  exclude_titles: [intern, sales]             # the title contains none
+  min_salary: {amount: 120000, currency: USD, period: year, if_missing: keep}
 
 searches:
-  engineering: {}         # uses the common roles
-  leadership:
-    roles: [tech lead, engineering manager]
+  remote-us:
+    work_mode: [remote]                       # remote, hybrid or onsite
+    locations: {values: [US], if_missing: keep}   # ISO codes: US is anywhere in the US
+  nyc-office:
+    work_mode: [onsite, hybrid]
+    locations: [US-NY]                        # US-NY is New York state only

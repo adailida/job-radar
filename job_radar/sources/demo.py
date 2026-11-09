@@ -4,6 +4,7 @@ import json
 from datetime import date, timedelta
 
 from job_radar.model import Posting, RawPage, SearchCriteria, Window
+from job_radar.places import PlaceCodes
 
 
 class DemoSource:
@@ -78,10 +79,23 @@ class DemoSource:
 
 
 class DemoParser:
-    """Turns the demo board's pages into postings. Stateless."""
+    """Turns the demo board's pages into postings, with place codes like a real board.
+
+    Stateless: holds only how places are read.
+    """
 
     source = "demo"
 
+    def __init__(self, places: PlaceCodes) -> None:
+        """Keep how places are read into codes."""
+        self._places = places
+
     def parse(self, page: RawPage) -> list[Posting]:
         """Read the postings from one page of the demo board."""
-        return [Posting.model_validate(record) for record in json.loads(page.body)["jobs"]]
+        postings = [Posting.model_validate(record) for record in json.loads(page.body)["jobs"]]
+        return [
+            posting.model_copy(
+                update={"locations": tuple(self._places.locate(p) for p in posting.locations)}
+            )
+            for posting in postings
+        ]

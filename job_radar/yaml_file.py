@@ -52,7 +52,9 @@ class YamlFile:
                     what = "unknown key"
                 case "missing":
                     what = "required"
+                case "value_error":
+                    what = str(item["ctx"]["error"])
                 case _:
-                    what = item["msg"].lower()
+                    what = item["msg"][:1].lower() + item["msg"][1:]
             problems.append(f"{where}: {what}")
         return "; ".join(problems)
