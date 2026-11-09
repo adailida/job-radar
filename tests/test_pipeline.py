@@ -36,7 +36,7 @@ def test_failing_step_gives_run_failed_and_keeps_files(tmp_path):
     steps = [FakeStep("dedupe", [job("1")]), FakeStep("filter", error=ValueError("bad")), after]
     result = Pipeline(steps, FileCheckpoints(tmp_path, WINDOW)).run()
     assert result == RunFailed(step="filter", reason="bad")
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["dedupe.jsonl", "manifest.json"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["01-dedupe.jsonl", "manifest.json"]
     assert after.received is None
 
 

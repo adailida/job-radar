@@ -354,18 +354,18 @@ One folder per run, all plain text:
 output/                        (setting; default ./output, gitignored)
   runs/
     2026-11-05T10-00-00/       named by the start time, to the second
-      fetch.jsonl              raw pages, as the boards returned them
-      convert.jsonl            postings
-      dedupe.jsonl             jobs
-      filter.jsonl             jobs that match the search
-      describe.jsonl           the same jobs, with full descriptions
-      recommend.jsonl          the top N recommendations
-      report.jsonl             the Report: where it is, one-line summary
+      01-fetch.jsonl           raw pages, as the boards returned them
+      02-convert.jsonl         postings
+      03-dedupe.jsonl          jobs
+      04-filter.jsonl          jobs that match the search
+      05-describe.jsonl        the same jobs, with full descriptions
+      06-recommend.jsonl       the top N recommendations
+      07-report.jsonl          the Report: where it is, one-line summary
       manifest.json            schema version; each finished step and its count, in order
       report.md                this run's report
 ```
 
-- One JSON Lines file per step, named after the step: one record per line, easy to `grep` and hand to an LLM
+- One JSON Lines file per step, named after the step and numbered in the order the steps ran, so the folder lists them in run order: one record per line, easy to `grep` and hand to an LLM
 - After a successful run only `manifest.json` and `report.md` remain. A failed run keeps everything, ready to resume
 - The report sits in the run folder, so deleting a run deletes its report. The terminal prints its path
 - Later, outside any run folder: the CV analysis cache (section 10), the spend ledger if the API lacks monthly usage (section 12), and a lock for one run at a time
@@ -1061,4 +1061,5 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | The report reads counts through a read-only `RunStats`, from the manifest | A shared context all steps read and write; the report asks for each step by name | No hidden coupling between steps: a new step shows up in the funnel on its own, and the report can't save or delete |
 | On success, delete every checkpoint; keep the manifest and the report | Keep every step's output; keep chosen outputs such as the deduped jobs | Checkpoints are only for resuming, which a successful run no longer needs. Jobs kept for history get their own storage with task 13 |
 | Files for checkpoints; SQLite considered again at task 13 | SQLite now; MySQL | Plain text is a requirement and lets you read a step's output directly while building. SQLite wins once data spans runs (history, seen jobs, trends); `Checkpoints` is an interface, so switching is one class. A database server is too much for a local tool |
+| Step files are numbered by their place in the manifest, the order the steps finished in; a step saved again keeps its number | `AppFactory` passes the step order to `FileCheckpoints`; `Pipeline` passes each step's position | `ReportStep` needs the checkpoints before the step list exists, so the factory would have to write the order twice. Steps run in order, so the manifest already holds it, and nothing outside `FileCheckpoints` changes. Two digits keep the order past 9 steps |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |

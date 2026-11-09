@@ -2,7 +2,7 @@
 
 How the code is put together: which classes exist, what each one is responsible for, which others it knows, and where state lives. Every box is a real class, named as in the code. The reasons behind each part are in [design.md](design.md).
 
-**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs; until task 7b a real run ranks them by keyword against the demo profile. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
+**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs; until task 7b a real run ranks them by keyword against the demo profile. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
 
 The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, fetches their full descriptions, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, a made-up profile and keyword scoring in place of the LLM.
 
@@ -384,7 +384,7 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `Step` | Interface | The shape every step shares | models |
 | `Checkpoints` | Repository | Save and load each step's output for one run; record counts in the manifest; once the run succeeds, mark it completed and delete the outputs | models |
 | `RunStats` | Interface | Read-only: how many items each finished step produced | models |
-| `FileCheckpoints` | Implements both | One JSON Lines file per step, plus `manifest.json` (the window, each step's count, completed or not), in the run folder | its run folder |
+| `FileCheckpoints` | Implements both | One JSON Lines file per step, numbered in run order (`01-fetch.jsonl`), plus `manifest.json` (the window, each step's count, completed or not), in the run folder | its run folder |
 | `FetchStep` | Step | Fetch raw pages from every configured job board | `JobBoardSource` |
 | `JobBoardSource`, `GetroSource` | Adapter | Query one board's API, page by page; `GetroSource` stops at the page that reaches past the window | `BoardClient` |
 | `BoardClient` | | Send one board's requests at its pace (1s for Getro), retrying timeouts, server errors and rate limits | the board's API |
@@ -460,7 +460,7 @@ sequenceDiagram
             p->>s: run(data)
             s-->>p: output, passed on in memory as the next data
             p->>cp: save(step, output)
-            Note right of cp: writes step.jsonl, adds its count to manifest.json
+            Note right of cp: writes NN-step.jsonl, adds its count to manifest.json
         end
         alt every step succeeded
             p->>cp: complete()
@@ -544,7 +544,7 @@ Each run gets its own folder, named by its start time, to the second. Demo runs 
 
 ```
 output/runs/2026-11-05T10-00-00/
-    fetch.jsonl  convert.jsonl  dedupe.jsonl  filter.jsonl  describe.jsonl  recommend.jsonl  report.jsonl
+    01-fetch.jsonl  02-convert.jsonl  03-dedupe.jsonl  04-filter.jsonl  05-describe.jsonl  06-recommend.jsonl  07-report.jsonl
     manifest.json     # the window, each finished step and its count, completed or not
     report.md
 ```
