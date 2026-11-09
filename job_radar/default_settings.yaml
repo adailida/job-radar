@@ -13,6 +13,8 @@ llm:
   max_description_chars: 4000  # how much of each description the model sees
   classify_batch_size: 50 # jobs per prompt when labelling seniority, job type and domain
   classify_description_chars: 1000  # labelling reads only the start of each description
+  extract_batch_size: 10  # jobs per prompt when finding what matched jobs ask for
+  extract_description_chars: 8000  # how much of each description that reads
 
 # What the LLM labels each job with. The descriptions guide it; searches and the
 # report use the names. Change, add or remove entries freely.

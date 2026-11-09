@@ -13,6 +13,7 @@ from job_radar.classify import Classifier, LlmClassifier, TitleClassifier
 from job_radar.clock import Clock
 from job_radar.cost import CostCheck, FileSpendLog
 from job_radar.drop_log import FileDropLog
+from job_radar.extract import Extractor, KeywordExtractor, LlmExtractor
 from job_radar.history import FileRunHistory, RunFolders
 from job_radar.html_text import HtmlText
 from job_radar.llm import ClaudeCli
@@ -41,6 +42,7 @@ from job_radar.steps.classify import ClassifyStep
 from job_radar.steps.convert import ConvertStep
 from job_radar.steps.dedupe import DedupeStep, JobKey
 from job_radar.steps.describe import DescribeStep
+from job_radar.steps.extract import ExtractStep
 from job_radar.steps.fetch import FetchStep
 from job_radar.steps.filter import FilterStep
 from job_radar.steps.match import MatchStep
@@ -62,6 +64,7 @@ class Parts:
     describers: list[JobDescriber]  # only for boards whose postings come without descriptions
     criteria: SearchCriteria
     classifier: Classifier
+    extractor: Extractor
     ranker: JobRanker
     profile: CandidateProfile
 
@@ -130,7 +133,7 @@ class AppFactory:
         folder = runs / (run_id or self._clock.stamp())
         folder.mkdir(parents=True, exist_ok=run_id is not None)
         checkpoints = FileCheckpoints(
-            folder, window, not_covered, keep={MatchStep.name: FileSeenJobs.FILE}
+            folder, window, not_covered, keep={ExtractStep.name: FileSeenJobs.FILE}
         )
         normalizer = Normalizer()
         words = Words()
@@ -146,6 +149,7 @@ class AppFactory:
             DescribeStep({d.source: d for d in parts.describers}, self._prompter),
             ClassifyStep(parts.classifier, self._prompter),
             MatchStep(parts.criteria, JobMatcher(normalizer)),
+            ExtractStep(parts.extractor, self._prompter),
             RecommendTopJobsStep(
                 parts.ranker,
                 parts.profile,
@@ -205,6 +209,7 @@ class AppFactory:
             [],
             DEMO_SEARCHES,
             TitleClassifier(),
+            KeywordExtractor(),
             KeywordRanker(),
             DEMO_PROFILE,
         )
@@ -238,12 +243,16 @@ class AppFactory:
             self._settings.job_types,
             self._settings.domains,
         )
+        extractor = LlmExtractor(
+            llm, llm_settings.extract_batch_size, llm_settings.extract_description_chars
+        )
         return Parts(
             sources,
             parsers,
             [GetroDescriber(network, getro, HtmlText())],
             criteria,
             classifier,
+            extractor,
             ranker,
             profile,
         )
