@@ -1,7 +1,7 @@
 """Turning a report's content into text."""
 
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Protocol, runtime_checkable
 
 from job_radar.model import Period, Posting, Recommendation, ReportContent, Salary, WorkMode
@@ -65,10 +65,15 @@ class MarkdownRenderer:
         ]
 
     def _details(self, posting: Posting) -> str:
-        """Work mode, places, salary and posted date, each left out when unknown."""
+        """Work mode, places, salary and posted date, each left out when unknown.
+
+        A place that only repeats the work mode ("Remote") is left out too.
+        """
+        mode = self.WORK_MODES.get(posting.work_mode, "")
+        places = [loc.text for loc in posting.locations if loc.text.lower() != mode.lower()]
         parts = [
-            self.WORK_MODES.get(posting.work_mode, ""),
-            "; ".join(location.text for location in posting.locations),
+            mode,
+            "; ".join(places),
             self._salary(posting.salary) if posting.salary else "",
             f"Posted {self._day(posting.posted_at)}" if posting.posted_at else "",
         ]
@@ -90,9 +95,9 @@ class MarkdownRenderer:
 
     @staticmethod
     def _money(amount: Decimal, currency: str) -> str:
-        """An amount with its currency, thousands as "k": "$150k", "EUR 52.5k", "$45.50"."""
+        """An amount with its currency, whole thousands as "k": "$150k", "EUR 53k", "$45.50"."""
         if amount >= 1000:
-            number = f"{(amount / 1000).normalize():f}k"
+            number = f"{(amount / 1000).quantize(Decimal(1), ROUND_HALF_UP)}k"
         elif amount == amount.to_integral_value():
             number = f"{amount:.0f}"
         else:

@@ -122,7 +122,8 @@ def test_markdown_report_says_when_no_job_reached_the_minimum():
         (salary("150000", "180000"), "$150k to $180k a year"),
         (salary("150000", "150000"), "$150k a year"),
         (salary("120000", None), "From $120k a year"),
-        (salary(None, "95500"), "Up to $95.5k a year"),
+        (salary(None, "95500"), "Up to $96k a year"),
+        (salary("128880", "193320"), "$129k to $193k a year"),
         (salary("45", "60.5", period=Period.HOUR), "$45 to $60.50 an hour"),
         (salary("4000", "5000", currency="GBP", period=Period.MONTH), "GBP 4k to GBP 5k a month"),
     ],
@@ -131,6 +132,13 @@ def test_salary_in_words(pay, words):
     one = posting("1", "Engineer", salary=pay, work_mode=WorkMode.UNKNOWN, locations=())
     text = MarkdownRenderer().render(content(rec(50, "r", one)))
     assert f"   {words}.\n" in text
+
+
+def test_a_place_that_only_repeats_the_work_mode_is_left_out():
+    one = posting(
+        "1", "Engineer", locations=(Location(text="Remote"),), posted_at=date(2026, 11, 6)
+    )
+    assert "   Remote. Posted 6 Nov.\n" in MarkdownRenderer().render(content(rec(50, "r", one)))
 
 
 @pytest.mark.parametrize(
