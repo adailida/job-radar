@@ -7,6 +7,7 @@ import pytest
 from job_radar.checkpoints import Checkpoints, FileCheckpoints, RunStats
 from job_radar.cli import Cli
 from job_radar.clock import Clock
+from job_radar.drop_log import DropLog, FileDropLog
 from job_radar.factory import AppFactory
 from job_radar.history import FileRunHistory, RunHistory
 from job_radar.html_text import HtmlText
@@ -33,6 +34,7 @@ from job_radar.steps.fetch import FetchStep
 from job_radar.steps.filter import FilterStep
 from job_radar.steps.recommend import RecommendTopJobsStep
 from job_radar.steps.report import ReportStep
+from job_radar.words import Words
 
 FOLDER = Path("unused")
 SEARCH = SearchCriteria(searches=(Search(name="default", roles=("Software Engineer",)),))
@@ -50,10 +52,12 @@ def steps():
         FetchStep([GetroSource("board", CLIENT)], SEARCH, WINDOW),
         ConvertStep({"getro": GetroParser(PlaceCodes())}),
         DedupeStep(JobKey(Normalizer()), date(2026, 11, 5)),
-        FilterStep(SEARCH, WINDOW, JobMatcher(Normalizer())),
+        FilterStep(SEARCH, WINDOW, JobMatcher(Normalizer()), FileDropLog(FOLDER, Words())),
         DescribeStep({"getro": GetroDescriber("board", CLIENT, HtmlText())}, TerminalPrompter()),
         RecommendTopJobsStep(RANKER, PROFILE, top_n=10, min_score=40),
-        ReportStep(CHECKPOINTS, MarkdownRenderer(), FileReportWriter(FOLDER), "run", WINDOW, 40),
+        ReportStep(
+            CHECKPOINTS, MarkdownRenderer(Words()), FileReportWriter(FOLDER), "run", WINDOW, 40
+        ),
     ]
 
 
@@ -69,7 +73,8 @@ IMPLEMENTATIONS = [
     (KeywordRanker(), JobRanker),
     (LLM, Llm),
     (FileReportWriter(FOLDER), ReportWriter),
-    (MarkdownRenderer(), ReportRenderer),
+    (MarkdownRenderer(Words()), ReportRenderer),
+    (FileDropLog(FOLDER, Words()), DropLog),
     (RunSucceeded(location="report.md", summary=""), RunResult),
     (RunFailed(step="fetch", reason=""), RunResult),
     (RunCancelled(), RunResult),

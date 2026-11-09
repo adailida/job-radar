@@ -52,7 +52,7 @@ def test_demo_run_end_to_end(tmp_path, capsys):
     out = capsys.readouterr().out
     assert out == f"Run finished: 3 jobs recommended.\nReport: {folder / 'report.md'}\n"
     assert prompter.asked == ["Continue?"]
-    assert sorted(p.name for p in folder.iterdir()) == ["manifest.json", "report.md"]
+    assert sorted(p.name for p in folder.iterdir()) == ["dropped.md", "manifest.json", "report.md"]
     report = (folder / "report.md").read_text()
     assert "## Recommended jobs (3)" in report
     assert "1. **Senior Data Engineer**, Brightwater Trust (score 100)" in report
@@ -66,7 +66,11 @@ def test_each_run_writes_one_report_and_saves_its_run_data(tmp_path):
     folders = sorted((tmp_path / "demo").iterdir())
     assert [f.name for f in folders] == [FIRST_RUN, "2026-11-05T15-00-00"]
     for folder in folders:
-        assert sorted(p.name for p in folder.iterdir()) == ["manifest.json", "report.md"]
+        assert sorted(p.name for p in folder.iterdir()) == [
+            "dropped.md",
+            "manifest.json",
+            "report.md",
+        ]
         manifest = json.loads((folder / "manifest.json").read_text())
         assert manifest["completed"] is True
         assert [step["step"] for step in manifest["steps"]][-1] == "report"

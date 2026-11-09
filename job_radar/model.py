@@ -295,3 +295,20 @@ class ReportContent(Model):
     min_score: int  # the lowest score a recommended job may have
     recommendations: tuple[Recommendation, ...]  # best first
     funnel: tuple[StepCount, ...]  # each finished step and its count, in run order
+
+
+class DroppedJob(Model):
+    """A job the filter dropped, and why: for each search, the first criterion it failed."""
+
+    job: Job
+    reasons: tuple[str, ...]  # "remote-us: work mode", one per search, in the searches' order
+
+
+class DropList(Model):
+    """What the filter dropped in one run, for the user to check for misses."""
+
+    window: Window
+    checked: int  # jobs the filter looked at
+    kept: int
+    before_window: int  # dropped for being posted before the window; not listed
+    dropped: tuple[DroppedJob, ...]  # dropped by the searches

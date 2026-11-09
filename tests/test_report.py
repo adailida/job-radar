@@ -20,6 +20,7 @@ from job_radar.model import (
 )
 from job_radar.report_renderer import MarkdownRenderer
 from job_radar.steps.report import ReportStep
+from job_radar.words import Words
 
 GOLDEN = Path(__file__).parent / "fixtures" / "report" / "report.md"
 RUN = "2026-11-09T13-58-11"
@@ -107,11 +108,11 @@ def test_markdown_report_matches_the_golden_file():
             StepCount(step="recommend", count=3),
         ),
     )
-    assert MarkdownRenderer().render(report) == GOLDEN.read_text(encoding="utf-8")
+    assert MarkdownRenderer(Words()).render(report) == GOLDEN.read_text(encoding="utf-8")
 
 
 def test_markdown_report_says_when_no_job_reached_the_minimum():
-    text = MarkdownRenderer().render(content())
+    text = MarkdownRenderer(Words()).render(content())
     assert "## Recommended jobs (0)\n\nNo job scored 40 or more this run.\n" in text
     assert "recommended: 0\n" in text
 
@@ -130,7 +131,7 @@ def test_markdown_report_says_when_no_job_reached_the_minimum():
 )
 def test_salary_in_words(pay, words):
     one = posting("1", "Engineer", salary=pay, work_mode=WorkMode.UNKNOWN, locations=())
-    text = MarkdownRenderer().render(content(rec(50, "r", one)))
+    text = MarkdownRenderer(Words()).render(content(rec(50, "r", one)))
     assert f"   {words}.\n" in text
 
 
@@ -138,7 +139,9 @@ def test_a_place_that_only_repeats_the_work_mode_is_left_out():
     one = posting(
         "1", "Engineer", locations=(Location(text="Remote"),), posted_at=date(2026, 11, 6)
     )
-    assert "   Remote. Posted 6 Nov.\n" in MarkdownRenderer().render(content(rec(50, "r", one)))
+    assert "   Remote. Posted 6 Nov.\n" in MarkdownRenderer(Words()).render(
+        content(rec(50, "r", one))
+    )
 
 
 @pytest.mark.parametrize(
@@ -150,7 +153,7 @@ def test_a_place_that_only_repeats_the_work_mode_is_left_out():
 )
 def test_window_in_words(window, words):
     report = ReportContent(run=RUN, window=window, min_score=40, recommendations=(), funnel=())
-    assert f"Covers postings {words}\n" in MarkdownRenderer().render(report)
+    assert f"Covers postings {words}\n" in MarkdownRenderer(Words()).render(report)
 
 
 class KeepingRenderer:

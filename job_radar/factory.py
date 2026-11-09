@@ -9,6 +9,7 @@ import httpx
 from job_radar.app import JobRadarApp
 from job_radar.checkpoints import FileCheckpoints
 from job_radar.clock import Clock
+from job_radar.drop_log import FileDropLog
 from job_radar.history import FileRunHistory
 from job_radar.html_text import HtmlText
 from job_radar.llm import ClaudeCli
@@ -37,6 +38,7 @@ from job_radar.steps.recommend import RecommendTopJobsStep
 from job_radar.steps.report import ReportStep
 from job_radar.window import WindowPlanner
 from job_radar.window_chooser import WindowChooser
+from job_radar.words import Words
 
 
 @dataclass(frozen=True)
@@ -87,11 +89,12 @@ class AppFactory:
         folder.mkdir(parents=True)
         checkpoints = FileCheckpoints(folder, window)
         normalizer = Normalizer()
+        words = Words()
         steps: list[Step] = [
             FetchStep(parts.sources, parts.criteria, window),
             ConvertStep({parser.source: parser for parser in parts.parsers}),
             DedupeStep(JobKey(normalizer), window.end),
-            FilterStep(parts.criteria, window, JobMatcher(normalizer)),
+            FilterStep(parts.criteria, window, JobMatcher(normalizer), FileDropLog(folder, words)),
             DescribeStep({d.source: d for d in parts.describers}, self._prompter),
             RecommendTopJobsStep(
                 parts.ranker,
@@ -101,7 +104,7 @@ class AppFactory:
             ),
             ReportStep(
                 checkpoints,
-                MarkdownRenderer(),
+                MarkdownRenderer(words),
                 FileReportWriter(folder),
                 folder.name,
                 window,

@@ -363,10 +363,11 @@ output/                        (setting; default ./output, gitignored)
       07-report.jsonl          the Report: where it is, one-line summary
       manifest.json            schema version; each finished step and its count, in order
       report.md                this run's report
+      dropped.md               what the filter dropped, grouped by why
 ```
 
 - One JSON Lines file per step, named after the step and numbered in the order the steps ran, so the folder lists them in run order: one record per line, easy to `grep` and hand to an LLM
-- After a successful run only `manifest.json` and `report.md` remain. A failed run keeps everything, ready to resume
+- After a successful run only `manifest.json`, `report.md` and `dropped.md` remain. A failed run keeps everything, ready to resume
 - The report sits in the run folder, so deleting a run deletes its report. The terminal prints its path
 - Later, outside any run folder: the CV analysis cache (section 10), the spend ledger if the API lacks monthly usage (section 12), and a lock for one run at a time
 
@@ -1083,4 +1084,5 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | A salary meets the minimum when the top of its range does | The bottom; the middle | A range that reaches the minimum is worth a look; the LLM sees the range |
 | `JobMatcher` checks one job against one search and names the first criterion it fails | The checks inside `FilterStep` | One responsibility each; the dropped list (task 11b) needs the reason |
 | `keywords` move after the describe step | Describe every job before the filter | Descriptions take a request per job; the filter cuts 380 jobs to 10 first |
+| The filter hands the jobs it dropped, with why, to a `DropLog`, which writes `dropped.md` next to the report | The report rebuilds the list from the dedupe and filter outputs; dropped jobs in the report itself | The report would need other steps' outputs by name and the matcher again. The list is long (329 titles in two weeks), so it gets its own file; the report links it. Jobs dated before the window are only counted, since a board like Fast Forward sends everything it has |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |
