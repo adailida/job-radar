@@ -10,7 +10,7 @@ from job_radar.app import JobRadarApp
 from job_radar.checkpoints import FileCheckpoints
 from job_radar.clock import Clock
 from job_radar.drop_log import FileDropLog
-from job_radar.history import FileRunHistory
+from job_radar.history import FileRunHistory, RunFolders
 from job_radar.html_text import HtmlText
 from job_radar.llm import ClaudeCli
 from job_radar.matching import JobMatcher
@@ -23,6 +23,7 @@ from job_radar.prompter import Prompter
 from job_radar.ranking import JobRanker, KeywordRanker, LlmRanker
 from job_radar.report_renderer import MarkdownRenderer
 from job_radar.report_writer import FileReportWriter
+from job_radar.runs_command import RunsCommand
 from job_radar.searches import DEMO_SEARCHES, SearchesFile
 from job_radar.settings import Settings
 from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber
@@ -78,10 +79,19 @@ class AppFactory:
         Demo runs keep their own history, so they never move a real run's window.
         """
         parts = self._demo() if demo else self._real()
-        runs = self._settings.output / ("demo" if demo else "runs")
+        runs = self._runs(demo)
         planner = WindowPlanner(self._settings.lookback_days)
         chooser = WindowChooser(FileRunHistory(runs), planner, self._prompter, self._clock)
         return JobRadarApp(chooser, partial(self._pipeline, parts, runs))
+
+    def runs_command(self, demo: bool = False) -> RunsCommand:
+        """Build the `runs` and `delete` commands, for real runs or demo runs."""
+        runs = self._runs(demo)
+        return RunsCommand(FileRunHistory(runs), RunFolders(runs), self._prompter, Words())
+
+    def _runs(self, demo: bool) -> Path:
+        """The folder that holds one folder per run: demo runs keep their own."""
+        return self._settings.output / ("demo" if demo else "runs")
 
     def _pipeline(self, parts: Parts, runs: Path, window: Window) -> Pipeline:
         """Make the run's folder and build the steps in order, for the agreed window."""

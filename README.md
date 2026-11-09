@@ -33,6 +33,8 @@ Works now:
 
     job-radar run --demo   # a run on made-up postings: no network, no LLM, no CV needed
     job-radar run          # real Fast Forward jobs, ranked by Claude against your CV and preferences
+    job-radar runs         # list earlier runs, newest first
+    job-radar delete <id>  # delete a run after asking (Enter means no); --all for every run
 
 A real run needs, in `local/` (never committed):
 
@@ -44,11 +46,7 @@ and Claude Code logged in.
 
 Each run says which dates it fetches: the last 14 days on a first run, since the last run after that. On a first run, or after a long break, it asks before going ahead.
 
-Planned:
-
-    job-radar run          # one run; writes output/runs/<run-id>/report.md
-    job-radar runs         # list runs
-    job-radar delete <id>  # delete a run
+Each run writes `output/runs/<run-id>/report.md`, with `dropped.md` next to it. Add `--demo` to `runs` or `delete` for demo runs.
 
 ## Docs
 

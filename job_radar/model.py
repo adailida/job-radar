@@ -312,3 +312,12 @@ class DropList(Model):
     kept: int
     before_window: int  # dropped for being posted before the window; not listed
     dropped: tuple[DroppedJob, ...]  # dropped by the searches
+
+
+class RunSummary(Model):
+    """One run as the run history sees it: its id, window, whether it completed, its steps."""
+
+    id: str  # the run folder's name: when it started, e.g. "2026-11-09T14-52-11"
+    window: Window
+    completed: bool
+    steps: tuple[StepCount, ...]  # each finished step and its count, in run order

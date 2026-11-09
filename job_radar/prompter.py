@@ -12,8 +12,8 @@ class Prompter(Protocol):
         """Show a message."""
         ...
 
-    def confirm(self, question: str) -> bool:
-        """Ask a yes or no question; yes is the default."""
+    def confirm(self, question: str, default: bool = True) -> bool:
+        """Ask a yes or no question; Enter, or no input at all, gives the default."""
         ...
 
 
@@ -23,7 +23,7 @@ class TerminalPrompter:
     Stateless: holds only how it reads and writes lines.
     """
 
-    YES = ("y", "yes", "")
+    YES = ("y", "yes")
     NO = ("n", "no")
 
     def __init__(
@@ -37,13 +37,16 @@ class TerminalPrompter:
         """Print the message."""
         self._write(message)
 
-    def confirm(self, question: str) -> bool:
-        """Ask until the answer is y or n; Enter means y."""
+    def confirm(self, question: str, default: bool = True) -> bool:
+        """Ask until the answer is y or n; Enter, or no input to read, gives the default."""
+        hint = "y" if default else "n"
         while True:
             try:
-                answer = self._read(f"{question} (y/n, Enter for y) ").strip().lower()
+                answer = self._read(f"{question} (y/n, Enter for {hint}) ").strip().lower()
             except EOFError:
-                return True
+                return default
+            if answer == "":
+                return default
             if answer in self.YES:
                 return True
             if answer in self.NO:

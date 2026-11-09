@@ -138,3 +138,14 @@ def test_results_say_how_the_run_ended():
     assert failed.message().startswith("Run failed at step 'fetch': board down\n")
     assert RunCancelled().message() == "Cancelled. Nothing was fetched."
     assert (succeeded.exit_code(), failed.exit_code(), RunCancelled().exit_code()) == (0, 1, 0)
+
+
+def test_runs_lists_demo_runs_and_delete_removes_one(tmp_path, capsys):
+    demo_cli(tmp_path, FakePrompter(True)).main(["run", "--demo"])
+    capsys.readouterr()
+    listing = FakePrompter()
+    assert demo_cli(tmp_path, listing).main(["runs", "--demo"]) == 0
+    assert listing.told == [f"{FIRST_RUN}  completed  22 Oct to 5 Nov 2026  3 recommended"]
+    deleting = FakePrompter(True)
+    assert demo_cli(tmp_path, deleting).main(["delete", "--demo", FIRST_RUN]) == 0
+    assert list((tmp_path / "demo").iterdir()) == []
