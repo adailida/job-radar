@@ -137,19 +137,6 @@ class Classification(Model):
     prompt_version: str  # prompt that produced the labels
 
 
-class Job(Model):
-    """One real opening, after postings that describe it are merged across sources.
-
-    Its id stays the same in every run that finds the opening again, from any source.
-    """
-
-    id: str
-    keys: tuple[str, ...]  # identity keys that tie postings to this job
-    postings: tuple[Posting, ...]  # primary first; the report shows its fields
-    first_seen: date  # date of the run that first saw it
-    classification: Classification | None = None  # labels, once classified; None when it failed
-
-
 class Requirement(Model):
     """One thing a posting asks for: a skill, tool, certification or years of experience."""
 
@@ -164,6 +151,20 @@ class Extraction(Model):
     job_id: str
     requirements: tuple[Requirement, ...]
     prompt_version: str  # prompt that produced the requirements
+
+
+class Job(Model):
+    """One real opening, after postings that describe it are merged across sources.
+
+    Its id stays the same in every run that finds the opening again, from any source.
+    """
+
+    id: str
+    keys: tuple[str, ...]  # identity keys that tie postings to this job
+    postings: tuple[Posting, ...]  # primary first; the report shows its fields
+    first_seen: date  # date of the run that first saw it
+    classification: Classification | None = None  # labels, once classified; None when it failed
+    extraction: Extraction | None = None  # requirements, once extracted; None when it failed
 
 
 class Match(Model):

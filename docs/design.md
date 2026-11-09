@@ -370,12 +370,13 @@ output/                        (setting; default ./output, gitignored)
       06-describe.jsonl        the same jobs, with full descriptions
       07-classify.jsonl        the same jobs, with labels: seniority, job type, domain, sector
       08-match.jsonl           jobs that meet every criterion of a search, labels included
-      09-recommend.jsonl       the top N recommendations at or above the minimum score
-      10-report.jsonl          the Report: where it is, one-line summary
+      09-extract.jsonl         the same jobs, with their requirements
+      10-recommend.jsonl       the top N recommendations at or above the minimum score
+      11-report.jsonl          the Report: where it is, one-line summary
       manifest.json            schema version; the window and any days a long break left out; each finished step and its count, in order
       report.md                this run's report
       dropped.md               what the filter dropped, grouped by why
-      jobs.jsonl               after success: the match step's output, with labels, kept so later runs know these jobs
+      jobs.jsonl               after success: the extract step's output (matched jobs, labels, requirements), kept so later runs know these jobs
       spend.jsonl              what each paid source spent: estimate, decision, credits used and left
 ```
 
@@ -647,7 +648,7 @@ Each run records how many merges came from each kind of key, and `jobs.jsonl` ke
 
 ### Two passes
 
-Built so far (task 18a): Classify, after describe (it reads the start of each description, which Fast Forward only has after describe), then a match step for `seniority` and `domains`. A job the LLM can't label keeps no labels, so `if_missing` decides. Extract comes with task 18b.
+Built so far (task 18a): Classify, after describe (it reads the start of each description, which Fast Forward only has after describe), then a match step for `seniority` and `domains`. A job the LLM can't label keeps no labels, so `if_missing` decides. Built (task 18b): Extract, right after match, on every matched job (not only the recommended ones): 10 jobs a prompt, descriptions up to 8,000 characters, the same retry and split. Names are only trimmed here; merging variants ("Python 3", "python") is left to where requirements are counted (task 21).
 
 
 ```
@@ -1121,5 +1122,6 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Enter at a cost question means skip the source | Go ahead; stop | Skipping spends nothing and still gives a report from the free sources |
 | Order: filter, describe, classify, match, recommend | Classify before describe | Labels need the description; Fast Forward gives it only after describe. Describing jobs that match then drops costs free requests only |
 | Match is its own step after classify, reusing `JobMatcher`; the filter skips seniority and domain until a job has labels | One filter after classify | The cheap filter still cuts most jobs before any LLM call; one matcher keeps the rules in one place |
-| The kept `jobs.jsonl` is the match step's output | The filter's output | Seen jobs are matched jobs (section 5), and they now carry labels for trends |
+| The kept `jobs.jsonl` is the extract step's output | The match step's output; the filter's | Seen jobs are matched jobs (section 5); the extract step keeps exactly those, and adds requirements for task 21 |
+| Extract runs before recommend, on every matched job | Only on recommended jobs | "What employers ask for" describes the market for your searches, not the few that fit your CV best |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |

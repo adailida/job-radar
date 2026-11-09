@@ -18,6 +18,8 @@ class LlmSettings(Model):
     max_description_chars: int = Field(ge=0)  # how much of each description it sees
     classify_batch_size: int = Field(ge=1)  # jobs per prompt when labelling
     classify_description_chars: int = Field(ge=0)  # labelling reads only the start
+    extract_batch_size: int = Field(ge=1)  # jobs per prompt when finding requirements
+    extract_description_chars: int = Field(ge=0)  # how much of each description that reads
 
 
 class RecommendSettings(Model):
