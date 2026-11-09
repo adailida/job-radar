@@ -44,6 +44,8 @@ A real run needs, in `local/` (never committed):
 
 and Claude Code logged in.
 
+A run shows only jobs no earlier run found (set `new_only: false` in `settings.yaml` to see them all again). Deleting a run makes its jobs new again.
+
 If a run fails, run the same command again: it offers to resume after the last step that finished.
 
 Each run says which dates it fetches: the last 14 days on a first run, since the last run after that. On a first run, or after a long break, it asks before going ahead.

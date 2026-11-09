@@ -44,9 +44,9 @@ class Settings(Model):
     """
 
     output: Path = Path("output")  # run folders go under output/runs/, demo runs under output/demo/
-    lookback_days: int = Field(
-        14, ge=1
-    )  # how far back a run may reach: a first run, or a long break
+    # how far back a run may reach: a first run, or after a long break
+    lookback_days: int = Field(14, ge=1)
+    new_only: bool = True  # drop jobs an earlier run already found
     llm: LlmSettings = LlmSettings()
     recommend: RecommendSettings = RecommendSettings()
     sources: SourcesSettings = SourcesSettings()

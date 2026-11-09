@@ -2,7 +2,7 @@
 
 import json
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Literal, Protocol, runtime_checkable
 
@@ -65,11 +65,22 @@ class FileCheckpoints:
 
     MANIFEST = "manifest.json"
 
-    def __init__(self, folder: Path, window: Window, not_covered: Window | None = None) -> None:
-        """Keep the run folder, the window the run covers, and the days a long break left out."""
+    def __init__(
+        self,
+        folder: Path,
+        window: Window,
+        not_covered: Window | None = None,
+        keep: Mapping[str, str] | None = None,
+    ) -> None:
+        """Keep the run folder, its window, the days a long break left out, and what to keep.
+
+        `keep` names steps whose output stays after the run completes, and the
+        file it stays as: `{"filter": "jobs.jsonl"}`.
+        """
         self._folder = folder
         self._window = window
         self._not_covered = not_covered
+        self._keep = dict(keep or {})
 
     def has(self, step: str) -> bool:
         """Whether the manifest lists this step as finished."""
@@ -106,9 +117,13 @@ class FileCheckpoints:
     def complete(self) -> None:
         """Mark the run completed in the manifest, then delete every step file.
 
-        The manifest and the report stay.
+        The manifest and the report stay, and so does the output of each step
+        to keep, under its kept name.
         """
         manifest = self._manifest()
+        for position, count in enumerate(manifest.steps):
+            if count.step in self._keep:
+                self._step_file(position, count.step).replace(self._folder / self._keep[count.step])
         self._save_manifest(manifest.model_copy(update={"completed": True}))
         for position, count in enumerate(manifest.steps):
             self._step_file(position, count.step).unlink(missing_ok=True)

@@ -27,6 +27,7 @@ from job_radar.report_writer import FileReportWriter
 from job_radar.resume import ResumeOffer
 from job_radar.runs_command import RunsCommand
 from job_radar.searches import DEMO_SEARCHES, SearchesFile
+from job_radar.seen import FileSeenJobs
 from job_radar.settings import Settings
 from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber
 from job_radar.sources.demo import DemoParser, DemoSource
@@ -37,6 +38,7 @@ from job_radar.steps.dedupe import DedupeStep, JobKey
 from job_radar.steps.describe import DescribeStep
 from job_radar.steps.fetch import FetchStep
 from job_radar.steps.filter import FilterStep
+from job_radar.steps.new_jobs_filter import NewJobsFilterStep
 from job_radar.steps.recommend import RecommendTopJobsStep
 from job_radar.steps.report import ReportStep
 from job_radar.window import WindowPlanner
@@ -108,13 +110,18 @@ class AppFactory:
         """Build the steps in order for the run's window, in a new folder or the resumed one."""
         folder = runs / (run_id or self._clock.stamp())
         folder.mkdir(parents=True, exist_ok=run_id is not None)
-        checkpoints = FileCheckpoints(folder, window, not_covered)
+        checkpoints = FileCheckpoints(
+            folder, window, not_covered, keep={FilterStep.name: FileSeenJobs.FILE}
+        )
         normalizer = Normalizer()
         words = Words()
         steps: list[Step] = [
             FetchStep(parts.sources, parts.criteria, window),
             ConvertStep({parser.source: parser for parser in parts.parsers}),
             DedupeStep(JobKey(normalizer, AtsLinks()), window.end),
+            NewJobsFilterStep(
+                FileSeenJobs(FileRunHistory(runs), runs), window.end, self._settings.new_only
+            ),
             FilterStep(parts.criteria, window, JobMatcher(normalizer), FileDropLog(folder, words)),
             DescribeStep({d.source: d for d in parts.describers}, self._prompter),
             RecommendTopJobsStep(
