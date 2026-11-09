@@ -4,6 +4,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from job_radar.ats import AtsLinks
 from job_radar.checkpoints import Checkpoints, FileCheckpoints, RunStats
 from job_radar.cli import Cli
 from job_radar.clock import Clock
@@ -51,7 +52,7 @@ def steps():
     return [
         FetchStep([GetroSource("board", CLIENT)], SEARCH, WINDOW),
         ConvertStep({"getro": GetroParser(PlaceCodes())}),
-        DedupeStep(JobKey(Normalizer()), date(2026, 11, 5)),
+        DedupeStep(JobKey(Normalizer(), AtsLinks()), date(2026, 11, 5)),
         FilterStep(SEARCH, WINDOW, JobMatcher(Normalizer()), FileDropLog(FOLDER, Words())),
         DescribeStep({"getro": GetroDescriber("board", CLIENT, HtmlText())}, TerminalPrompter()),
         RecommendTopJobsStep(RANKER, PROFILE, top_n=10, min_score=40),

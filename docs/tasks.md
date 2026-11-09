@@ -112,7 +112,8 @@ One line each for now; each task gets its detail, against the class names in arc
 - [x] **13a. Run history:** `job-radar runs` lists runs; `job-radar delete <id>...` and `--all` delete after asking, Enter meaning no; `--demo` for demo runs
 - [x] **13b. Resume:** when the newest run failed, `job-radar run` offers to resume it; `Pipeline` skips the finished steps and loads the last saved output (moved from task 4 on Nov 5: nothing can choose a failed run before this task)
 - [x] **14. Time window in the report:** when the lookback cap cut a gap, the report says so and which dates it covers (the window itself is task 4)
-- [ ] **15. Smarter dedupe:** ATS and fuzzy keys; across runs, so only new jobs by default
+- [x] **15a. Stronger keys:** an ATS key from Greenhouse, Lever, Ashby and Workable links, a fuzzy key on company, title and country; postings sharing any key merge, transitively
+- [ ] **15b. Only new jobs:** each completed run keeps the jobs its filter passed (`jobs.jsonl`); `NewJobsFilterStep` (`new_jobs_filter`) after dedupe drops jobs an earlier completed run kept (fuzzy keys within 60 days, ATS keys always); `new_only` setting
 - [ ] **16. JobsPipe:** `JobsPipeSource` and `JobsPipeParser`, fixtures recorded with a few credits
 - [ ] **17. Cost checks:** estimate, limits, ask before spending, monthly spend
 - [ ] **18. Classify and extract:** seniority, domain and requirements from the LLM, cached
