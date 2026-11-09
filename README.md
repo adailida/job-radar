@@ -48,6 +48,8 @@ JobsPipe (paid, off by default) adds LinkedIn, Indeed and employers' own ATS. Pu
 
 A run shows only jobs no earlier run found (set `new_only: false` in `settings.yaml` to see them all again). Deleting a run makes its jobs new again.
 
+If your Claude usage limit runs out mid-run, the run asks whether to finish with what's done and carry the rest over to the next run, or stop and resume after the reset.
+
 If a run fails, run the same command again: it offers to resume after the last step that finished.
 
 Each run says which dates it fetches: the last 14 days on a first run, since the last run after that. On a first run, or after a long break, it asks before going ahead.

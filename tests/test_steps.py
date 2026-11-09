@@ -1,7 +1,7 @@
 from datetime import date
 
 import pytest
-from fakes import MemorySpendLog, job, posting
+from fakes import MemorySpendLog, guard, job, posting
 
 from job_radar.model import (
     CandidateProfile,
@@ -75,17 +75,20 @@ def test_convert_fails_on_a_board_without_parser():
 def test_recommend_keeps_top_n_best_first():
     jobs = [job("1"), job("2"), job("3"), job("4")]
     ranker = ScoreByIdRanker({"demo:1": 40, "demo:2": 90, "demo:3": 70, "demo:4": 70})
-    top = RecommendTopJobsStep(ranker, PROFILE, top_n=3, min_score=0).run(jobs)
+    top = RecommendTopJobsStep(ranker, PROFILE, top_n=3, min_score=0, guard=guard()).run(jobs)
     assert [(r.job.id, r.score) for r in top] == [("demo:2", 90), ("demo:3", 70), ("demo:4", 70)]
 
 
 def test_recommend_leaves_out_jobs_below_the_minimum_score():
     jobs = [job("1"), job("2"), job("3")]
     ranker = ScoreByIdRanker({"demo:1": 39, "demo:2": 40, "demo:3": 85})
-    top = RecommendTopJobsStep(ranker, PROFILE, top_n=10, min_score=40).run(jobs)
+    top = RecommendTopJobsStep(ranker, PROFILE, top_n=10, min_score=40, guard=guard()).run(jobs)
     assert [(r.job.id, r.score) for r in top] == [("demo:3", 85), ("demo:2", 40)]
 
 
 def test_recommend_gives_nothing_when_no_job_reaches_the_minimum():
     ranker = ScoreByIdRanker({"demo:1": 18})
-    assert RecommendTopJobsStep(ranker, PROFILE, top_n=10, min_score=40).run([job("1")]) == []
+    assert (
+        RecommendTopJobsStep(ranker, PROFILE, top_n=10, min_score=40, guard=guard()).run([job("1")])
+        == []
+    )

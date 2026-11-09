@@ -1,4 +1,4 @@
-"""Step 8: keep the jobs that match a search on every criterion, labels included."""
+"""Step 9: keep the jobs that match a search on every criterion, labels included."""
 
 from job_radar.matching import JobMatcher
 from job_radar.model import Job, SearchCriteria

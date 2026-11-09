@@ -5,8 +5,9 @@ from typing import Protocol, runtime_checkable
 
 from pydantic import ValidationError
 
-from job_radar.llm import Llm
+from job_radar.llm import Llm, UsageLimit
 from job_radar.model import Classification, Job, Model, Seniority
+from job_radar.usage import UsageLimitReached
 
 
 @runtime_checkable
@@ -82,11 +83,18 @@ class LlmClassifier:
         self._domains = dict(domains)
 
     def classify(self, jobs: list[Job]) -> dict[str, Classification]:
-        """Labels for each job, a batch at a time; jobs that still fail are left out."""
+        """Labels for each job, a batch at a time; jobs that still fail are left out.
+
+        When the usage limit stops it, raises `UsageLimitReached` with the
+        labels so far and the jobs from the unfinished batch on.
+        """
         size = self._batch_size
         found: dict[str, Classification] = {}
         for start in range(0, len(jobs), size):
-            found |= self._batch(jobs[start : start + size])
+            try:
+                found |= self._batch(jobs[start : start + size])
+            except UsageLimit:
+                raise UsageLimitReached(found, jobs[start:]) from None
         return found
 
     def _batch(self, jobs: list[Job]) -> dict[str, Classification]:

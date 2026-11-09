@@ -118,7 +118,7 @@ One line each for now; each task gets its detail, against the class names in arc
 - [x] **17. Cost checks:** estimate, limits, ask before spending, monthly spend; the estimate and the monthly spend come from free JobsPipe calls; `spend.jsonl` and a report line per paid source
 - [x] **18a. Classify and match:** seniority, job type, domain and sector from the LLM (50 jobs a prompt); `seniority` and `domains` criteria; job types and domains in settings
 - [x] **18b. Extract:** requirements (skills, tools, certifications, years) from matched jobs, 10 a prompt, kept with the job
-- [ ] **19. Usage-limit carry-over:** jobs the LLM couldn't reach move to the next run
+- [x] **19. Usage-limit carry-over:** jobs the LLM couldn't reach move to the next run: `UsageLimit` from `claude`, one `UsageLimitGuard` (finish and carry over, or stop), `pending.jsonl`, a `carried_over` step after the filter, a report line
 - [ ] **20. Trends:** periods, coverage, comparisons, low-sample notes
 - [ ] **21. What employers ask for:** requirement shares over a rolling window
 - [ ] **22. Experience to gain:** CV against requirements, with reasons and suggestions

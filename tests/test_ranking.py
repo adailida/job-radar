@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-from fakes import MemoryDropLog, job, posting
+from fakes import MemoryDropLog, guard, job, posting
 
 from job_radar.matching import JobMatcher
 from job_radar.model import CandidateProfile, Job, Period, Salary, Search, SearchCriteria, Window
@@ -149,6 +149,8 @@ def test_only_filtered_postings_go_to_the_llm_in_batches():
     ]
     kept = FilterStep(search, window, JobMatcher(Normalizer()), MemoryDropLog()).run(found)
     llm = FakeLlm()
-    RecommendTopJobsStep(LlmRanker(llm, batch_size=2), PROFILE, top_n=10, min_score=0).run(kept)
+    RecommendTopJobsStep(
+        LlmRanker(llm, batch_size=2), PROFILE, top_n=10, min_score=0, guard=guard()
+    ).run(kept)
     titles = [re.findall(r"Title: (.+)", prompt) for prompt in llm.prompts]
     assert titles == [["Data Engineer", "Senior Data Engineer"], ["Data Engineer II"]]

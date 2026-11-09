@@ -36,9 +36,11 @@ from job_radar.steps.fetch import FetchStep
 from job_radar.steps.filter import FilterStep
 from job_radar.steps.recommend import RecommendTopJobsStep
 from job_radar.steps.report import ReportStep
+from job_radar.usage import FilePendingLog, UsageLimitGuard
 from job_radar.words import Words
 
 FOLDER = Path("unused")
+GUARD = UsageLimitGuard(TerminalPrompter(), FilePendingLog(FOLDER))
 SEARCH = SearchCriteria(searches=(Search(name="default", roles=("Software Engineer",)),))
 WINDOW = Window(start=date(2026, 10, 29), end=date(2026, 11, 5))
 CHECKPOINTS = FileCheckpoints(FOLDER, WINDOW)
@@ -56,12 +58,13 @@ def steps():
         DedupeStep(JobKey(Normalizer(), AtsLinks()), date(2026, 11, 5)),
         FilterStep(SEARCH, WINDOW, JobMatcher(Normalizer()), FileDropLog(FOLDER, Words())),
         DescribeStep({"getro": GetroDescriber("board", CLIENT, HtmlText())}, TerminalPrompter()),
-        RecommendTopJobsStep(RANKER, PROFILE, top_n=10, min_score=40),
+        RecommendTopJobsStep(RANKER, PROFILE, top_n=10, min_score=40, guard=GUARD),
         ReportStep(
             CHECKPOINTS,
             MarkdownRenderer(Words()),
             FileReportWriter(FOLDER),
             FileSpendLog(FOLDER),
+            FilePendingLog(FOLDER),
             "run",
             WINDOW,
             None,

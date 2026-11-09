@@ -156,3 +156,27 @@ class NoCost:
     def check(self, window):
         """No approvals."""
         return []
+
+
+class MemoryPendingLog:
+    """A pending log that keeps carried-over jobs in memory."""
+
+    def __init__(self, *jobs):
+        """Start with these jobs."""
+        self.kept = list(jobs)
+
+    def add(self, jobs) -> None:
+        """Keep the jobs, each once by id."""
+        known = {job.id for job in self.kept}
+        self.kept += [job for job in jobs if job.id not in known]
+
+    def jobs(self):
+        """The jobs kept."""
+        return list(self.kept)
+
+
+def guard(*answers: str):
+    """A usage-limit guard with a user giving these answers and an in-memory pending log."""
+    from job_radar.usage import UsageLimitGuard
+
+    return UsageLimitGuard(FakePrompter(*answers), MemoryPendingLog())

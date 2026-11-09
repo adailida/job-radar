@@ -1,6 +1,7 @@
 """Language models, behind one small interface."""
 
 import json
+import re
 import subprocess
 import tempfile
 from collections.abc import Callable
@@ -9,6 +10,10 @@ from typing import Protocol, runtime_checkable
 
 class LlmError(Exception):
     """The model gave no answer: not installed, not logged in, timed out, or failed."""
+
+
+class UsageLimit(LlmError):
+    """The subscription's usage limit is reached: no more answers until it resets."""
 
 
 @runtime_checkable
@@ -34,6 +39,10 @@ class ClaudeCli:
     """
 
     COMMAND = "claude"
+    # TODO(task 26): confirm the pattern against a real limit answer.
+    USAGE_LIMIT = re.compile(
+        r"usage limit|limit reached|rate limit|quota|out of (extra )?usage", re.IGNORECASE
+    )
 
     def __init__(
         self,
@@ -99,6 +108,11 @@ class ClaudeCli:
             except subprocess.TimeoutExpired:
                 raise LlmError(f"no answer from `{self.COMMAND}` in {self._timeout:g}s") from None
 
+    def _limit(self, detail: str) -> None:
+        """Raise `UsageLimit` when an error says the subscription's usage limit is reached."""
+        if self.USAGE_LIMIT.search(detail):
+            raise UsageLimit(f"`{self.COMMAND}` usage limit reached: {detail[:300]}")
+
     def _answer(self, done: subprocess.CompletedProcess, structured: bool) -> str:
         """The answer from the command's JSON output, or an error saying why there is none.
 
@@ -109,9 +123,11 @@ class ClaudeCli:
             output = json.loads(done.stdout)
         except json.JSONDecodeError:
             detail = (done.stderr or done.stdout).strip()[:300]
+            self._limit(detail)
             raise LlmError(f"`{self.COMMAND}` failed (exit {done.returncode}): {detail}") from None
         if output.get("is_error") or done.returncode != 0:
             detail = str(output.get("result") or output.get("subtype") or "unknown error")
+            self._limit(detail)
             raise LlmError(f"`{self.COMMAND}` failed: {detail[:300]}")
         if structured and output.get("structured_output") is not None:
             return json.dumps(output["structured_output"])

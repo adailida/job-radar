@@ -1,4 +1,4 @@
-"""Step 6: fetch full descriptions for the jobs kept."""
+"""Step 7: fetch full descriptions for the jobs kept."""
 
 from collections.abc import Mapping
 
