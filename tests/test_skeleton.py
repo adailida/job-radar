@@ -23,7 +23,7 @@ from job_radar.ranking import JobRanker, KeywordRanker, LlmRanker
 from job_radar.report_renderer import MarkdownRenderer, ReportRenderer
 from job_radar.report_writer import FileReportWriter, ReportWriter
 from job_radar.result import RunCancelled, RunFailed, RunResult, RunSucceeded
-from job_radar.settings import Settings
+from job_radar.settings import SettingsFile
 from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber
 from job_radar.sources.demo import DemoParser, DemoSource
 from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
@@ -110,7 +110,7 @@ def test_step_names_are_unique():
 
 
 def test_cli_still_shows_version(capsys):
-    cli = Cli(AppFactory(Settings(), Path("local"), Clock(), TerminalPrompter()))
+    cli = Cli(AppFactory(SettingsFile.defaults(), Path("local"), Clock(), TerminalPrompter(), {}))
     with pytest.raises(SystemExit) as exit_:
         cli.main(["--version"])
     assert exit_.value.code == 0

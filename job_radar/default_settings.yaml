@@ -1,0 +1,30 @@
+# job-radar's default settings: every setting there is, with its default.
+# The app reads this file first. Put only what you change in local/settings.yaml:
+# it is merged over this one, at any depth. Unknown keys there are errors.
+
+output: output            # run folders go under output/runs/, demo runs under output/demo/
+lookback_days: 14         # how far back a run may reach: a first run, or after a long break
+new_only: true            # drop jobs an earlier run already found; false ranks them again
+
+llm:
+  model: haiku            # the Claude model that scores jobs
+  timeout_seconds: 120    # how long to wait for one answer
+  batch_size: 20          # jobs per prompt
+  max_description_chars: 4000  # how much of each description the model sees
+
+recommend:
+  top_n: 10               # at most this many jobs in the report
+  min_score: 40           # 0 to 100; a lower score is a poor fit and isn't recommended
+
+sources:
+  getro:
+    network: "997"        # the Getro job board to fetch: 997 is Fast Forward
+  jobspipe:               # a paid API: LinkedIn, Indeed and employers' own ATS
+    enabled: false        # on needs JOBSPIPE_API_KEY in the environment or .env
+    api_key_env: JOBSPIPE_API_KEY
+    max_jobs_per_run: 25  # one credit a job, so also the most a run spends
+    delay_seconds: 1.0    # between requests
+    match_if_missing: true  # also ask for jobs that don't say; false costs fewer credits
+    filters: {}           # JobsPipe-only filters, sent as written, e.g.
+                          #   occupation_code_or: ["25"], employer_type_not: [agency, broker],
+                          #   max_ghost_score: 40, description_phrase_or: [nonprofit organization]

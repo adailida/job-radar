@@ -1,0 +1,863 @@
+{
+  "metadata": {
+    "total_results": null,
+    "truncated_results": 1,
+    "total_companies": null,
+    "truncated_companies": 0,
+    "next_cursor": null,
+    "next_delta_cursor": null,
+    "credits_charged": 5,
+    "jobs_already_paid": 0,
+    "credits_remaining": 862,
+    "credits_allowance": 1000
+  },
+  "data": [
+    {
+      "id": "iaziqy.fa.ocs:304059",
+      "job_title": "Staff Software Engineer, Agentic",
+      "url": "https://iaziqy.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/304059",
+      "date_posted": "2026-11-09T18:27:17+00:00",
+      "has_blurred_data": false,
+      "company": "Uber",
+      "final_url": null,
+      "source_url": "https://iaziqy.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/304059",
+      "location": "San Francisco, CA, United States",
+      "short_location": "San Francisco, CA, United States",
+      "long_location": "San Francisco, CA, United States",
+      "state_code": "CA",
+      "latitude": 37.77493,
+      "longitude": -122.41942,
+      "coordinates_source": "city_centroid",
+      "postal_code": null,
+      "remote": null,
+      "hybrid": null,
+      "salary_string": "$232,000 per year - USD $258,000",
+      "min_annual_salary": 232000,
+      "min_annual_salary_usd": 232000,
+      "max_annual_salary": 258000,
+      "max_annual_salary_usd": 258000,
+      "avg_annual_salary_usd": 245000,
+      "salary_currency": "USD",
+      "countries": [
+        "United States"
+      ],
+      "country": "United States",
+      "country_codes": [
+        "US"
+      ],
+      "country_code": "US",
+      "cities": [
+        "San Francisco"
+      ],
+      "continents": [
+        "North America"
+      ],
+      "seniority": "director",
+      "discovered_at": "2026-11-09T18:41:15+00:00",
+      "status": "active",
+      "closed_at": null,
+      "closed_reason": null,
+      "company_domain": "uber.com",
+      "hiring_team": [],
+      "reposted": false,
+      "date_reposted": null,
+      "employment_statuses": [
+        "full_time"
+      ],
+      "easy_apply": null,
+      "technology_slugs": [
+        "c++",
+        "java",
+        "python"
+      ],
+      "keyword_slugs": [
+        "agentic-ai",
+        "lean-manufacturing",
+        "etl",
+        "design-systems",
+        "observability",
+        "compliance",
+        "c++",
+        "java",
+        "python",
+        "system-design",
+        "incident-response",
+        "llm",
+        "rag",
+        "ai-safety",
+        "sre"
+      ],
+      "occupation_code": "2512",
+      "occupation_label": "Software Developers",
+      "employer_type": "employer",
+      "isic_division": "49",
+      "isic_division_label": "Land transport and transport via pipelines",
+      "description": "About the Role\n\nAgentic Pods is pioneering a new way for Engineering to partner with teams across Uber and transform how work gets done through AI. Our engineers embed directly with operational teams to understand complex workflows, reimagine what's possible with agentic AI, and build production-grade systems that turn those opportunities into reality.\n\nWe are looking for an Agentic Software Engineer to design, build, and operate intelligent, reliable agentic systems that transform complex operational workflows at scale.\n\nThis role sits at the intersection of backend engineering, production reliability, and applied AI, combining deep technical ownership with a forward-deployed engineering approach. You'll work closely with operators and domain experts to identify high-impact opportunities, determine where AI agents can safely and effectively improve workflows, and translate ambiguous business challenges into scalable, production-ready solutions.\n\nYou'll own the full engineering lifecycle, from problem discovery and system architecture to implementation, deployment, and continuous improvement. This is an opportunity to shape how Uber applies agentic AI to real-world operations while helping establish the technical foundations for broader adoption across the company.\n\nWhat You'll Do\n\nDesign and Build Agentic Systems\n\n- Partner directly with operational teams to understand complex workflows, identify inefficiencies, and determine where AI agents, traditional automation, or human decision-making can deliver meaningful improvements.\n\n- Design, develop, and deploy production-grade agentic systems, including AI agents, reusable skills, backend services, APIs, system integrations, data pipelines, and human-in-the-loop workflows.\n\n- Rapidly prototype, validate, and iterate on solutions with real users, translating ambiguous requirements into reliable, scalable software.\n\nOwn Production Reliability and Performance\n\n- Design systems with reliability, scalability, and operational resilience in mind, establishing clear performance and quality standards.\n\n- Build comprehensive observability across agent behavior, model outputs, system dependencies, and workflow outcomes using tracing, logging, metrics, monitoring, and alerting.\n\n- Own systems throughout their production lifecycle, troubleshooting failures, implementing recovery mechanisms, and continuously improving performance based on operational insights and user feedback.\n\nBuild Safe, Measurable, and Trustworthy AI Systems\n\n- Develop evaluation frameworks to measure agent effectiveness, including task completion, output quality, tool selection, policy compliance, and failure handling.\n\n- Implement testing and validation strategies across development, controlled rollouts, and production environments to ensure consistent and predictable system behavior.\n\n- Design appropriate safeguards, including access controls, human approvals, auditability, data protection, reversible actions, and escalation mechanisms.\n\n- Collaborate with Security, Privacy, Legal, and Data teams to ensure AI-powered workflows meet Uber's standards for safety, compliance, and operational integrity.\n\nDrive Reusability and Engineering Excellence\n\n- Identify opportunities to transform individual solutions into reusable agent capabilities, shared services, platform components, and standardized integration patterns.\n\n- Design flexible architectures that support different business needs and regional requirements without unnecessary duplication.\n\n- Contribute to engineering standards, architecture decisions, development tooling, deployment practices, and reliability frameworks that enable Agentic Pods to scale effectively across Uber.\n\nWho Thrives on This Team\n\nWe're looking for engineers who combine strong software engineering fundamentals with curiosity, ownership, and a passion for applying emerging technologies to real-world challenges.\n\n- Agentic-first thinker: You see beyond existing workflows and recognize opportunities to fundamentally improve how work gets done using AI and automation.\n\n- 0→1 builder: You thrive in ambiguous environments and can turn loosely defined problems into working, production-ready solutions.\n\n- Product-minded engineer: You focus on solving meaningful user problems and understand that the best solution isn't always the most technically complex.\n\n- Systems thinker: You balance immediate business needs with long-term scalability, reliability, and opportunities for reuse.\n\n- Collaborative problem solver: You learn unfamiliar domains quickly, build strong relationships with stakeholders, and communicate effectively across technical and non-technical teams.\n\nMinimum Qualifications\n\n-\nPhD or equivalent in Computer Science, Engineering, Mathematics, or a related field and 2 years of full-time software engineering experience; or 5 years of full-time software engineering experience, including 3 years of specialized technical software engineering experience in one or more programming languages, such as C, C++, Java, Python, or Go.\n\nNote: The 3 years of specialized software engineering experience may be gained through education, full-time employment, additional training, coursework, research, or a combination of these. This experience is not necessarily in addition to the education and full-time work experience requirements listed above.\n\n- Strong experience designing, developing, and deploying production backend or distributed systems, such as AI-enabled applications, orchestration platforms, APIs, asynchronous workflows, developer platforms, or enterprise integrations.\n\n- Hands-on experience owning production systems, including monitoring, alerting, incident response, troubleshooting, failure recovery, and debugging across application, infrastructure, and data dependencies.\n\n- Proficiency in at least one general-purpose programming language, such as Python, Go, Java, or C++.\n\nPreferred Qualifications\n\n- Hands-on experience building agentic AI applications or integrating large language models (LLMs) with tools, APIs, enterprise data sources, and permissioned systems.\n\n- Familiarity with agent orchestration, evaluation frameworks, retrieval-augmented generation (RAG), context management, model routing, and AI safety controls.\n\n- Experience in site reliability engineering (SRE), infrastructure, platform engineering, production engineering, or forward-deployed engineering environments.\n\n- Experience designing and operating systems that support sensitive, business-critical, or operationally consequential workflows.\n\n- Demonstrated ability to lead technical design, make architectural decisions, and influence engineering direction across teams.\n\n- Strong problem-solving skills and the ability to collaborate directly with business stakeholders to translate complex operational challenges into technical solutions.\n\nFor San Francisco, CA-based roles: The base salary range for this role is USD $232,000 per year - USD $258,000 per year.\n\nFor Sunnyvale, CA-based roles: The base salary range for this role is USD $232,000 per year - USD $258,000 per year.\n\nFor all US locations, you will be eligible to participate in Uber's bonus program, and may be offered an equity award & other types of comp. All full-time employees are eligible to participate in a 401(k) plan. You will also be eligible for various benefits.\n\nReady to Ride?\n\nThis isn't the kind of place where you follow a playbook — it's where you help write one. If you're driven by impact, energized by challenge, and ready to shape how the world moves — we'd love to hear from you.\n\nYou may be eligible for bonuses, equity, and other compensation, as well as a range of benefits. Explore our benefits.\n\nOffices remain key to collaboration and Uber's culture. Unless approved for full remote work, employees must spend at least 50% of their time in-office. Some roles, like those at greenlight hubs, require full-time in-office presence. Ask your Recruiter for details about this role's requirements.\n\nUber is proud to be an Equal Opportunity employer. All qualified applicants will receive consideration for employment without regard to sex, gender identity, sexual orientation, race, color, religion, national origin, disability, protected Veteran status, age, or any other characteristic protected by law. We also consider qualified applicants regardless of criminal histories, consistent with legal requirements. If you have a disability or special need that requires accommodation, please let us know by completing this form.",
+      "company_object": {
+        "name": "Uber",
+        "domain": "uber.com",
+        "url": "http://www.uber.com",
+        "logo": "https://media.licdn.com/dms/image/v2/C4D0BAQFiYnR1Mbtxdg/company-logo_200_200/company-logo_200_200/0/1630552741617/uber_com_logo?e=2147483647&v=beta&t=7dxf_cKFL245Rd3v8qQYIGneIgixqtJyHkfYx_RdyYs",
+        "employee_count": 168745,
+        "employee_count_min": null,
+        "linkedin_url": "https://www.linkedin.com/company/uber-com",
+        "description": "We are Uber. The go-getters. The kind of people who are relentless about our mission to help people go anywhere and get anything and earn their way. Movement is what we power. It’s our lifeblood. It runs through our veins. It’s what gets us out of bed each morning. It pushes us to constantly reimagine how we can move better. For you. For all the places you want to go. For all the things you want to get. For all the ways you want to earn. Across the entire world. In real time. At the incredible speed of now.\n\nThe idea for Uber was born on a snowy night in Paris in 2008, and ever since then our DNA of reimagination and reinvention carries on. We’ve grown into a global platform powering flexible earnings and the movement of people and things in ever expanding ways. We’ve gone from connecting rides on 4 wheels to 2 wheels to 18-wheel freight deliveries. From takeout meals to daily essentials to prescription drugs to just about anything you need at any time and earning your way. From drivers with background checks to real-time verification, safety is a top priority every single day. At Uber, the pursuit of reimagination is never finished, never stops, and is always just beginning.",
+        "founded": "2009",
+        "location": {
+          "street": "1455 3rd St",
+          "city": "San Francisco",
+          "region": "California",
+          "postal_code": "94158",
+          "country": "US"
+        },
+        "intelligence": {
+          "revenue_usd": 55227000000,
+          "revenue_year": null,
+          "revenue_source": "directory",
+          "revenue_confidence": "band",
+          "entity_kind": "company",
+          "founded_year": 2009,
+          "headcount": 32800,
+          "industry": "Transportation, Warehousing & Logistics",
+          "hq_region": null,
+          "hq_city": "San Francisco",
+          "revenue_low_usd": 50000000000,
+          "revenue_high_usd": 100000000000,
+          "headcount_low": 10000,
+          "headcount_high": 50000,
+          "lei": null,
+          "legal_name": null,
+          "group_lei": null,
+          "group_name": null
+        }
+      },
+      "normalized_title": "Staff Software Engineer",
+      "matching_phrases": [],
+      "matching_words": [],
+      "work_arrangement": null,
+      "is_manager": false,
+      "job_function": "Engineering",
+      "last_seen_at": "2026-11-09 18:41:15",
+      "verified_at": "2026-11-09 18:50:46",
+      "sources": [
+        {
+          "provider": "oracle",
+          "url": "https://iaziqy.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/304059",
+          "seen_at": "2026-11-09T18:41:15.086102+00:00"
+        }
+      ],
+      "work_arrangement_source": null,
+      "visa_sponsorship": null,
+      "benefits": [],
+      "salary_source": "description",
+      "salary_type": "observed",
+      "estimated_min_annual_salary_usd": 158305,
+      "estimated_avg_annual_salary_usd": 182558,
+      "estimated_max_annual_salary_usd": 215618,
+      "expires_at": "2026-11-16 08:00:00",
+      "applicant_count": null,
+      "recruiter_emails": [],
+      "listing_type": null,
+      "metro_code": "41860",
+      "metro_label": "San Francisco-Oakland-Fremont, CA",
+      "normalized_city": "San Francisco",
+      "normalized_region": "US-CA",
+      "seniority_source": "title",
+      "esco_skills": [
+        {
+          "id": "82fea746-853f-4f1b-8ab7-55de8619cccd",
+          "label": "lean manufacturing"
+        },
+        {
+          "id": "9d0d89be-bffa-4393-b6f6-8d05bea49051",
+          "label": "data extraction, transformation and loading tools"
+        },
+        {
+          "id": "b633eb55-8f1f-4ae6-ab4c-2022ffe2cb7f",
+          "label": "C++"
+        },
+        {
+          "id": "19a8293b-8e95-4de3-983f-77484079c389",
+          "label": "Java (computer programming)"
+        },
+        {
+          "id": "ccd0a1d9-afda-43d9-b901-96344886e14d",
+          "label": "Python (computer programming)"
+        }
+      ],
+      "ghost_score": null,
+      "language": "en"
+    },
+    {
+      "id": "615472",
+      "job_title": "D365 Software Developer",
+      "url": "https://trustcareers.si.edu/en/postings/62de6a1b-7969-439b-bee0-840e43f013e0",
+      "date_posted": "2026-11-09T18:24:27+00:00",
+      "has_blurred_data": false,
+      "company": "Smithsonian Institution",
+      "final_url": null,
+      "source_url": "https://trustcareers.si.edu/en/postings/62de6a1b-7969-439b-bee0-840e43f013e0",
+      "location": "Washington, DC, Washington, DC",
+      "short_location": "Washington, DC, Washington, DC",
+      "long_location": "Washington, DC, Washington, DC",
+      "state_code": "DC",
+      "latitude": 38.89511,
+      "longitude": -77.03637,
+      "coordinates_source": "city_centroid",
+      "postal_code": null,
+      "remote": false,
+      "hybrid": false,
+      "salary_string": null,
+      "min_annual_salary": 120000,
+      "min_annual_salary_usd": 120000,
+      "max_annual_salary": 120000,
+      "max_annual_salary_usd": 120000,
+      "avg_annual_salary_usd": 120000,
+      "salary_currency": "USD",
+      "countries": [
+        "United States"
+      ],
+      "country": "United States",
+      "country_codes": [
+        "US"
+      ],
+      "country_code": "US",
+      "cities": [
+        "Washington"
+      ],
+      "continents": [
+        "North America"
+      ],
+      "seniority": null,
+      "discovered_at": "2026-11-09T18:20:15+00:00",
+      "status": "active",
+      "closed_at": null,
+      "closed_reason": null,
+      "company_domain": "si.edu",
+      "hiring_team": [],
+      "reposted": false,
+      "date_reposted": null,
+      "employment_statuses": [
+        "full_time"
+      ],
+      "easy_apply": null,
+      "technology_slugs": [],
+      "keyword_slugs": [],
+      "occupation_code": "2512",
+      "occupation_label": "Software Developers",
+      "employer_type": "employer",
+      "isic_division": "91",
+      "isic_division_label": "Libraries, archives, museums and other cultural activities",
+      "description": "OPEN DATE: November 9, 2026\n\nCLOSING DATE: November 23, 2026\n\nPOSITION TYPE: Trust Fund\n\nAPPOINTMENT TYPE: Indefinite\n\nSCHEDULE: Full Time\n\nDUTY LOCATION: Washington, DC\n\nPosition sensitivity and risk: Low Risk\n\nOpen to all qualified applicants\n\nWhat are Trust Fund Positions?\n\nTrust Fund positions are unique to the Smithsonian. They are paid for from a variety of sources, including the Smithsonian endowment, revenue from our business activities, donations, grants and contracts. Trust employees are not part of the civil service, nor does trust fund employment lead to Federal status. The salary ranges for trust positions are generally the same as for federal positions and in many cases trust and federal employees work side by side. Trust employees have their own benefit program, which may include Health, Dental & Vision Insurance, Life Insurance, Transit/Commuter Benefits, Accidental Death and Dismemberment Insurance, Annual and Sick Leave, Family Friendly Leave, 403b Retirement Plan, Discounts for Smithsonian Memberships, Museum Stores and Restaurants, Credit Union, Smithsonian Early Enrichment Center (Child Care), Flexible Spending Account (Health & Dependent Care).\n\nConditions of Employment\n\n- Pass Pre-employment Background Check and Subsequent Background Investigation for position designated.\n\n- Complete a Probationary Period.\n\n- Maintain a Bank Account for Direct Deposit/Electronic Transfer.\n\n- The position is open to all candidates eligible to work in the United States. Proof of eligibility to work in U.S. is not required to apply.\n\n- Applicants must meet all qualification and eligibility requirements within 30 days of the closing date of this announcement.",
+      "company_object": {
+        "name": "Smithsonian Institution",
+        "domain": "si.edu",
+        "url": "https://www.si.edu",
+        "logo": "https://media.licdn.com/dms/image/v2/C4E0BAQGDnTyOh5w2QA/company-logo_200_200/company-logo_200_200/0/1660666271373/smithsonian_institution_logo?e=2147483647&v=beta&t=aI6PJVDl7l4_eEFOkNpclJpa8LXg1fwxVsXFWKk0W6A",
+        "employee_count": 6681,
+        "employee_count_min": null,
+        "linkedin_url": "https://www.linkedin.com/company/smithsonian-institution",
+        "description": "The Smithsonian Institution is the world's largest museum, education, and research complex. We are a community of learning and an opener of doors. Join us on a voyage of discovery.\n\nLegal: https://www.si.edu/termsofuse",
+        "founded": "1846",
+        "location": {
+          "street": null,
+          "city": "Washington",
+          "region": "DC",
+          "postal_code": null,
+          "country": "US"
+        },
+        "intelligence": {
+          "revenue_usd": null,
+          "revenue_year": null,
+          "revenue_source": null,
+          "revenue_confidence": null,
+          "entity_kind": "company",
+          "founded_year": 1846,
+          "headcount": 6234,
+          "industry": "Education",
+          "hq_region": "DC",
+          "hq_city": "Washington",
+          "revenue_low_usd": null,
+          "revenue_high_usd": null,
+          "headcount_low": 100,
+          "headcount_high": 250,
+          "lei": "549300ZJ87IUCDSX4306",
+          "legal_name": "SMITHSONIAN INSTITUTION",
+          "group_lei": null,
+          "group_name": null
+        }
+      },
+      "normalized_title": "D365 Software Developer",
+      "matching_phrases": [],
+      "matching_words": [],
+      "work_arrangement": "onsite",
+      "is_manager": false,
+      "job_function": "Engineering",
+      "last_seen_at": "2026-11-09 18:20:15",
+      "verified_at": "2026-11-09 18:25:26",
+      "sources": [
+        {
+          "provider": "pinpoint",
+          "url": "https://trustcareers.si.edu/en/postings/62de6a1b-7969-439b-bee0-840e43f013e0",
+          "seen_at": "2026-11-09T18:20:15.644561+00:00"
+        }
+      ],
+      "work_arrangement_source": "source",
+      "visa_sponsorship": null,
+      "benefits": [],
+      "salary_source": "source",
+      "salary_type": "observed",
+      "estimated_min_annual_salary_usd": 121067,
+      "estimated_avg_annual_salary_usd": 151811,
+      "estimated_max_annual_salary_usd": 173299,
+      "expires_at": null,
+      "applicant_count": null,
+      "recruiter_emails": [],
+      "listing_type": null,
+      "metro_code": "47900",
+      "metro_label": "Washington-Arlington-Alexandria, DC-VA-MD-WV",
+      "normalized_city": "Washington",
+      "normalized_region": "US-DC",
+      "seniority_source": null,
+      "esco_skills": [],
+      "ghost_score": 0,
+      "language": "en"
+    },
+    {
+      "id": "939892e5-5273-4bfc-8c41-a6c51cabb228",
+      "job_title": "Software Engineer, Comms Platform",
+      "url": "https://jobs.ashbyhq.com/ramp/939892e5-5273-4bfc-8c41-a6c51cabb228",
+      "date_posted": "2026-11-09T18:22:09+00:00",
+      "has_blurred_data": false,
+      "company": "Ramp",
+      "final_url": null,
+      "source_url": "https://jobs.ashbyhq.com/ramp/939892e5-5273-4bfc-8c41-a6c51cabb228",
+      "location": "Remote (US)",
+      "short_location": "Remote (US)",
+      "long_location": "Remote (US)",
+      "state_code": null,
+      "latitude": null,
+      "longitude": null,
+      "coordinates_source": null,
+      "postal_code": null,
+      "remote": true,
+      "hybrid": false,
+      "salary_string": "$172K - $280K",
+      "min_annual_salary": 172000,
+      "min_annual_salary_usd": 172000,
+      "max_annual_salary": 280000,
+      "max_annual_salary_usd": 280000,
+      "avg_annual_salary_usd": 226000,
+      "salary_currency": "USD",
+      "countries": [
+        "United States"
+      ],
+      "country": "United States",
+      "country_codes": [
+        "US"
+      ],
+      "country_code": "US",
+      "cities": [],
+      "continents": [
+        "North America"
+      ],
+      "seniority": null,
+      "discovered_at": "2026-11-09T18:34:23+00:00",
+      "status": "active",
+      "closed_at": null,
+      "closed_reason": null,
+      "company_domain": "ramp.com",
+      "hiring_team": [],
+      "reposted": false,
+      "date_reposted": null,
+      "employment_statuses": [
+        "full_time"
+      ],
+      "easy_apply": null,
+      "technology_slugs": [
+        "twilio"
+      ],
+      "keyword_slugs": [
+        "communication",
+        "observability",
+        "mentoring",
+        "system-design",
+        "twilio"
+      ],
+      "occupation_code": null,
+      "occupation_label": null,
+      "employer_type": "employer",
+      "isic_division": "62",
+      "isic_division_label": "Computer programming, consultancy and related activities",
+      "description": "About Ramp\n\nRamp is building the smart infrastructure for finance teams, embedded in the transaction flow of every dollar a business spends. We automate how over $275B in annualized spend flows in and out of 85,000+ companies: authorizing payments, flagging risk, categorizing spend, and closing books.\n\nThe problems are high-stakes, data-dense, and unforgiving.\n\nWe hire people with high agency and high urgency. We look for slope over intercept. We care less about where you trained and more about what you’ve built. At Ramp, everyone is a builder who owns problems end to end and makes consequential decisions that shape the outcome.\n\nThe median Ramp customer saves 7.5% and grows revenue 16% in their first year – far in excess of businesses operating without Ramp. We believe every ambitious company deserves the same.\n\nIf you want to build systems that directly shape how companies move and manage billions, Ramp is the place to do it.\n\nAbout the Role\n\nEvery approval request, receipt reminder, payment alert, and card notification Ramp sends has to reach the right person, on the right channel, at the right time. When it does, finance teams close faster and employees spend less time chasing tasks. When it doesn't, a missed message can mean a stalled approval, a late payment, or a flood of notifications nobody asked for.\n\nRamp's Communications Platform team builds the shared system that every product team uses to reach customers. It handles transactional messages across email, SMS, push, Slack, Microsoft Teams, and WhatsApp, including templating, delivery, retries, digesting, user preferences, and delivery monitoring. The team also supports the conversational experiences that let customers work with Ramp directly from the channels they already use.\n\nWe're looking for a backend engineer to own a core part of that platform. You'll take responsibility for an area such as message delivery and channel integrations, communication preferences, or platform reliability and scale, set its technical direction within the team, and keep it correct and dependable as message volume and the number of teams building on it grow. You'll work closely with product, design, and engineering partners across Ramp to make communications faster, more reliable, and easier for every team to build on.\n\nWhat You'll Do\n\n-\nOwn the design and evolution of a core part of Ramp's communications platform, from technical design through launch, monitoring, and iteration\n\n-\nBuild and extend integrations with messaging channels and delivery providers, including email, SMS, push, and workplace chat tools such as Slack and Microsoft Teams\n\n-\nDesign delivery workflows that are idempotent, retry safely, and confirm successful delivery, so customers reliably get the messages they need without duplicate sends\n\n-\nBuild communication preferences and controls that let users and administrators decide what they receive and where\n\n-\nMake the platform simple and safe for other Ramp engineers to build on, with clear abstractions, strong defaults, and good developer tooling\n\n-\nImprove the reliability, performance, and observability of the platform as message volume grows\n\n-\nDrive technical direction for your area and raise the engineering bar through design reviews, code reviews, and mentorship\n\nWhat You'll Need\n\n-\nExperience designing, building, and operating production backend systems, including APIs, data models, and asynchronous workflows\n\n-\nA track record of owning a system or product area end to end and shaping its technical direction over time\n\n-\nStrong system design judgment, especially around reliability, idempotency, and correctness in high-volume distributed systems\n\n-\nProduct sense: you care about the experience of the people receiving each message, not just the ticket, and you balance speed with quality\n\n-\nClear communication and a collaborative approach to technical decisions across product, design, and engineering\n\nNice to Haves\n\n-\nExperience building notification, messaging, or communications platforms\n\n-\nExperience integrating with messaging providers or channel APIs, such as Twilio, SendGrid, Slack, Microsoft Teams, or WhatsApp\n\n-\nExperience building internal platforms or shared services used by many engineering teams\n\n-\nExperience scaling high-volume, event-driven, or queue-based systems\n\nBenefits available to all full-time Ramp employees (Global)\n\n-\nFlexible PTO\n\n-\nCentralized home-office equipment ordering\n\n-\nHealth and wellness stipend\n\n-\nBudget for intra-office travel\n\n-\nWeekly coffee stipend\n\nUnited States\n\n-\n100% medical, dental & vision insurance coverage for you, with partial coverage for dependents\n\n-\nOne Medical annual membership\n\n-\n401(k), including employer match on contributions made while employed by Ramp\n\n-\nFertility HRA (up to $10,000 per year)\n\n-\nParental leave: up to 16 weeks (birthing + bonding) or 8 weeks (bonding only) at 100% pay\n\n-\nPet insurance\n\n-\nIn-office perks: lunch, snacks, drinks, and more\n\n-\nRelocation expense coverage to NYC or SF (if needed)\n\nCanada\n\n-\nGroup medical, dental, and vision coverage through Sun Life\n\n-\nLife, AD&D, and disability coverage\n\n-\nFertility drug coverage (up to $4,000 lifetime)\n\n-\nGroup Retirement Plan with employer match (RRSP + DPSP)\n\n-\nParental leave: up to 16 weeks (birthing + bonding) or 8 weeks (bonding only) at 100% pay, with additional time available at reduced pay\n\n-\nEmployee Assistance Program and virtual care through Lumino Health\n\nUnited Kingdom\n\n-\nPrivate medical insurance through Freedom Elite\n\n-\nVirtual GP and at-home care via eMed x Livi\n\n-\nWorkplace pension through Penfold, with salary sacrifice option\n\n-\nParental leave: up to 16 weeks (birthing + bonding) or 8 weeks (bonding only) at 100% pay with additional time available at reduced pay\n\nReferral Instructions\n\nIf you are being referred for the role, please contact that person to apply on your behalf.\n\nOther notices\n\nPursuant to the San Francisco Fair Chance Ordinance, we will consider for employment qualified applicants with arrest and conviction records.\n\nBeware of recruiting scams: Ramp will only contact you through official @Ramp.com email addresses and will never ask for payment or sensitive personal information during the hiring process.\n\nRamp Applicant Privacy Notice",
+      "company_object": {
+        "name": "Ramp",
+        "domain": "ramp.com",
+        "url": "ramp.com",
+        "logo": "https://media.licdn.com/dms/image/v2/D4E0BAQFpzb0Ial_Qaw/company-logo_200_200/company-logo_200_200/0/1735867522188?e=2147483647&v=beta&t=1LCYN5z5a9563LntWlpy8uO0dwbDc45M4Ssz75cLrGE",
+        "employee_count": 2900,
+        "employee_count_min": null,
+        "linkedin_url": "https://www.linkedin.com/company/ramp",
+        "description": "Ramp is an all-in-one financial operations platform designed to save businesses time and money. Combining corporate cards, expense management, bill payments, accounting automation, procurement, travel, treasury, and more, Ramp empowers finance teams to do their best work. \n\nMore than 70,000 companies, from family-owned farms to space startups, have saved $10B and 27.5M hours with Ramp since its founding in 2019.\n\nInvestors include Founders Fund, Thrive Capital, Khosla Ventures, Sequoia, Greylock, Stripe, Goldman Sachs, Coatue, and Redpoint, as well as over 100 angel investors who were founders or executives of leading companies. The Ramp team comprises talented leaders from leading financial services and fintech companies—Stripe, Affirm, Goldman Sachs, American Express, Mastercard, Visa, Capital One—as well as technology companies such as Meta, Uber, Netflix, Twitter, Dropbox, and Instacart.\n\nRamp has been named to Fast Company's Most Innovative Companies list and LinkedIn's Top U.S. Startups for over 3 years, as well as the Forbes Cloud 100, CNBC Disruptor 50, and TIME Magazine's 100 Most Influential Companies.\n\nVisit our website for a full list of US state licenses & disclosures: https://ramp.com/legal/state-disclosures",
+        "founded": "2019",
+        "location": {
+          "street": null,
+          "city": "New York",
+          "region": "New York",
+          "postal_code": "10003",
+          "country": "US"
+        },
+        "intelligence": {
+          "revenue_usd": 1400000000,
+          "revenue_year": 2026,
+          "revenue_source": "directory",
+          "revenue_confidence": "reported",
+          "entity_kind": "company",
+          "founded_year": 2006,
+          "headcount": 3205,
+          "industry": "Banking, Financial Services and Insurance",
+          "hq_region": null,
+          "hq_city": "New York",
+          "revenue_low_usd": null,
+          "revenue_high_usd": null,
+          "headcount_low": 1000,
+          "headcount_high": 5000,
+          "lei": null,
+          "legal_name": null,
+          "group_lei": null,
+          "group_name": null
+        }
+      },
+      "normalized_title": null,
+      "matching_phrases": [],
+      "matching_words": [],
+      "work_arrangement": "remote",
+      "is_manager": null,
+      "job_function": null,
+      "last_seen_at": "2026-11-09 18:34:23",
+      "verified_at": "2026-11-09 18:45:05",
+      "sources": [
+        {
+          "provider": "ashby",
+          "url": "https://jobs.ashbyhq.com/ramp/939892e5-5273-4bfc-8c41-a6c51cabb228",
+          "seen_at": "2026-11-09T18:34:23.191866+00:00"
+        }
+      ],
+      "work_arrangement_source": "source",
+      "visa_sponsorship": null,
+      "benefits": [],
+      "salary_source": "source",
+      "salary_type": "observed",
+      "estimated_min_annual_salary_usd": null,
+      "estimated_avg_annual_salary_usd": null,
+      "estimated_max_annual_salary_usd": null,
+      "expires_at": null,
+      "applicant_count": null,
+      "recruiter_emails": [],
+      "listing_type": null,
+      "metro_code": null,
+      "metro_label": null,
+      "normalized_city": null,
+      "normalized_region": null,
+      "seniority_source": null,
+      "esco_skills": [
+        {
+          "id": "15d76317-c71a-4fa2-aadc-2ecc34e627b7",
+          "label": "communication"
+        }
+      ],
+      "ghost_score": null,
+      "language": "en"
+    },
+    {
+      "id": "744000160689889",
+      "job_title": "Senior Embedded Software Engineer - Product Security",
+      "url": "https://jobs.smartrecruiters.com/Intuitive/744000160689889",
+      "date_posted": "2026-11-09T18:18:52+00:00",
+      "has_blurred_data": false,
+      "company": "Intuitive",
+      "final_url": null,
+      "source_url": "https://jobs.smartrecruiters.com/Intuitive/744000160689889",
+      "location": "Sunnyvale, CA, United States",
+      "short_location": "Sunnyvale, CA, United States",
+      "long_location": "Sunnyvale, CA, United States",
+      "state_code": "CA",
+      "latitude": 37.36883,
+      "longitude": -122.03635,
+      "coordinates_source": "city_centroid",
+      "postal_code": null,
+      "remote": false,
+      "hybrid": false,
+      "salary_string": null,
+      "min_annual_salary": null,
+      "min_annual_salary_usd": null,
+      "max_annual_salary": null,
+      "max_annual_salary_usd": null,
+      "avg_annual_salary_usd": null,
+      "salary_currency": null,
+      "countries": [
+        "United States"
+      ],
+      "country": "United States",
+      "country_codes": [
+        "US"
+      ],
+      "country_code": "US",
+      "cities": [
+        "Sunnyvale"
+      ],
+      "continents": [
+        "North America"
+      ],
+      "seniority": "mid_level",
+      "discovered_at": "2026-11-09T18:25:07+00:00",
+      "status": "active",
+      "closed_at": null,
+      "closed_reason": null,
+      "company_domain": "intuitive.com",
+      "hiring_team": [],
+      "reposted": false,
+      "date_reposted": null,
+      "employment_statuses": [
+        "full_time"
+      ],
+      "easy_apply": null,
+      "technology_slugs": [
+        "linux",
+        "python",
+        "bash",
+        "c++",
+        "aws"
+      ],
+      "keyword_slugs": [
+        "creativity",
+        "communication",
+        "linux",
+        "compliance",
+        "cybersecurity",
+        "python",
+        "bash",
+        "c++",
+        "aws",
+        "accessibility",
+        "embedded-systems",
+        "network-security",
+        "quality-assurance",
+        "vulnerability-management"
+      ],
+      "occupation_code": "2512",
+      "occupation_label": "Software Developers",
+      "employer_type": "employer",
+      "isic_division": "62",
+      "isic_division_label": "Computer programming, consultancy and related activities",
+      "description": "It started with a simple idea: what if surgery could be less invasive and recovery less painful? Nearly 30 years later, that question still fuels everything we do at Intuitive. As a global leader in robotic-assisted surgery and minimally invasive care, our technologies—like the da Vinci surgical system and Ion—have transformed how care is delivered for millions of patients worldwide.\n\nWe’re a team of engineers, clinicians, and innovators united by one purpose: to make surgery smarter, safer, and more human. Every day, our work helps care teams perform with greater precision and patients recover faster, improving outcomes around the world.\n\nThe problems we solve demand creativity, rigor, and collaboration. The work is challenging, but deeply meaningful—because every improvement we make has the potential to change a life.\n\nIf you’re ready to contribute to something bigger than yourself and help transform the future of healthcare, you’ll find your purpose here.\n\nThis role contributes broadly to the Product Security Team and product development groups by designing, building, and maintaining security solutions and features for current and next-generation surgical robotic systems and manufacturing processes. This position is responsible for improving the overall security posture of products through security analysis, threat modeling, risk analysis, and development of mitigation strategies.\n\nThe role supports cross-functional teams and collaborates across multiple departments to ensure secure product development and manufacturing standards. This position operates within a dynamic, high-energy team environment and is committed to delivering high product quality across embedded platforms, host-side applications, and networked medical device ecosystems.\n\nEssential Job Duties\n\n- Design, develop, and implement security solutions and features for products and manufacturing processes.\n\n- Collaborate with security analysis and implementation teams to validate security requirements and mitigations are correctly implemented.\n\n- Contribute to OS security hardening across embedded platforms, covering kernel patching, access control policies, filesystem protections, and reducing attack surface at the system level.\n\n- Apply network security principles to medical device architectures, including secure communication protocols, network segmentation, and interface hardening.\n\n- Design and implement security features across embedded platforms including Yocto Linux and QNX, adapting to additional environments based on product and program requirements.\n\n- Collaborate with cross-functional teams, including product, manufacturing, legal, regulatory, quality assurance, and engineering to address security concerns and compliance.\n\n- Develop and present security architectures and mitigation strategies to both technical and non-technical stakeholders.\n\n- Review system designs, advise on hardware component selection, and ensure security requirements are addressed from the ground up.\n\nRequired Education, Skills & Experience\n\n- Minimum 8 years of related experience in cybersecurity, product security engineering or related field with a Bachelor's degree; or 5 years of experience and a Master's degree; or a PhD with 3 years of experience; or equivalent experience.\n\n- Understanding of embedded security, including secure boot, OS hardening, kernel patching, and platform trust architectures.\n\n- Strong proficiency in Python, shell scripting, and C/C++ for security feature development and automation.\n\n- Hands-on experience with embedded Linux build systems, particularly Yocto Project, and real-time operating systems such as QNX, including system configuration, layer development, and security hardening within those environments.\n\n- Solid understanding of network security concepts, including protocols, segmentation, interface hardening, and threat modeling for networked devices.\n\n- Strong knowledge of cybersecurity fundamentals: vulnerability management, threat modeling, risk analysis, and mitigation techniques.\n\n- Familiarity with cloud security technologies such as AWS and security compliance standards like IEC 62443, NIST, and FDA cybersecurity guidance is a plus.\n\nDue to the nature of our business and the role, please note that Intuitive and/or your customer(s) may require that you show current proof of vaccination against certain diseases including COVID-19. Details can vary by role.\n\nIntuitive is an Equal Opportunity Employer. We provide equal employment opportunities to all qualified applicants and employees, and prohibit discrimination and harassment of any type, without regard to race, sex, pregnancy, sexual orientation, gender identity, national origin, color, age, religion, protected veteran or disability status, genetic information or any other status protected under federal, state, or local applicable laws.\n\nMandatory Notices\n\nU.S. Export Controls Disclaimer: In accordance with the U.S. Export Administration Regulations (15 CFR §743.13(b)), some roles at Intuitive Surgical may be subject to U.S. export controls for prospective employees who are nationals from countries currently on embargo or sanctions status.\n\nCertain information you provide as part of the application will be used for purposes of determining whether Intuitive Surgical will need to (i) obtain an export license from the U.S. Government on your behalf (note: the government’s licensing process can take 3 to 6+ months) or (ii) implement a Technology Control Plan (“TCP”) (note: typically adds 2 weeks to the hiring process).\n\nFor any Intuitive role subject to export controls, final offers are contingent upon obtaining an approved export license and/or an executed TCP prior to the prospective employee’s start date, which may or may not be flexible, and within a timeframe that does not unreasonably impede the hiring need. If applicable, candidates will be notified and instructed on any requirements for these purposes.\n\nWe will consider for employment qualified applicants with arrest and conviction records in accordance with fair chance laws.\n\nPreference will be given to qualified candidates who do not reside, or plan to reside, in Alabama, Arkansas, Delaware, Florida, Indiana, Iowa, Louisiana, Maryland, Mississippi, Missouri, Oklahoma, Pennsylvania, South Carolina, or Tennessee.\n\nThis position may be filled at a different job level than listed here depending on\n\nbusiness need and/or on the selected candidate’s experience, knowledge and skills.\n\nCompensation will be based primarily on the job level at which the role is filled and the\n\ncandidate’s qualifications, consistent with applicable law.\n\nAccommodation & Accessibility Notice:\n\nIntuitive is committed to providing reasonable accommodations to qualified individuals with disabilities. If you require assistance or an accommodation during any part of the application or interview process, please contact People Services at someone@example.org.\n\nWe provide market-competitive compensation packages, inclusive of base pay, incentives, benefits, and equity. It would not be typical for someone to be hired at the top end of range for the role, as actual pay will be determined based on several factors, including experience, skills, and qualifications. The target compensation ranges are listed.",
+      "company_object": {
+        "name": "Intuitive",
+        "domain": "intuitive.com",
+        "url": "http://www.intuitive.com",
+        "logo": "https://media.licdn.com/dms/image/v2/C560BAQE2wfXIjiCzWA/company-logo_200_200/company-logo_200_200/0/1630649619968/intuitivesurgical_logo?e=2147483647&v=beta&t=yAhwTdN7xB7j9rAmQ75Z1NupWBucGh1upgi7goVE5hk",
+        "employee_count": 13404,
+        "employee_count_min": null,
+        "linkedin_url": "https://www.linkedin.com/company/intuitivesurgical",
+        "description": "Intuitive (Nasdaq: ISRG), headquartered in Sunnyvale, Calif., is a global technology leader in minimally invasive care and the pioneer of robotic-assisted surgery. At Intuitive, we believe that minimally invasive care is life-enhancing care. Through ingenuity and intelligent technology, we expand the potential of physicians to heal without constraints.",
+        "founded": null,
+        "location": {
+          "street": "1020 Kifer Road, Building 108",
+          "city": "California",
+          "region": "94086",
+          "postal_code": null,
+          "country": "US"
+        },
+        "intelligence": {
+          "revenue_usd": 10060000000,
+          "revenue_year": null,
+          "revenue_source": "directory",
+          "revenue_confidence": "band",
+          "entity_kind": "company",
+          "founded_year": 1995,
+          "headcount": 8081,
+          "industry": "Technology",
+          "hq_region": "CA",
+          "hq_city": "Sunnyvale",
+          "revenue_low_usd": 5030000000,
+          "revenue_high_usd": 20120000000,
+          "headcount_low": null,
+          "headcount_high": null,
+          "lei": null,
+          "legal_name": null,
+          "group_lei": null,
+          "group_name": null
+        }
+      },
+      "normalized_title": "Senior Embedded Software Engineer, Product Security",
+      "matching_phrases": [],
+      "matching_words": [],
+      "work_arrangement": "onsite",
+      "is_manager": null,
+      "job_function": "Engineering",
+      "last_seen_at": "2026-11-09 18:25:07",
+      "verified_at": "2026-11-09 18:34:51",
+      "sources": [
+        {
+          "provider": "smartrecruiters",
+          "url": "https://jobs.smartrecruiters.com/Intuitive/744000160689889",
+          "seen_at": "2026-11-09T18:25:07.577560+00:00"
+        }
+      ],
+      "work_arrangement_source": "source",
+      "visa_sponsorship": null,
+      "benefits": [],
+      "salary_source": null,
+      "salary_type": "estimated",
+      "estimated_min_annual_salary_usd": 170199,
+      "estimated_avg_annual_salary_usd": 209893,
+      "estimated_max_annual_salary_usd": 223190,
+      "expires_at": null,
+      "applicant_count": null,
+      "recruiter_emails": [
+        "someone@example.org"
+      ],
+      "listing_type": null,
+      "metro_code": "41940",
+      "metro_label": "San Jose-Sunnyvale-Santa Clara, CA",
+      "normalized_city": "Sunnyvale",
+      "normalized_region": "US-CA",
+      "seniority_source": "source",
+      "esco_skills": [
+        {
+          "id": "15d76317-c71a-4fa2-aadc-2ecc34e627b7",
+          "label": "communication"
+        },
+        {
+          "id": "8088750d-8388-4170-a76f-48354c469c44",
+          "label": "cyber security"
+        },
+        {
+          "id": "ccd0a1d9-afda-43d9-b901-96344886e14d",
+          "label": "Python (computer programming)"
+        },
+        {
+          "id": "21d2f96d-35f7-4e3f-9745-c533d2dd6e97",
+          "label": "computer programming"
+        },
+        {
+          "id": "b633eb55-8f1f-4ae6-ab4c-2022ffe2cb7f",
+          "label": "C++"
+        },
+        {
+          "id": "2180bd8c-86de-4889-8165-adac902eee9d",
+          "label": "embedded systems"
+        }
+      ],
+      "ghost_score": null,
+      "language": "en"
+    },
+    {
+      "id": "31f093863268580d",
+      "job_title": "Software Engineer III",
+      "url": "https://www.indeed.com/viewjob?jk=31f093863268580d",
+      "date_posted": "2026-11-09T18:16:52+00:00",
+      "has_blurred_data": false,
+      "company": "Utah Association of Counties",
+      "final_url": null,
+      "source_url": "https://www.indeed.com/viewjob?jk=31f093863268580d",
+      "location": "Salt Lake City, UT 84107",
+      "short_location": "Salt Lake City, UT 84107",
+      "long_location": "Salt Lake City, UT 84107",
+      "state_code": "UT",
+      "latitude": 40.653507,
+      "longitude": -111.8709,
+      "coordinates_source": "source",
+      "postal_code": "84107",
+      "remote": false,
+      "hybrid": false,
+      "salary_string": null,
+      "min_annual_salary": 100000,
+      "min_annual_salary_usd": 100000,
+      "max_annual_salary": 120000,
+      "max_annual_salary_usd": 120000,
+      "avg_annual_salary_usd": 110000,
+      "salary_currency": "USD",
+      "countries": [
+        "United States"
+      ],
+      "country": "United States",
+      "country_codes": [
+        "US"
+      ],
+      "country_code": "US",
+      "cities": [
+        "Salt Lake City"
+      ],
+      "continents": [
+        "North America"
+      ],
+      "seniority": null,
+      "discovered_at": "2026-11-09T18:44:21+00:00",
+      "status": "active",
+      "closed_at": null,
+      "closed_reason": null,
+      "company_domain": null,
+      "hiring_team": [],
+      "reposted": false,
+      "date_reposted": null,
+      "employment_statuses": [
+        "full_time"
+      ],
+      "easy_apply": null,
+      "technology_slugs": [
+        ".net",
+        "sql-server",
+        "azure",
+        "react",
+        "javascript",
+        "sql",
+        "graphql",
+        "typescript",
+        "html",
+        "css",
+        "git"
+      ],
+      "keyword_slugs": [
+        "tax",
+        ".net",
+        "sql-server",
+        "azure",
+        "mentoring",
+        "react",
+        "javascript",
+        "rest-api",
+        "system-design",
+        "devops",
+        "sql",
+        "ci/cd",
+        "graphql",
+        "typescript",
+        "html",
+        "css",
+        "lean-manufacturing",
+        "communication",
+        "api-design",
+        "git"
+      ],
+      "occupation_code": "2512",
+      "occupation_label": "Software Developers",
+      "employer_type": "employer",
+      "isic_division": "84",
+      "isic_division_label": "Public administration and defence; compulsory social security",
+      "description": "IMPORTANT: To be considered for this position, please email your resume and cover letter to: someone@example.org Include in the subject line: Software Engineer III Applicant – (Insert Your Name). Only emailed application will be considered.\n\nPosition\n\nTitle: Software Engineer III\n\nDivision: Statewide Tax Administration & Technology Solutions (STATS)\n\nReports to: Programs Manager, STATS\n\nLocation: UAC office in Murray, UT\n\nJob Type: Full-Time, Exempt\n\nTravel Requirement: Minimal\n\nSalary Range: $100,000 to $120,000 dependent upon experience\n\nWho We Are\n\nThe Statewide Tax Administration & Technology Solutions (STATS) program is a division of the Utah Association of Counties (UAC) providing tax administration products and technology services to local and state government stakeholders across Utah. Our work directly impacts Utah citizens by delivering meaningful software, reliable services, and modernized data infrastructure that evolves with county needs.\n\nJob Overview\n\nWe are seeking a skilled and adaptable Software Engineer III to design, build, deploy, and support enterprise‑grade applications using Microsoft .NET technologies, SQL Server, and Azure cloud services. This role is primarily focused on full stack development, cloud‑native solutions, and system integrations. The ideal candidate is a strong .NET and Azure engineer first, comfortable working across multiple technology stacks, system configurations, and architectural patterns.\n\nThey will develop a deep understanding of the business processes supported by our applications and become a dependable technical and functional owner of the capabilities they maintain, driving projects forward independently while ensuring deadlines are met with minimal oversight. A developer who values clean code, collaboration, and long-term maintainability, they will exhibit excellent interpersonal skills, enjoy mentoring less-experienced developers, and contribute to a collaborative engineering culture.\n\nKey Responsibilities\n\n· Application & Backend Development: Design, develop, and maintain full stack applications using .NET Framework, .NET 10, MVC, Entity Framework, React, ExtJS, or other JavaScript frameworks. Build and maintain secure, high-performance RESTful APIs and backend services while applying software architecture principles, design patterns, and DevOps best practices.\n\n· Database Development: Design and optimize SQL Server databases, schemas, and data models. Write and maintain complex T-SQL queries, stored procedures, and performance-tuning solutions, ensuring data integrity and efficient access patterns using DACPACs and deployment strategies.\n\n· Azure Cloud & Integration Services: Develop, deploy, and maintain solutions using Azure App Services and Azure SQL Database. Build event-driven architectures utilizing Azure Functions, Azure Service Bus, Azure Queues, and Azure Blob Storage. Participate in CI/CD pipelines, environment management, and release processes using Azure DevOps.\n\n· Full Stack & Multi-Stack Development: Create user-friendly front-end applications with React, GraphQL, JavaScript/TypeScript, HTML, and CSS (including state management and security). Work across multiple application stacks, frameworks, and configurations to meet project needs and contribute to modernization efforts, including upgrades to newer .NET and Azure capabilities.\n\n· Mentorship & Collaboration: Mentor junior developers, providing guidance on coding standards, design decisions, and professional growth. Participate actively in code reviews, technical discussions, and collaborate closely with cross-functional teams, architects, and stakeholders. Help promote a culture of continuous improvement, learning, and technical excellence.\n\n· Documentation & Communication: Create and maintain technical documentation, including system design, integration flows, and deployment guides. Communicate effectively with technical and non-technical staff. Assist with knowledge transfer and long-term system sustainability.\n\nCore Technical Skills\n\nSoftware & Full Stack Development\n\n- .NET Framework & .NET Core / .NET 10\n\n- React, ExtJS, Javascript/TypeScript, HTML, CSS\n\n- RESTful & Web API Development\n\n- Microsoft SQL Server & T-SQL\n\n- MVC & Entity Framework\n\nCloud, Integrations & DevOps\n\n- Azure App Services & Azure SQL Database\n\n- Azure Functions & Azure Service Bus\n\n- Azure Queues & Azure Blob Storage\n\n- Azure DevOps & Ci/CD Pipelines\n\n- Git-based Version Control\n\nQualifications\n\nRequired\n\n· Bachelor’s degree in Computer Science, Software Engineering, Information Systems, or a related field (or equivalent professional experience).\n\n· Proven experience as a Full Stack or Backend‑focused .NET Developer (5+ years).\n\n· Strong expertise in: .NET Framework, modern .NET (.NET Core/.NET 10), SQL Server, T‑SQL and RESTful/Web API development.\n\n· Demonstrated experience with front-end React, ExtJs or other JavaScript Frameworks.\n\n· Hands‑on experience with Azure cloud services and deploying scalable applications.\n\n· Strong understanding of software design, architecture, and engineering best practices.\n\n· Experience with Git‑based version control, Azure DevOps and collaborative development workflows.\n\n· Excellent problem‑solving, analysis, and communication skills.\n\nPreferred\n\n· Experience with Azure Service Bus, functions, messaging, queues, and the ExtJs Framework.\n\n· Familiarity with DevOps practices, CI/CD automation, and infrastructure‑aware development.\n\n· Azure certifications.\n\nSuccess Measures\n\nPerformance and impact in this role will be evaluated on:\n\n· Application Reliability & Performance: Maintaining highly secure, performant software applications and efficiently troubleshooting complex issues across environments.\n\n· Project Delivery & Quality: Driving project forward independently, adhering to deadlines, and ensuring long-term code maintainability.\n\n· Mentorship & Collaboration: Successfully providing guidance to junior developers, delivering constructive code reviews, and fostering team-wide technical excellence.\n\n· Cloud & System Modernization: Effectively utilizing Azure cloud services and contributing to modernization and CI/CD enhancements.\n\nHow to Apply\n\nTo be considered for this position, please email your resume and cover letter to: someone@example.org Include in the subject line: Software Engineer III Applicant – (Insert Your Name). Only emailed applications will be considered. Applications will be accepted until the position is filled, initial review of resumes will begin November 18, 2026.\n\nPay: $100,000.00 - $120,000.00 per year\n\nBenefits:\n\n- Dental insurance\n\n- Dependent health insurance coverage\n\n- Health insurance\n\n- Life insurance\n\n- Paid holidays\n\n- Paid time off\n\n- Retirement plan\n\nWork Location: In person",
+      "company_object": {
+        "name": "Utah Association of Counties",
+        "domain": null,
+        "url": null,
+        "logo": null,
+        "employee_count": 91,
+        "employee_count_min": null,
+        "linkedin_url": null,
+        "description": null,
+        "founded": null,
+        "location": null,
+        "intelligence": {
+          "revenue_usd": 12504910,
+          "revenue_year": null,
+          "revenue_source": "directory",
+          "revenue_confidence": "band",
+          "entity_kind": "company",
+          "founded_year": 1923,
+          "headcount": 91,
+          "industry": "Professional Services",
+          "hq_region": "Utah",
+          "hq_city": "Murray",
+          "revenue_low_usd": 5000000,
+          "revenue_high_usd": 25000000,
+          "headcount_low": 25,
+          "headcount_high": 100,
+          "lei": null,
+          "legal_name": null,
+          "group_lei": null,
+          "group_name": null
+        }
+      },
+      "normalized_title": "Software Engineer III",
+      "matching_phrases": [],
+      "matching_words": [],
+      "work_arrangement": "onsite",
+      "is_manager": false,
+      "job_function": "Engineering",
+      "last_seen_at": "2026-11-09 18:44:21",
+      "verified_at": "2026-11-09 18:52:53",
+      "sources": [
+        {
+          "provider": "indeed",
+          "url": "https://www.indeed.com/viewjob?jk=31f093863268580d",
+          "seen_at": "2026-11-09T18:44:21.729977+00:00"
+        }
+      ],
+      "work_arrangement_source": "text",
+      "visa_sponsorship": null,
+      "benefits": [
+        "paid_holidays"
+      ],
+      "salary_source": "source",
+      "salary_type": "observed",
+      "estimated_min_annual_salary_usd": 99361,
+      "estimated_avg_annual_salary_usd": 125962,
+      "estimated_max_annual_salary_usd": 156485,
+      "expires_at": null,
+      "applicant_count": null,
+      "recruiter_emails": [
+        "someone@example.org"
+      ],
+      "listing_type": null,
+      "metro_code": "41620",
+      "metro_label": "Salt Lake City-Murray, UT",
+      "normalized_city": "Salt Lake City",
+      "normalized_region": "US-UT",
+      "seniority_source": null,
+      "esco_skills": [
+        {
+          "id": "56a7f561-1d55-43c9-9cd7-36a0a9bc6c50",
+          "label": "ASP.NET"
+        },
+        {
+          "id": "c062bab3-3ea0-4291-9220-a2d8fef4bead",
+          "label": "SQL Server"
+        },
+        {
+          "id": "3cd569a2-4f88-4c1e-9995-8dce8c5e51a7",
+          "label": "JavaScript"
+        },
+        {
+          "id": "f0de4973-0a70-4644-8fd4-3a97080476f4",
+          "label": "DevOps"
+        },
+        {
+          "id": "598de5b0-5b58-4ea7-8058-a4bc4d18c742",
+          "label": "SQL"
+        },
+        {
+          "id": "867137fb-ff1b-4ca3-99f3-cb6969aa2c68",
+          "label": "TypeScript"
+        },
+        {
+          "id": "e5d1f825-60ed-4bdd-872a-e748c387f777",
+          "label": "CSS"
+        },
+        {
+          "id": "82fea746-853f-4f1b-8ab7-55de8619cccd",
+          "label": "lean manufacturing"
+        },
+        {
+          "id": "15d76317-c71a-4fa2-aadc-2ecc34e627b7",
+          "label": "communication"
+        },
+        {
+          "id": "9d2e926f-53d9-41f5-98f3-19dfaa687f3f",
+          "label": "tools for software configuration management"
+        }
+      ],
+      "ghost_score": null,
+      "language": "en"
+    }
+  ]
+}

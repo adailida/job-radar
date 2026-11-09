@@ -40,9 +40,11 @@ A real run needs, in `local/` (never committed):
 
 - `profile.yaml`: what you're searching for: roles, excluded titles, work mode, places, minimum salary. Start from [examples/profile.example.yaml](examples/profile.example.yaml)
 - `cv.pdf` (or `cv.md`, `cv.txt`), and your ideal job in your own words in `preferences.md`
-- optionally `settings.yaml`, with only the settings you change; [examples/settings.example.yaml](examples/settings.example.yaml) lists every one with its default
+- optionally `settings.yaml`, with only the settings you change. The app reads [job_radar/default_settings.yaml](job_radar/default_settings.yaml) first, every setting with its default, and merges yours over it
 
 and Claude Code logged in.
+
+JobsPipe (paid, off by default) adds LinkedIn, Indeed and employers' own ATS. Put `JOBSPIPE_API_KEY=...` in `.env` (never committed) and set `sources.jobspipe.enabled: true` in `settings.yaml`; `max_jobs_per_run` caps the credits a run can spend.
 
 A run shows only jobs no earlier run found (set `new_only: false` in `settings.yaml` to see them all again). Deleting a run makes its jobs new again.
 

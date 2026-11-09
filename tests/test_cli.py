@@ -10,7 +10,7 @@ from job_radar.factory import AppFactory
 from job_radar.model import Window
 from job_radar.pipeline import Pipeline
 from job_radar.result import RunCancelled, RunFailed, RunSucceeded
-from job_radar.settings import RecommendSettings, Settings
+from job_radar.settings import SettingsFile
 from job_radar.steps.recommend import RecommendTopJobsStep
 from job_radar.window import WindowPlan, WindowReason
 
@@ -19,8 +19,8 @@ FIRST_RUN = "2026-11-05T10-00-00"
 
 def demo_cli(tmp_path, prompter: FakePrompter, hour: int = 10) -> Cli:
     """The real command, with run folders in a temp folder, a fixed clock and a set user."""
-    settings = Settings(output=tmp_path, recommend=RecommendSettings(top_n=3))
-    return Cli(AppFactory(settings, tmp_path / "local", FixedClock(hour), prompter))
+    settings = SettingsFile.defaults(output=str(tmp_path), recommend={"top_n": 3})
+    return Cli(AppFactory(settings, tmp_path / "local", FixedClock(hour), prompter, {}))
 
 
 class FailingFactory:
@@ -204,9 +204,11 @@ def test_a_run_after_a_long_break_says_in_the_report_which_days_it_missed(tmp_pa
 
 
 def test_with_new_only_off_a_second_run_sees_every_job_again(tmp_path):
-    settings = Settings(output=tmp_path, new_only=False, recommend=RecommendSettings(top_n=3))
+    settings = SettingsFile.defaults(output=str(tmp_path), new_only=False, recommend={"top_n": 3})
     for hour in (10, 15):
-        cli = Cli(AppFactory(settings, tmp_path / "local", FixedClock(hour), FakePrompter(True)))
+        cli = Cli(
+            AppFactory(settings, tmp_path / "local", FixedClock(hour), FakePrompter(True), {})
+        )
         assert cli.main(["run", "--demo"]) == 0
     manifest = json.loads((tmp_path / "demo" / "2026-11-05T15-00-00" / "manifest.json").read_text())
     counts = {step["step"]: step["count"] for step in manifest["steps"]}
