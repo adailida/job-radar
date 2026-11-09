@@ -1,4 +1,4 @@
-"""Step 7: recommend the jobs that fit the user best."""
+"""Step 9: recommend the jobs that fit the user best."""
 
 from job_radar.model import CandidateProfile, Job, Recommendation
 from job_radar.ranking import JobRanker

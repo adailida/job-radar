@@ -9,6 +9,7 @@ import httpx
 from job_radar.app import JobRadarApp
 from job_radar.ats import AtsLinks
 from job_radar.checkpoints import FileCheckpoints
+from job_radar.classify import Classifier, LlmClassifier, TitleClassifier
 from job_radar.clock import Clock
 from job_radar.cost import CostCheck, FileSpendLog
 from job_radar.drop_log import FileDropLog
@@ -36,11 +37,13 @@ from job_radar.sources.demo import DemoParser, DemoSource
 from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
 from job_radar.sources.http import BoardClient
 from job_radar.sources.jobspipe import JobsPipeParser, JobsPipeSource
+from job_radar.steps.classify import ClassifyStep
 from job_radar.steps.convert import ConvertStep
 from job_radar.steps.dedupe import DedupeStep, JobKey
 from job_radar.steps.describe import DescribeStep
 from job_radar.steps.fetch import FetchStep
 from job_radar.steps.filter import FilterStep
+from job_radar.steps.match import MatchStep
 from job_radar.steps.new_jobs_filter import NewJobsFilterStep
 from job_radar.steps.recommend import RecommendTopJobsStep
 from job_radar.steps.report import ReportStep
@@ -58,6 +61,7 @@ class Parts:
     parsers: list[JobBoardParser]
     describers: list[JobDescriber]  # only for boards whose postings come without descriptions
     criteria: SearchCriteria
+    classifier: Classifier
     ranker: JobRanker
     profile: CandidateProfile
 
@@ -126,7 +130,7 @@ class AppFactory:
         folder = runs / (run_id or self._clock.stamp())
         folder.mkdir(parents=True, exist_ok=run_id is not None)
         checkpoints = FileCheckpoints(
-            folder, window, not_covered, keep={FilterStep.name: FileSeenJobs.FILE}
+            folder, window, not_covered, keep={MatchStep.name: FileSeenJobs.FILE}
         )
         normalizer = Normalizer()
         words = Words()
@@ -140,6 +144,8 @@ class AppFactory:
             ),
             FilterStep(parts.criteria, window, JobMatcher(normalizer), FileDropLog(folder, words)),
             DescribeStep({d.source: d for d in parts.describers}, self._prompter),
+            ClassifyStep(parts.classifier, self._prompter),
+            MatchStep(parts.criteria, JobMatcher(normalizer)),
             RecommendTopJobsStep(
                 parts.ranker,
                 parts.profile,
@@ -158,6 +164,19 @@ class AppFactory:
             ),
         ]
         return Pipeline(steps, checkpoints)
+
+    def _check_domains(self, criteria: SearchCriteria) -> None:
+        """Every domain a search names is one the settings define."""
+        known = self._settings.domains
+        for search in criteria.searches:
+            unknown = [
+                d for d in (search.domains.values if search.domains else ()) if d not in known
+            ]
+            if unknown:
+                raise ConfigError(
+                    f"profile.yaml: searches.{search.name}.domains: unknown {', '.join(unknown)}; "
+                    f"the settings define {', '.join(known)}"
+                )
 
     def _jobspipe(self) -> JobsPipeSource:
         """The JobsPipe source, with its key from the environment or `.env`."""
@@ -185,6 +204,7 @@ class AppFactory:
             [DemoParser(PlaceCodes())],
             [],
             DEMO_SEARCHES,
+            TitleClassifier(),
             KeywordRanker(),
             DEMO_PROFILE,
         )
@@ -197,6 +217,7 @@ class AppFactory:
         run before anything is fetched. JobsPipe joins Fast Forward when it is on.
         """
         criteria = SearchesFile(self._local / "profile.yaml").load()
+        self._check_domains(criteria)
         profile = ProfileLoader(self._local).load()
         http = httpx.Client(headers={"User-Agent": self.USER_AGENT}, timeout=20)
         getro = BoardClient(http)
@@ -210,11 +231,19 @@ class AppFactory:
         llm = ClaudeCli(llm_settings.model, llm_settings.timeout_seconds)
         llm.check()
         ranker = LlmRanker(llm, llm_settings.batch_size, llm_settings.max_description_chars)
+        classifier = LlmClassifier(
+            llm,
+            llm_settings.classify_batch_size,
+            llm_settings.classify_description_chars,
+            self._settings.job_types,
+            self._settings.domains,
+        )
         return Parts(
             sources,
             parsers,
             [GetroDescriber(network, getro, HtmlText())],
             criteria,
+            classifier,
             ranker,
             profile,
         )

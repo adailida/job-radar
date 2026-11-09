@@ -3,6 +3,8 @@
 from decimal import Decimal
 
 from job_radar.model import (
+    Classification,
+    Domains,
     IfMissing,
     Job,
     MinSalary,
@@ -10,6 +12,8 @@ from job_radar.model import (
     Places,
     Posting,
     Search,
+    Seniorities,
+    Seniority,
     WorkMode,
     WorkModes,
 )
@@ -19,10 +23,11 @@ from job_radar.normalize import Normalizer
 class JobMatcher:
     """Says whether a job meets a search, and if not, which criterion it fails first.
 
-    Checks the job's primary posting. A criterion the posting says nothing
-    about follows the criterion's `if_missing`. Titles compare as whole words
-    in canonical form, so "intern" doesn't match "International". Stateless:
-    holds only the normalizer.
+    Checks the job's primary posting, and its labels once it has them:
+    seniority and domain are skipped until the job is classified. A criterion
+    the posting says nothing about follows the criterion's `if_missing`. Titles
+    compare as whole words in canonical form, so "intern" doesn't match
+    "International". Stateless: holds only the normalizer.
     """
 
     YEARLY = {Period.YEAR: Decimal(1), Period.MONTH: Decimal(12), Period.HOUR: Decimal(2080)}
@@ -44,7 +49,22 @@ class JobMatcher:
             return "location"
         if search.min_salary and not self._salary(posting, search.min_salary):
             return "salary"
+        labels = job.classification
+        if labels is not None and search.seniority and not self._level(labels, search.seniority):
+            return "seniority"
+        if labels is not None and search.domains and not self._domain(labels, search.domains):
+            return "domain"
         return None
+
+    def _level(self, labels: Classification, wanted: Seniorities) -> bool:
+        """Whether the job's level is one wanted; unknown counts as missing."""
+        known = None if labels.seniority is Seniority.UNKNOWN else labels.seniority in wanted.values
+        return self._decide(known, wanted.if_missing)
+
+    def _domain(self, labels: Classification, wanted: Domains) -> bool:
+        """Whether the job's domain is one wanted; none counts as missing."""
+        known = None if labels.domain is None else labels.domain in wanted.values
+        return self._decide(known, wanted.if_missing)
 
     def _title_has(self, posting: Posting, words: tuple[str, ...]) -> bool:
         """Whether the title contains any of these, as whole words, any case."""

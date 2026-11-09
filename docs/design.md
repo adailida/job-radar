@@ -368,12 +368,14 @@ output/                        (setting; default ./output, gitignored)
       04-new_jobs_filter.jsonl jobs no earlier completed run found
       05-filter.jsonl          jobs that match the search
       06-describe.jsonl        the same jobs, with full descriptions
-      07-recommend.jsonl       the top N recommendations at or above the minimum score
-      08-report.jsonl          the Report: where it is, one-line summary
+      07-classify.jsonl        the same jobs, with labels: seniority, job type, domain, sector
+      08-match.jsonl           jobs that meet every criterion of a search, labels included
+      09-recommend.jsonl       the top N recommendations at or above the minimum score
+      10-report.jsonl          the Report: where it is, one-line summary
       manifest.json            schema version; the window and any days a long break left out; each finished step and its count, in order
       report.md                this run's report
       dropped.md               what the filter dropped, grouped by why
-      jobs.jsonl               after success: the filter's output, kept so later runs know these jobs
+      jobs.jsonl               after success: the match step's output, with labels, kept so later runs know these jobs
       spend.jsonl              what each paid source spent: estimate, decision, credits used and left
 ```
 
@@ -507,7 +509,7 @@ examples/
 
 ### Profile
 
-Built so far (task 11a): `common` and `searches` with `roles`, `exclude_titles`, `work_mode`, `locations` and `min_salary`, each of the last three with `if_missing`. `keywords` comes after the describe step (descriptions aren't there when the filter runs); `seniority` and `domains` with Classify. The CV keeps its fixed names in `local/` (no `cv:` key).
+Built so far: `common` and `searches` with `roles`, `exclude_titles`, `work_mode`, `locations` and `min_salary` (task 11a), and `seniority` and `domains` (task 18a), all but the first two with `if_missing`. `keywords` comes after the describe step (descriptions aren't there when the filter runs). Domain names must be ones the settings define. The CV keeps its fixed names in `local/` (no `cv:` key).
 
 ```yaml
 cv: cv.pdf
@@ -644,6 +646,9 @@ Each run records how many merges came from each kind of key, and `jobs.jsonl` ke
 ## 9. LLM layer
 
 ### Two passes
+
+Built so far (task 18a): Classify, after describe (it reads the start of each description, which Fast Forward only has after describe), then a match step for `seniority` and `domains`. A job the LLM can't label keeps no labels, so `if_missing` decides. Extract comes with task 18b.
+
 
 ```
 ... Filter --> Classify --> Match --> Extract --> Aggregate ...
@@ -1114,4 +1119,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Defaults are a real YAML file the app reads (`job_radar/default_settings.yaml`), the user's file merged over it | Defaults in the model, with an example file a test keeps in sync (the earlier choice) | Changed Nov 9 at the owner's ask: the full config you read is the one the app uses. Still one place for defaults: the model has none |
 | The cost check runs in the app, before the run folder exists | Inside the fetch step | Stopping at the check leaves no failed run to resume or delete; the fetch step only spends within the approvals |
 | Enter at a cost question means skip the source | Go ahead; stop | Skipping spends nothing and still gives a report from the free sources |
+| Order: filter, describe, classify, match, recommend | Classify before describe | Labels need the description; Fast Forward gives it only after describe. Describing jobs that match then drops costs free requests only |
+| Match is its own step after classify, reusing `JobMatcher`; the filter skips seniority and domain until a job has labels | One filter after classify | The cheap filter still cuts most jobs before any LLM call; one matcher keeps the rules in one place |
+| The kept `jobs.jsonl` is the match step's output | The filter's output | Seen jobs are matched jobs (section 5), and they now carry labels for trends |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |

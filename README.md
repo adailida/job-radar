@@ -38,7 +38,7 @@ Works now:
 
 A real run needs, in `local/` (never committed):
 
-- `profile.yaml`: what you're searching for: roles, excluded titles, work mode, places, minimum salary. Start from [examples/profile.example.yaml](examples/profile.example.yaml)
+- `profile.yaml`: what you're searching for: roles, excluded titles, work mode, places, minimum salary, seniority and domains (cause areas, as the settings name them). Start from [examples/profile.example.yaml](examples/profile.example.yaml)
 - `cv.pdf` (or `cv.md`, `cv.txt`), and your ideal job in your own words in `preferences.md`
 - optionally `settings.yaml`, with only the settings you change. The app reads [job_radar/default_settings.yaml](job_radar/default_settings.yaml) first, every setting with its default, and merges yours over it
 

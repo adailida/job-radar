@@ -112,3 +112,18 @@ def test_a_bad_criterion_names_its_path(tmp_path, line, problem):
 def test_the_example_file_reads():
     names = [search.name for search in SearchesFile(EXAMPLE).load().searches]
     assert names == ["remote-us", "nyc-office"]
+
+
+def test_reads_seniority_and_domains(tmp_path):
+    text = (
+        "searches:\n"
+        "  one: {seniority: [senior, lead], domains: {values: [climate], if_missing: drop}}\n"
+    )
+    [one] = load(tmp_path, text).searches
+    assert [level.value for level in one.seniority.values] == ["senior", "lead"]
+    assert (one.domains.values, one.domains.if_missing) == (("climate",), IfMissing.DROP)
+
+
+def test_unknown_is_not_a_level_to_ask_for(tmp_path):
+    with pytest.raises(ConfigError, match=r"searches.one.seniority: ask for levels"):
+        load(tmp_path, "searches:\n  one: {seniority: [unknown]}\n")

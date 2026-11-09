@@ -1,4 +1,4 @@
-"""Step 8: write the report."""
+"""Step 10: write the report."""
 
 from job_radar.checkpoints import RunStats
 from job_radar.cost import SpendLog

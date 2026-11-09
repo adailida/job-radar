@@ -4,7 +4,16 @@ from pathlib import Path
 
 from pydantic import Field
 
-from job_radar.model import MinSalary, Model, Places, Search, SearchCriteria, WorkModes
+from job_radar.model import (
+    Domains,
+    MinSalary,
+    Model,
+    Places,
+    Search,
+    SearchCriteria,
+    Seniorities,
+    WorkModes,
+)
 from job_radar.yaml_file import ConfigError, YamlFile
 
 DEMO_SEARCHES = SearchCriteria(
@@ -25,6 +34,8 @@ class _Criteria(Model):
     work_mode: WorkModes | None = None
     locations: Places | None = None
     min_salary: MinSalary | None = None
+    seniority: Seniorities | None = None
+    domains: Domains | None = None
 
 
 class _ProfileFile(Model):

@@ -126,6 +126,17 @@ class Posting(Model):
         return f"{self.source}:{self.source_id}"
 
 
+class Classification(Model):
+    """Labels for one job, used to match it against searches and group it in the report."""
+
+    job_id: str
+    seniority: Seniority
+    job_type: str | None = None  # a job type from settings, "Other", or None when unclear
+    domain: str | None = None  # a domain from settings, "Other", or None when unclear
+    sector: str | None = None  # free label, for an informational breakdown
+    prompt_version: str  # prompt that produced the labels
+
+
 class Job(Model):
     """One real opening, after postings that describe it are merged across sources.
 
@@ -136,17 +147,7 @@ class Job(Model):
     keys: tuple[str, ...]  # identity keys that tie postings to this job
     postings: tuple[Posting, ...]  # primary first; the report shows its fields
     first_seen: date  # date of the run that first saw it
-
-
-class Classification(Model):
-    """Labels for one job, used to match it against searches and group it in the report."""
-
-    job_id: str
-    seniority: Seniority
-    job_type: str | None = None  # a job type from settings, "Other", or None when unclear
-    domain: str | None = None  # a domain from settings, "Other", or None when unclear
-    sector: str | None = None  # free label, for an informational breakdown
-    prompt_version: str  # prompt that produced the labels
+    classification: Classification | None = None  # labels, once classified; None when it failed
 
 
 class Requirement(Model):
@@ -236,6 +237,25 @@ class MinSalary(_Criterion):
         return {"amount": data} if isinstance(data, int | float | str | Decimal) else data
 
 
+class Seniorities(_Criterion):
+    """The levels wanted: a job matches if its seniority is any of them. Unknown is missing."""
+
+    values: tuple[Seniority, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _known_levels(self) -> Self:
+        """Unknown is what a missing level is, not a level to ask for."""
+        if Seniority.UNKNOWN in self.values:
+            raise ValueError("ask for levels such as senior or lead; unknown is if_missing's job")
+        return self
+
+
+class Domains(_Criterion):
+    """The domains wanted, by name from the settings: a job matches if its domain is any of them."""
+
+    values: tuple[str, ...] = Field(min_length=1)
+
+
 class Search(Model):
     """One named search: criteria a job must meet together. An unset criterion lets every job by."""
 
@@ -246,6 +266,8 @@ class Search(Model):
     work_mode: WorkModes | None = None
     locations: Places | None = None
     min_salary: MinSalary | None = None
+    seniority: Seniorities | None = None  # checked once the job is classified
+    domains: Domains | None = None  # checked once the job is classified
 
 
 class SearchCriteria(Model):
