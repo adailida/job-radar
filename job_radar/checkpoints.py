@@ -48,6 +48,7 @@ class Manifest(Model):
 
     version: Literal[2] = 2  # changed when the saved models change shape
     window: Window
+    not_covered: Window | None = None  # days a long break left out, before the window
     completed: bool = False
     steps: tuple[StepCount, ...] = ()  # each finished step and its count, in order
 
@@ -58,15 +59,17 @@ class FileCheckpoints:
     One JSON Lines file per step, numbered in the order the steps ran
     (`01-fetch.jsonl`, `02-convert.jsonl`), plus `manifest.json` with the run's
     window, each finished step and its count, and whether the run completed.
-    Holds only its folder and the run's window; the files are the state.
+    Holds only its folder, the run's window and the days it didn't cover; the
+    files are the state.
     """
 
     MANIFEST = "manifest.json"
 
-    def __init__(self, folder: Path, window: Window) -> None:
-        """Keep the run folder this run's files go in, and the window the run covers."""
+    def __init__(self, folder: Path, window: Window, not_covered: Window | None = None) -> None:
+        """Keep the run folder, the window the run covers, and the days a long break left out."""
         self._folder = folder
         self._window = window
+        self._not_covered = not_covered
 
     def has(self, step: str) -> bool:
         """Whether the manifest lists this step as finished."""
@@ -118,7 +121,7 @@ class FileCheckpoints:
         """The manifest as saved, or a new one if no step has finished yet."""
         path = self._folder / self.MANIFEST
         if not path.exists():
-            return Manifest(window=self._window)
+            return Manifest(window=self._window, not_covered=self._not_covered)
         return Manifest.model_validate_json(path.read_text(encoding="utf-8"))
 
     def _save_manifest(self, manifest: Manifest) -> None:

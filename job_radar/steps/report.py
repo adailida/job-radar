@@ -9,10 +9,10 @@ from job_radar.report_writer import ReportWriter
 class ReportStep:
     """Puts together what the run's report says, then has it formatted and written.
 
-    The content is the recommended jobs, the run's window and the funnel of
-    counts; the renderer decides only how it looks. Stateless: holds only
-    where it reads counts from, the renderer, where the report goes, and
-    what it needs to know about the run.
+    The content is the recommended jobs, the run's window, any days a long
+    break left out, and the funnel of counts; the renderer decides only how it
+    looks. Stateless: holds only where it reads counts from, the renderer,
+    where the report goes, and what it needs to know about the run.
     """
 
     name = "report"
@@ -25,6 +25,7 @@ class ReportStep:
         writer: ReportWriter,
         run_id: str,
         window: Window,
+        not_covered: Window | None,
         min_score: int,
     ) -> None:
         """Keep the run's counts, how the report is formatted and stored, and the run's facts."""
@@ -33,6 +34,7 @@ class ReportStep:
         self._writer = writer
         self._run_id = run_id
         self._window = window
+        self._not_covered = not_covered
         self._min_score = min_score
 
     def run(self, data: list[Recommendation]) -> list[Report]:
@@ -40,6 +42,7 @@ class ReportStep:
         content = ReportContent(
             run=self._run_id,
             window=self._window,
+            not_covered=self._not_covered,
             min_score=self._min_score,
             recommendations=tuple(data),
             funnel=tuple(self._stats.funnel()),

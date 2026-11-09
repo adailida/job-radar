@@ -51,6 +51,7 @@ class FileRunHistory:
                     RunSummary(
                         id=run.name,
                         window=manifest.window,
+                        not_covered=manifest.not_covered,
                         completed=manifest.completed,
                         steps=manifest.steps,
                     )

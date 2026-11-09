@@ -77,3 +77,11 @@ def test_run_folders_refuse_anything_but_an_existing_run(tmp_path, run_id):
     with pytest.raises(KeyError):
         RunFolders(tmp_path).delete(run_id)
     assert [p.name for p in tmp_path.iterdir()] == ["2026-11-01T09-00-00"]
+
+
+def test_runs_carry_the_days_a_long_break_left_out(tmp_path):
+    gap = Window(start=date(2026, 10, 1), end=date(2026, 10, 21))
+    folder = tmp_path / "2026-11-05T09-00-00"
+    folder.mkdir()
+    FileCheckpoints(folder, window(5), gap).save("dedupe", [job("1")])
+    assert FileRunHistory(tmp_path).runs()[0].not_covered == gap

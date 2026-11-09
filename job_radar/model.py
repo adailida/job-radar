@@ -292,6 +292,7 @@ class ReportContent(Model):
 
     run: str  # the run's folder name, e.g. "2026-11-09T13-58-11"
     window: Window
+    not_covered: Window | None = None  # days a long break left out, before the window
     min_score: int  # the lowest score a recommended job may have
     recommendations: tuple[Recommendation, ...]  # best first
     funnel: tuple[StepCount, ...]  # each finished step and its count, in run order
@@ -319,5 +320,6 @@ class RunSummary(Model):
 
     id: str  # the run folder's name: when it started, e.g. "2026-11-09T14-52-11"
     window: Window
+    not_covered: Window | None = None  # days a long break left out, before the window
     completed: bool
     steps: tuple[StepCount, ...]  # each finished step and its count, in run order

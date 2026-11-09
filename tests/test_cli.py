@@ -1,4 +1,5 @@
 import json
+from datetime import date
 
 from fakes import WINDOW, FakePrompter, FakeStep, FixedClock
 
@@ -6,10 +7,12 @@ from job_radar.app import JobRadarApp
 from job_radar.checkpoints import FileCheckpoints
 from job_radar.cli import Cli
 from job_radar.factory import AppFactory
+from job_radar.model import Window
 from job_radar.pipeline import Pipeline
 from job_radar.result import RunCancelled, RunFailed, RunSucceeded
 from job_radar.settings import RecommendSettings, Settings
 from job_radar.steps.recommend import RecommendTopJobsStep
+from job_radar.window import WindowPlan, WindowReason
 
 FIRST_RUN = "2026-11-05T10-00-00"
 
@@ -29,7 +32,7 @@ class FailingFactory:
     def create(self, demo: bool = False) -> JobRadarApp:
         step = FakeStep("fetch", error=RuntimeError("board down"))
         pipeline = Pipeline([step], FileCheckpoints(self._folder, WINDOW))
-        return JobRadarApp(NoResume(), FixedWindow(), lambda window, run_id: pipeline)
+        return JobRadarApp(NoResume(), FixedWindow(), lambda window, gap, run_id: pipeline)
 
 
 class NoResume:
@@ -43,7 +46,7 @@ class FixedWindow:
     """Agrees the same window every time, without asking."""
 
     def choose(self):
-        return WINDOW
+        return WindowPlan(window=WINDOW, reason=WindowReason.FIRST_RUN)
 
 
 class BrokenFactory:
@@ -179,3 +182,14 @@ def test_a_failed_demo_run_is_resumed_by_the_same_command(tmp_path, capsys, monk
     manifest = json.loads((folders[0] / "manifest.json").read_text())
     assert manifest["completed"] is True
     assert "## Recommended jobs (3)" in (folders[0] / "report.md").read_text()
+
+
+def test_a_run_after_a_long_break_says_in_the_report_which_days_it_missed(tmp_path):
+    old = tmp_path / "demo" / "2026-09-30T10-00-00"
+    old.mkdir(parents=True)
+    checkpoints = FileCheckpoints(old, Window(start=date(2026, 9, 16), end=date(2026, 9, 30)))
+    checkpoints.save("report", [])
+    checkpoints.complete()
+    assert demo_cli(tmp_path, FakePrompter(True)).main(["run", "--demo"]) == 0
+    report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
+    assert "Not covered: 1 Oct to 21 Oct 2026. The last run was on 30 Sep" in report

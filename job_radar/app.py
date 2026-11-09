@@ -23,11 +23,12 @@ class JobRadarApp:
         self,
         offer: ResumeOffer,
         chooser: WindowChooser,
-        build: Callable[[Window, str | None], Pipeline],
+        build: Callable[[Window, Window | None, str | None], Pipeline],
     ) -> None:
         """Keep who offers a resume, who agrees the window, and how to build the pipeline.
 
-        `build` takes the window and the run to resume, or None for a new run.
+        `build` takes the window, the days a long break left out (or None),
+        and the run to resume (or None for a new run).
         """
         self._offer = offer
         self._chooser = chooser
@@ -37,8 +38,8 @@ class JobRadarApp:
         """Resume the failed run or agree a new window, run the pipeline, say how it ended."""
         failed = self._offer.offer()
         if failed is not None:
-            return self._build(failed.window, failed.id).run()
-        window = self._chooser.choose()
-        if window is None:
+            return self._build(failed.window, failed.not_covered, failed.id).run()
+        plan = self._chooser.choose()
+        if plan is None:
             return RunCancelled()
-        return self._build(window, None).run()
+        return self._build(plan.window, plan.not_covered(), None).run()

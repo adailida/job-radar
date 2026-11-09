@@ -171,9 +171,28 @@ def test_report_step_puts_the_run_into_the_content_and_writes_the_rendered_text(
     renderer, writer = KeepingRenderer(), MemoryWriter()
     funnel = [StepCount(step="fetch", count=2), StepCount(step="convert", count=12)]
     recs = [Recommendation(job=job("1"), score=90, reason="Fits well")]
-    reports = ReportStep(FakeStats(funnel), renderer, writer, RUN, WINDOW, 40).run(recs)
+    reports = ReportStep(FakeStats(funnel), renderer, writer, RUN, WINDOW, None, 40).run(recs)
     assert renderer.content == ReportContent(
         run=RUN, window=WINDOW, min_score=40, recommendations=tuple(recs), funnel=tuple(funnel)
     )
     assert writer.text == "the report"
     assert reports == [Report(location="memory/report.md", summary="1 job recommended")]
+
+
+def test_a_long_break_is_noted_with_the_days_left_out():
+    gap = Window(start=date(2026, 10, 21), end=date(2026, 10, 25))
+    window = Window(start=date(2026, 10, 26), end=date(2026, 11, 9))
+    report = ReportContent(
+        run=RUN, window=window, not_covered=gap, min_score=40, recommendations=(), funnel=()
+    )
+    text = MarkdownRenderer(Words()).render(report)
+    assert "covers: [2026-10-26, 2026-11-09]\nnot_covered: [2026-10-21, 2026-10-25]\n" in text
+    assert (
+        "Covers postings from 26 Oct to 9 Nov 2026.\n\nNot covered: 21 Oct to 25 Oct 2026. "
+        "The last run was on 20 Oct, and a run reaches back at most 14 days.\n"
+    ) in text
+
+
+def test_no_gap_means_no_note():
+    text = MarkdownRenderer(Words()).render(content())
+    assert "not_covered" not in text and "Not covered" not in text

@@ -56,7 +56,13 @@ def steps():
         DescribeStep({"getro": GetroDescriber("board", CLIENT, HtmlText())}, TerminalPrompter()),
         RecommendTopJobsStep(RANKER, PROFILE, top_n=10, min_score=40),
         ReportStep(
-            CHECKPOINTS, MarkdownRenderer(Words()), FileReportWriter(FOLDER), "run", WINDOW, 40
+            CHECKPOINTS,
+            MarkdownRenderer(Words()),
+            FileReportWriter(FOLDER),
+            "run",
+            WINDOW,
+            None,
+            40,
         ),
     ]
 

@@ -6,6 +6,7 @@ from job_radar.app import JobRadarApp
 from job_radar.model import RunSummary, StepCount, Window
 from job_radar.result import RunCancelled
 from job_radar.resume import ResumeOffer
+from job_radar.window import WindowPlan, WindowReason
 from job_radar.words import Words
 
 WINDOW = Window(start=date(2026, 10, 26), end=date(2026, 11, 9))
@@ -92,14 +93,19 @@ class Built:
 
 def test_the_app_resumes_the_offered_run_in_its_folder_with_its_window():
     built, calls, chooser = Built(), [], Chooser(None)
-    app = JobRadarApp(Offer(FAILED), chooser, lambda w, run_id: calls.append((w, run_id)) or built)
+    app = JobRadarApp(
+        Offer(FAILED), chooser, lambda w, gap, run_id: calls.append((w, gap, run_id)) or built
+    )
     app.run()
-    assert calls == [(WINDOW, FAILED.id)]
+    assert calls == [(WINDOW, None, FAILED.id)]
     assert built.ran and not chooser.asked
 
 
 def test_the_app_starts_a_new_run_when_nothing_is_resumed():
-    built, calls, chooser = Built(), [], Chooser(WINDOW)
-    app = JobRadarApp(Offer(None), chooser, lambda w, run_id: calls.append((w, run_id)) or built)
+    plan = WindowPlan(window=WINDOW, reason=WindowReason.FIRST_RUN)
+    built, calls, chooser = Built(), [], Chooser(plan)
+    app = JobRadarApp(
+        Offer(None), chooser, lambda w, gap, run_id: calls.append((w, gap, run_id)) or built
+    )
     app.run()
-    assert calls == [(WINDOW, None)] and chooser.asked
+    assert calls == [(WINDOW, None, None)] and chooser.asked
