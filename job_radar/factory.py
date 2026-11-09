@@ -7,6 +7,7 @@ from pathlib import Path
 import httpx
 
 from job_radar.app import JobRadarApp
+from job_radar.ats import AtsLinks
 from job_radar.checkpoints import FileCheckpoints
 from job_radar.clock import Clock
 from job_radar.drop_log import FileDropLog
@@ -113,7 +114,7 @@ class AppFactory:
         steps: list[Step] = [
             FetchStep(parts.sources, parts.criteria, window),
             ConvertStep({parser.source: parser for parser in parts.parsers}),
-            DedupeStep(JobKey(normalizer), window.end),
+            DedupeStep(JobKey(normalizer, AtsLinks()), window.end),
             FilterStep(parts.criteria, window, JobMatcher(normalizer), FileDropLog(folder, words)),
             DescribeStep({d.source: d for d in parts.describers}, self._prompter),
             RecommendTopJobsStep(

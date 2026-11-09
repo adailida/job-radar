@@ -604,7 +604,7 @@ Each posting gets several keys. Two postings are the same job if they share any 
 - Company: lowercase, no punctuation, legal suffixes dropped (Inc, LLC, Ltd, GmbH)
 - Title: lowercase, no punctuation, abbreviations expanded (Sr to senior, Eng to engineer), an aside in brackets removed only when it is about place or work mode ("Engineer (Remote, US)"). Other asides stay: on real data, "Specialist (Media and Communication)" and "Specialist (Media development, journalism...)" are different roles
 - The fuzzy key uses country, not city: sources word cities differently ("NYC", "New York, NY")
-- Built so far (task 6): one key per posting, on company, title and the posting's places as written, since postings carry no country codes before task 11. It merges less than the country key would, never two cities. ATS keys, the country key and keys from earlier runs come with task 15
+- Built so far (task 15a): the ATS key for Greenhouse, Lever, Ashby and Workable links, and the fuzzy key on company, title and countries; a place with no country code counts by its text ("remote"). Postings sharing any key merge transitively; the job's id is its primary posting's strongest key. On real data 67 of 400 Fast Forward postings link to one of these four. Keys from earlier runs come with task 15b
 
 ### Dedupe stage
 
@@ -1090,4 +1090,5 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | The next run offers to resume a failed run; nothing is asked when it fails | Ask "Delete its data?" when it fails (the earlier design) | One question instead of two, asked when the user wants to go on; `job-radar delete` covers the rest |
 | Only the newest run is offered for resuming | A list of failed runs to pick from | A failed run followed by another run is stale; its window has been fetched again |
 | The days a long break left out are worked out from the window plan once and saved in the manifest | Work them out again when the report is written | A resumed run (13b) has no plan in memory; the manifest keeps what the report needs. The field is optional, so older manifests still read |
+| A place with no country code counts by its text in the fuzzy key | Leave it out of the key; one "unknown" for every such place | "Remote" and a posting with no place at all are different facts; leaving it out would merge them |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |
