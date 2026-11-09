@@ -320,6 +320,7 @@ class ReportContent(Model):
     recommendations: tuple[Recommendation, ...]  # best first
     funnel: tuple[StepCount, ...]  # each finished step and its count, in run order
     spends: tuple["Spend", ...] = ()  # what each paid source spent
+    carried_over: int = 0  # jobs carried over to the next run by the usage limit
 
 
 class DroppedJob(Model):

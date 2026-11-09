@@ -3,7 +3,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from fakes import WINDOW, FakeStats, MemorySpendLog, MemoryWriter, job
+from fakes import WINDOW, FakeStats, MemoryPendingLog, MemorySpendLog, MemoryWriter, job
 
 from job_radar.model import (
     Approval,
@@ -175,7 +175,15 @@ def test_report_step_puts_the_run_into_the_content_and_writes_the_rendered_text(
     funnel = [StepCount(step="fetch", count=2), StepCount(step="convert", count=12)]
     recs = [Recommendation(job=job("1"), score=90, reason="Fits well")]
     reports = ReportStep(
-        FakeStats(funnel), renderer, writer, MemorySpendLog(), RUN, WINDOW, None, 40
+        FakeStats(funnel),
+        renderer,
+        writer,
+        MemorySpendLog(),
+        MemoryPendingLog(),
+        RUN,
+        WINDOW,
+        None,
+        40,
     ).run(recs)
     assert renderer.content == ReportContent(
         run=RUN, window=WINDOW, min_score=40, recommendations=tuple(recs), funnel=tuple(funnel)

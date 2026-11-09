@@ -9,9 +9,11 @@ from job_radar.cli import Cli
 from job_radar.factory import AppFactory
 from job_radar.model import Window
 from job_radar.pipeline import Pipeline
+from job_radar.ranking import KeywordRanker
 from job_radar.result import RunCancelled, RunFailed, RunSucceeded
 from job_radar.settings import SettingsFile
 from job_radar.steps.recommend import RecommendTopJobsStep
+from job_radar.usage import FilePendingLog, UsageLimitReached
 from job_radar.window import WindowPlan, WindowReason
 
 FIRST_RUN = "2026-11-05T10-00-00"
@@ -107,6 +109,7 @@ def test_new_source_plugs_in_without_changes_downstream(tmp_path):
         "dedupe": 12,
         "new_jobs_filter": 12,
         "filter": 8,
+        "carried_over": 8,
         "describe": 8,
         "classify": 8,
         "match": 8,
@@ -218,3 +221,26 @@ def test_with_new_only_off_a_second_run_sees_every_job_again(tmp_path):
     manifest = json.loads((tmp_path / "demo" / "2026-11-05T15-00-00" / "manifest.json").read_text())
     counts = {step["step"]: step["count"] for step in manifest["steps"]}
     assert counts["new_jobs_filter"] == 12
+
+
+def test_jobs_the_usage_limit_stopped_are_ranked_by_the_next_run(tmp_path, monkeypatch):
+    real_score = KeywordRanker.score
+
+    def limited(self, jobs, profile):
+        raise UsageLimitReached(real_score(self, jobs[:2], profile), jobs[2:])
+
+    monkeypatch.setattr(KeywordRanker, "score", limited)
+    first = FakePrompter(True, "f")
+    assert demo_cli(tmp_path, first).main(["run", "--demo"]) == 0
+    assert first.asked[-1].startswith("6 jobs not ranked: usage limit reached.")
+    folder = tmp_path / "demo" / FIRST_RUN
+    assert len(FilePendingLog(folder).jobs()) == 6
+    assert (
+        "6 jobs carried over to the next run (usage limit)." in (folder / "report.md").read_text()
+    )
+    monkeypatch.setattr(KeywordRanker, "score", real_score)
+    assert demo_cli(tmp_path, FakePrompter(), hour=15).main(["run", "--demo"]) == 0
+    manifest = json.loads((tmp_path / "demo" / "2026-11-05T15-00-00" / "manifest.json").read_text())
+    counts = {step["step"]: step["count"] for step in manifest["steps"]}
+    assert (counts["filter"], counts["carried_over"]) == (0, 6)
+    assert counts["recommend"] == 3

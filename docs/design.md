@@ -367,17 +367,19 @@ output/                        (setting; default ./output, gitignored)
       03-dedupe.jsonl          jobs
       04-new_jobs_filter.jsonl jobs no earlier completed run found
       05-filter.jsonl          jobs that match the search
-      06-describe.jsonl        the same jobs, with full descriptions
-      07-classify.jsonl        the same jobs, with labels: seniority, job type, domain, sector
-      08-match.jsonl           jobs that meet every criterion of a search, labels included
-      09-extract.jsonl         the same jobs, with their requirements
-      10-recommend.jsonl       the top N recommendations at or above the minimum score
-      11-report.jsonl          the Report: where it is, one-line summary
+      06-carried_over.jsonl    the same jobs, plus those the last run carried over
+      07-describe.jsonl        the same jobs, with full descriptions
+      08-classify.jsonl        the same jobs, with labels: seniority, job type, domain, sector
+      09-match.jsonl           jobs that meet every criterion of a search, labels included
+      10-extract.jsonl         the same jobs, with their requirements
+      11-recommend.jsonl       the top N recommendations at or above the minimum score
+      12-report.jsonl          the Report: where it is, one-line summary
       manifest.json            schema version; the window and any days a long break left out; each finished step and its count, in order
       report.md                this run's report
       dropped.md               what the filter dropped, grouped by why
       jobs.jsonl               after success: the extract step's output (matched jobs, labels, requirements), kept so later runs know these jobs
       spend.jsonl              what each paid source spent: estimate, decision, credits used and left
+      pending.jsonl            jobs the usage limit stopped, carried over to the next run
 ```
 
 - One JSON Lines file per step, named after the step and numbered in the order the steps ran, so the folder lists them in run order: one record per line, easy to `grep` and hand to an LLM
@@ -694,6 +696,9 @@ class JobRanker(Protocol):          # Strategy: scores jobs against the CV and p
 - Batch sizes keep calls well inside the context window: an Extract batch is ~10 × 8,000 characters, about 20,000 tokens in and a few thousand out
 
 ### Usage limit and pending jobs
+
+Built (task 19): `ClaudeCli` raises `UsageLimit` when an error answer matches a usage-limit pattern (not yet seen on a real limit; to confirm in task 26). The ranker, classifier and extractor then raise `UsageLimitReached` with what they did and the jobs from the unfinished batch on, and one `UsageLimitGuard` asks, for every step alike: "N jobs not ranked: usage limit reached. Finish with what's done and carry them over, or stop? (f/s, Enter for f)". Finish: the step passes on what's done and the rest go to `pending.jsonl`; stop: the step fails, and the same command resumes it after the reset. The next run's `carried_over` step adds them after the filter (see the decision below), skipping any this run found again. The report says how many were carried over. An unreachable LLM (other errors) still fails the step, so it is resumed rather than carried over.
+
 
 - When the subscription usage limit is hit mid-run, the run stops calling the LLM and asks: "N jobs not processed. Finish now and carry them over, or stop?" Default: finish
 - Jobs not processed because of the usage limit, or because the LLM became unreachable, go to the run's `pending.jsonl` with descriptions
@@ -1124,4 +1129,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Match is its own step after classify, reusing `JobMatcher`; the filter skips seniority and domain until a job has labels | One filter after classify | The cheap filter still cuts most jobs before any LLM call; one matcher keeps the rules in one place |
 | The kept `jobs.jsonl` is the extract step's output | The match step's output; the filter's | Seen jobs are matched jobs (section 5); the extract step keeps exactly those, and adds requirements for task 21 |
 | Extract runs before recommend, on every matched job | Only on recommended jobs | "What employers ask for" describes the market for your searches, not the few that fit your CV best |
+| Carried-over jobs join after the filter, not before | Before the filter, as first planned | They passed the filter in their own run, and are usually dated before this run's window, which the filter would drop |
+| One `UsageLimitGuard` for classify, extract and rank; the LLM passes signal partial progress with `UsageLimitReached` | Each step handles the limit itself | One rule and one question, and the passes stay unaware of prompts and files |
+| Only the usage limit carries jobs over; other LLM errors fail the step | Carry over on any LLM error | A failed step resumes from its saved input; carrying over is for a limit that resets on its own |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |

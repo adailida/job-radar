@@ -38,6 +38,7 @@ from job_radar.sources.demo import DemoParser, DemoSource
 from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
 from job_radar.sources.http import BoardClient
 from job_radar.sources.jobspipe import JobsPipeParser, JobsPipeSource
+from job_radar.steps.carried_over import CarriedOverStep
 from job_radar.steps.classify import ClassifyStep
 from job_radar.steps.convert import ConvertStep
 from job_radar.steps.dedupe import DedupeStep, JobKey
@@ -49,6 +50,7 @@ from job_radar.steps.match import MatchStep
 from job_radar.steps.new_jobs_filter import NewJobsFilterStep
 from job_radar.steps.recommend import RecommendTopJobsStep
 from job_radar.steps.report import ReportStep
+from job_radar.usage import FilePendingLog, LastRunPending, UsageLimitGuard
 from job_radar.window import WindowPlanner
 from job_radar.window_chooser import WindowChooser
 from job_radar.words import Words
@@ -138,6 +140,8 @@ class AppFactory:
         normalizer = Normalizer()
         words = Words()
         spend = FileSpendLog(folder)
+        pending = FilePendingLog(folder)
+        guard = UsageLimitGuard(self._prompter, pending)
         steps: list[Step] = [
             FetchStep(parts.sources, parts.criteria, window, approvals, spend),
             ConvertStep({parser.source: parser for parser in parts.parsers}),
@@ -146,21 +150,24 @@ class AppFactory:
                 FileSeenJobs(FileRunHistory(runs), runs), window.end, self._settings.new_only
             ),
             FilterStep(parts.criteria, window, JobMatcher(normalizer), FileDropLog(folder, words)),
+            CarriedOverStep(LastRunPending(FileRunHistory(runs), runs)),
             DescribeStep({d.source: d for d in parts.describers}, self._prompter),
-            ClassifyStep(parts.classifier, self._prompter),
+            ClassifyStep(parts.classifier, self._prompter, guard),
             MatchStep(parts.criteria, JobMatcher(normalizer)),
-            ExtractStep(parts.extractor, self._prompter),
+            ExtractStep(parts.extractor, self._prompter, guard),
             RecommendTopJobsStep(
                 parts.ranker,
                 parts.profile,
                 self._settings.recommend.top_n,
                 self._settings.recommend.min_score,
+                guard,
             ),
             ReportStep(
                 checkpoints,
                 MarkdownRenderer(words),
                 FileReportWriter(folder),
                 spend,
+                pending,
                 folder.name,
                 window,
                 not_covered,

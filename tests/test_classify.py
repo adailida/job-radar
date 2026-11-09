@@ -2,7 +2,7 @@ import json
 import re
 
 import pytest
-from fakes import FakePrompter, job
+from fakes import FakePrompter, guard, job
 
 from job_radar.classify import LlmClassifier, TitleClassifier
 from job_radar.matching import JobMatcher
@@ -142,7 +142,7 @@ def label(job_id: str, seniority=Seniority.SENIOR, domain: str | None = "climate
 def test_the_step_adds_labels_and_says_how_many_failed():
     prompter = FakePrompter()
     jobs = [job("1"), job("2")]
-    found = ClassifyStep(SetLabels({"demo:1": label("demo:1")}), prompter).run(jobs)
+    found = ClassifyStep(SetLabels({"demo:1": label("demo:1")}), prompter, guard()).run(jobs)
     assert [j.classification for j in found] == [label("demo:1"), None]
     assert prompter.told == ["The LLM couldn't label 1 of 2 jobs."]
 

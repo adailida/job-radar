@@ -5,8 +5,9 @@ from typing import Protocol, runtime_checkable
 
 from pydantic import Field, ValidationError
 
-from job_radar.llm import Llm
+from job_radar.llm import Llm, UsageLimit
 from job_radar.model import CandidateProfile, Job, Model, Recommendation, Salary
+from job_radar.usage import UsageLimitReached
 
 
 @runtime_checkable
@@ -91,10 +92,19 @@ class LlmRanker:
         self._description_chars = description_chars
 
     def score(self, jobs: list[Job], profile: CandidateProfile) -> list[Recommendation]:
-        """Score the jobs a batch at a time, in the order given."""
+        """Score the jobs a batch at a time, in the order given.
+
+        When the usage limit stops it, raises `UsageLimitReached` with the
+        scores so far and the jobs from the unfinished batch on.
+        """
         size = self._batch_size
-        batches = [jobs[i : i + size] for i in range(0, len(jobs), size)]
-        return [rec for batch in batches for rec in self._batch(batch, profile)]
+        scored: list[Recommendation] = []
+        for start in range(0, len(jobs), size):
+            try:
+                scored += self._batch(jobs[start : start + size], profile)
+            except UsageLimit:
+                raise UsageLimitReached(scored, jobs[start:]) from None
+        return scored
 
     def _batch(self, jobs: list[Job], profile: CandidateProfile) -> list[Recommendation]:
         """Score one batch, asking once more when the first answer can't be used."""
