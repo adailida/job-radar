@@ -2,7 +2,7 @@
 
 How the code is put together: which classes exist, what each one is responsible for, which others it knows, and where state lives. Every box is a real class, named as in the code. The reasons behind each part are in [design.md](design.md).
 
-**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs; until task 7b a real run ranks them by keyword against the demo profile. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
+**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
 
 The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, fetches their full descriptions, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, a made-up profile and keyword scoring in place of the LLM.
 
@@ -256,16 +256,20 @@ classDiagram
     class LlmRanker {
         -llm: Llm
         -batch_size: int
+        -description_chars: int
     }
     class KeywordRanker
     class Llm {
         <<interface>>
-        +complete(system, prompt) str
+        +complete(system, prompt, schema) str
     }
     class ClaudeCli {
         -model: str
+        -timeout: float
+        +check()
     }
     class ProfileLoader {
+        -folder: Path
         +load() CandidateProfile
     }
     class CandidateProfile {
@@ -340,6 +344,9 @@ classDiagram
     style GetroParser stroke:#2e7d32,stroke-width:3px
     style DemoParser stroke:#2e7d32,stroke-width:3px
     style KeywordRanker stroke:#2e7d32,stroke-width:3px
+    style LlmRanker stroke:#2e7d32,stroke-width:3px
+    style ClaudeCli stroke:#2e7d32,stroke-width:3px
+    style ProfileLoader stroke:#2e7d32,stroke-width:3px
 ```
 
 How to read the arrows:
@@ -399,10 +406,10 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `JobDescriber`, `GetroDescriber` | Adapter | Fetch one posting's description as plain text; `GetroDescriber` makes one request per job and gives nothing for a job the board no longer has or lists | `BoardClient`, `HtmlText` |
 | `HtmlText` | | Turn HTML into plain text that keeps paragraphs, line breaks and lists | nothing |
 | `RecommendTopJobsStep` | Step | Keep the N best-scored jobs | `JobRanker`, `CandidateProfile` |
-| `JobRanker`, `LlmRanker` | Strategy | Score jobs against the CV and preferences, in batches | `Llm` |
+| `JobRanker`, `LlmRanker` | Strategy | Score jobs against the CV and preferences, 20 to a prompt, with a JSON schema; check the answer scores every job once, ask again once if not | `Llm` |
 | `KeywordRanker` | Strategy | Score a job by the share of its title words found in the profile, for `--demo` and tests | models |
-| `Llm`, `ClaudeCli` | Interface | Send one prompt to a language model; `ClaudeCli` runs `claude -p` on the subscription | `claude -p` |
-| `ProfileLoader` | | Read the CV and preferences from `local/` into a `CandidateProfile` | `local/` |
+| `Llm`, `ClaudeCli` | Interface | Send one prompt to a language model; `ClaudeCli` runs `claude -p` on the subscription, one plain turn from an empty folder, and checks the login before a run | `claude` |
+| `ProfileLoader` | | Read the CV (`cv.pdf`, `cv.md` or `cv.txt`) and `preferences.md` from `local/` into a `CandidateProfile`; say what's missing | `local/` |
 | `ReportStep` | Step | Build the Markdown report: the funnel and the top N | `RunStats`, `ReportWriter` |
 | `ReportWriter`, `FileReportWriter` | Interface | Store the finished report and say where it is | its run folder |
 | `Clock` | | The current time, so tests can fix it | the system clock |
@@ -432,7 +439,7 @@ sequenceDiagram
 
     U->>cli: job-radar run --demo
     cli->>f: create(demo)
-    f->>f: pick the demo parts (a real run loads the profile)
+    f->>f: pick the demo parts (a real run reads the CV and preferences and checks the claude login)
     Note over cli,f: a setup error stops here: Cli prints it and exits with 2
     f-->>cli: JobRadarApp
     cli->>app: run()
@@ -482,7 +489,7 @@ sequenceDiagram
 
 ### Inside the steps
 
-The demo run, opening the black boxes. The save around each step (above) is left out. A real run puts `GetroSource` and `GetroParser` where the demo board is (built), `GetroDescriber` in the describe step (built: one request per kept job, 1s apart), and `LlmRanker` over `ClaudeCli` where `KeywordRanker` is (task 7b); dedupe gets stronger keys in task 15, and filter the full criteria in task 11.
+The demo run, opening the black boxes. The save around each step (above) is left out. A real run puts `GetroSource` and `GetroParser` where the demo board is (built), `GetroDescriber` in the describe step (built: one request per kept job, 1s apart), and `LlmRanker` over `ClaudeCli` where `KeywordRanker` is (built: batches of 20, against your CV and preferences); dedupe gets stronger keys in task 15, and filter the full criteria in task 11.
 
 ```mermaid
 sequenceDiagram
