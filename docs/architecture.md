@@ -2,7 +2,7 @@
 
 How the code is put together: which classes exist, what each one is responsible for, which others it knows, and where state lives. Every box is a real class, named as in the code. The reasons behind each part are in [design.md](design.md).
 
-**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads `local/settings.yaml` over the defaults and the searches from `local/profile.yaml`; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. PR #17 notes in the report the days a long break left out. PR #18 merges postings on the employer's own id, read from ATS links, and on company, title and country. PR #19 drops jobs an earlier completed run already found, in `NewJobsFilterStep`. PR #20 adds JobsPipe, a paid API, off by default and capped per run, and moves the default settings into `job_radar/default_settings.yaml`, which the app reads first. PR #21 agrees what paid sources may spend before anything is fetched. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
+**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads `local/settings.yaml` over the defaults and the searches from `local/profile.yaml`; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. PR #17 notes in the report the days a long break left out. PR #18 merges postings on the employer's own id, read from ATS links, and on company, title and country. PR #19 drops jobs an earlier completed run already found, in `NewJobsFilterStep`. PR #20 adds JobsPipe, a paid API, off by default and capped per run, and moves the default settings into `job_radar/default_settings.yaml`, which the app reads first. PR #21 agrees what paid sources may spend before anything is fetched. PR #22 labels each job (seniority, job type, domain, sector) and adds a match step for the `seniority` and `domains` criteria. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
 
 The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, fetches their full descriptions, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, a made-up profile and keyword scoring in place of the LLM.
 
@@ -361,6 +361,24 @@ classDiagram
         -describers: dict~str, JobDescriber~
         -prompter: Prompter
     }
+    class ClassifyStep {
+        -classifier: Classifier
+        -prompter: Prompter
+    }
+    class Classifier {
+        <<Strategy>>
+        +classify(jobs) dict~str, Classification~
+    }
+    class LlmClassifier {
+        -llm: Llm
+        -job_types: dict
+        -domains: dict
+    }
+    class TitleClassifier
+    class MatchStep {
+        -criteria: SearchCriteria
+        -matcher: JobMatcher
+    }
     class JobDescriber {
         <<Adapter>>
         +source: str
@@ -452,6 +470,13 @@ classDiagram
     SeenJobs <|.. FileSeenJobs : implements
     Step <|.. FilterStep : implements
     Step <|.. DescribeStep : implements
+    Step <|.. ClassifyStep : implements
+    Step <|.. MatchStep : implements
+    ClassifyStep o-- Classifier : holds
+    Classifier <|.. LlmClassifier : implements
+    Classifier <|.. TitleClassifier : implements
+    LlmClassifier o-- Llm : holds
+    MatchStep o-- JobMatcher : holds
     Step <|.. RecommendTopJobsStep : implements
     Step <|.. ReportStep : implements
     FetchStep o-- JobBoardSource : holds, one per board
@@ -516,6 +541,10 @@ classDiagram
     style PlaceCodes stroke:#2e7d32,stroke-width:3px
     style JobMatcher stroke:#2e7d32,stroke-width:3px
     style DescribeStep stroke:#2e7d32,stroke-width:3px
+    style ClassifyStep stroke:#2e7d32,stroke-width:3px
+    style LlmClassifier stroke:#2e7d32,stroke-width:3px
+    style TitleClassifier stroke:#2e7d32,stroke-width:3px
+    style MatchStep stroke:#2e7d32,stroke-width:3px
     style GetroDescriber stroke:#2e7d32,stroke-width:3px
     style BoardClient stroke:#2e7d32,stroke-width:3px
     style HtmlText stroke:#2e7d32,stroke-width:3px
@@ -558,6 +587,8 @@ The pipeline saves each step's output and passes it to the next step in memory. 
 | `NewJobsFilterStep` | `new_jobs_filter` | `Job`s | the `Job`s no earlier completed run found |
 | `FilterStep` | `filter` | `Job`s | `Job`s that match any search |
 | `DescribeStep` | `describe` | `Job`s | the same `Job`s, each primary posting with its full description |
+| `ClassifyStep` | `classify` | `Job`s | the same `Job`s, each with its labels (none when the LLM couldn't) |
+| `MatchStep` | `match` | `Job`s | the `Job`s that meet every criterion of a search, labels included |
 | `RecommendTopJobsStep` | `recommend` | `Job`s | the top N `Recommendation`s at or above the minimum score, each with its `Job`, a score and a reason |
 | `ReportStep` | `report` | `Recommendation`s | `Report`: where it is and a one-line summary |
 
@@ -607,6 +638,9 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `FilterStep` | Step | Keep the jobs posted in the window that match any search | `SearchCriteria`, `Window`, `JobMatcher` |
 | `JobMatcher` | | Say whether a job meets one search, and which criterion it fails first: roles, excluded title, work mode, location, salary; `if_missing` settles what the posting doesn't say | `Normalizer` |
 | `DescribeStep` | Step | Fill in the full description of each kept job's primary posting, through the describer for its board; say first how long it takes. Jobs that have one, or whose board has no describer, pass through | `JobDescriber`, `Prompter` |
+| `ClassifyStep` | Step | Add labels to every job; say how many the classifier couldn't label | `Classifier`, `Prompter` |
+| `Classifier`, `LlmClassifier`, `TitleClassifier` | Strategy | Label seniority, job type, domain and sector: `LlmClassifier` 50 jobs a prompt from the start of each description, job types and domains from settings, a retry then a split per bad answer; `TitleClassifier` seniority from title words, for `--demo` | `Llm` |
+| `MatchStep` | Step | Keep the jobs that meet every criterion of some search, now with seniority and domain | `SearchCriteria`, `JobMatcher` |
 | `JobDescriber`, `GetroDescriber` | Adapter | Fetch one posting's description as plain text; `GetroDescriber` makes one request per job and gives nothing for a job the board no longer has or lists | `BoardClient`, `HtmlText` |
 | `HtmlText` | | Turn HTML into plain text that keeps paragraphs, line breaks and lists | nothing |
 | `RecommendTopJobsStep` | Step | Keep the N best-scored jobs that reach the minimum score (40 by default) | `JobRanker`, `CandidateProfile` |
@@ -768,11 +802,11 @@ Each run gets its own folder, named by its start time, to the second. Demo runs 
 ```
 output/runs/2026-11-05T10-00-00/
     01-fetch.jsonl  02-convert.jsonl  03-dedupe.jsonl  04-new_jobs_filter.jsonl  05-filter.jsonl
-    06-describe.jsonl  07-recommend.jsonl  08-report.jsonl
+    06-describe.jsonl  07-classify.jsonl  08-match.jsonl  09-recommend.jsonl  10-report.jsonl
     manifest.json     # the window, days left out after a long break, each finished step and its count, completed or not
     report.md
     dropped.md        # what the filter dropped, by reason
-    jobs.jsonl        # after success: the jobs the filter passed, read by later runs as seen
+    jobs.jsonl        # after success: the matched jobs, with labels, read by later runs as seen
     spend.jsonl       # what each paid source spent: estimate, decision, credits used and left
 ```
 

@@ -252,3 +252,16 @@ def test_fetch_paid_spends_within_the_cap_and_says_what_it_cost():
 def test_jobspipe_limits_come_from_the_plan_unless_the_settings_set_them():
     assert JobsPipeSource.PLANS["free"] == (250, None)
     assert JobsPipeSource.PLANS["seeker"] == (2500, 10_000)
+
+
+def test_a_domain_the_settings_dont_define_is_a_setup_error(tmp_path):
+    local = tmp_path / "local"
+    local.mkdir()
+    (local / "profile.yaml").write_text("searches: {all: {domains: [space]}}\n")
+    factory = AppFactory(
+        SettingsFile.defaults(output=str(tmp_path)), local, None, FakePrompter(), {}
+    )
+    with pytest.raises(
+        ConfigError, match=r"searches.all.domains: unknown space; the settings define"
+    ):
+        factory.create(demo=False)

@@ -16,6 +16,8 @@ class LlmSettings(Model):
     timeout_seconds: float = Field(gt=0)  # to wait for one answer
     batch_size: int = Field(ge=1)  # jobs per prompt
     max_description_chars: int = Field(ge=0)  # how much of each description it sees
+    classify_batch_size: int = Field(ge=1)  # jobs per prompt when labelling
+    classify_description_chars: int = Field(ge=0)  # labelling reads only the start
 
 
 class RecommendSettings(Model):
@@ -66,6 +68,8 @@ class Settings(Model):
     lookback_days: int = Field(ge=1)
     new_only: bool  # drop jobs an earlier run already found
     llm: LlmSettings
+    job_types: dict[str, str] = Field(min_length=1)  # name: what the LLM is told it means
+    domains: dict[str, str] = Field(min_length=1)  # name: what the LLM is told it means
     recommend: RecommendSettings
     sources: SourcesSettings
 

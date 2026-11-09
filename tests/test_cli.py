@@ -108,6 +108,8 @@ def test_new_source_plugs_in_without_changes_downstream(tmp_path):
         "new_jobs_filter": 12,
         "filter": 8,
         "describe": 8,
+        "classify": 8,
+        "match": 8,
         "recommend": 3,
         "report": 1,
     }
@@ -185,7 +187,7 @@ def test_a_failed_demo_run_is_resumed_by_the_same_command(tmp_path, capsys, monk
     again = FakePrompter(True)
     assert demo_cli(tmp_path, again, hour=11).main(["run", "--demo"]) == 0
     assert again.asked == [
-        f"The last run, {FIRST_RUN} (22 Oct to 5 Nov 2026), stopped after describe. Resume it?"
+        f"The last run, {FIRST_RUN} (22 Oct to 5 Nov 2026), stopped after match. Resume it?"
     ]
     folders = list((tmp_path / "demo").iterdir())
     assert [f.name for f in folders] == [FIRST_RUN]

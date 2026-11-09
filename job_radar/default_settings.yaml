@@ -11,6 +11,28 @@ llm:
   timeout_seconds: 120    # how long to wait for one answer
   batch_size: 20          # jobs per prompt
   max_description_chars: 4000  # how much of each description the model sees
+  classify_batch_size: 50 # jobs per prompt when labelling seniority, job type and domain
+  classify_description_chars: 1000  # labelling reads only the start of each description
+
+# What the LLM labels each job with. The descriptions guide it; searches and the
+# report use the names. Change, add or remove entries freely.
+job_types:
+  engineering: "builds software: backend, frontend, full stack, mobile, platform, infrastructure, data or ML engineering"
+  engineering-management: "leads engineers: engineering manager, head or director of engineering, CTO"
+  product: "product management or product design"
+  data: "data analysis, analytics or data science, not mainly building software"
+  security: "information security, security engineering or IT security"
+  it-operations: "IT support, systems administration, DevOps operations"
+domains:
+  climate: "climate change mitigation and adaptation, energy, conservation"
+  health: "health care, public health, global health"
+  education: "education and learning"
+  civic: "government, public services, civic tech, democracy"
+  justice: "criminal justice, legal aid, human rights"
+  economic-opportunity: "jobs, financial inclusion, poverty, housing"
+  humanitarian: "humanitarian aid, refugees, international development"
+  ai-safety: "AI safety, AI governance, responsible AI"
+  commercial: "a business with no particular social mission"
 
 recommend:
   top_n: 10               # at most this many jobs in the report
