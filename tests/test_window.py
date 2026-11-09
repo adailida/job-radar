@@ -55,7 +55,7 @@ def chooser(last: Window | None, prompter: FakePrompter) -> WindowChooser:
 
 def test_first_run_asks_before_fetching():
     prompter = FakePrompter(True)
-    assert chooser(None, prompter).choose() == Window(start=date(2026, 10, 22), end=TODAY)
+    assert chooser(None, prompter).choose().window == Window(start=date(2026, 10, 22), end=TODAY)
     assert prompter.told == ["No earlier runs. Fetching the last 14 days: Oct 22 to Nov 5."]
     assert prompter.asked == ["Continue?"]
 
@@ -76,7 +76,7 @@ def test_capped_run_asks_and_says_why():
 
 def test_run_after_a_recent_one_goes_ahead_without_asking():
     prompter = FakePrompter()
-    assert chooser(ran(date(2026, 11, 3)), prompter).choose() == Window(
+    assert chooser(ran(date(2026, 11, 3)), prompter).choose().window == Window(
         start=date(2026, 11, 2), end=TODAY
     )
     assert prompter.told == [
@@ -84,3 +84,19 @@ def test_run_after_a_recent_one_goes_ahead_without_asking():
         "from the day before it, to catch postings listed late."
     ]
     assert prompter.asked == []
+
+
+def test_a_capped_run_names_the_days_it_leaves_out():
+    plan = PLANNER.plan(TODAY, ran(date(2026, 9, 30)))
+    assert plan.not_covered() == Window(start=date(2026, 10, 1), end=date(2026, 10, 21))
+
+
+def test_a_capped_run_right_after_the_lookback_leaves_nothing_out():
+    plan = PLANNER.plan(TODAY, ran(date(2026, 10, 22)))
+    assert plan.reason is WindowReason.CAPPED
+    assert plan.not_covered() is None
+
+
+def test_first_and_later_runs_leave_nothing_out():
+    assert PLANNER.plan(TODAY, None).not_covered() is None
+    assert PLANNER.plan(TODAY, ran(date(2026, 11, 3))).not_covered() is None

@@ -21,6 +21,13 @@ class WindowPlan(Model):
     reason: WindowReason
     last_run: date | None = None
 
+    def not_covered(self) -> Window | None:
+        """The days between the last run and this window, when the lookback cut them off."""
+        if self.reason is not WindowReason.CAPPED or self.last_run is None:
+            return None
+        start, end = self.last_run + timedelta(days=1), self.window.start - timedelta(days=1)
+        return Window(start=start, end=end) if start <= end else None
+
 
 class WindowPlanner:
     """Decides the dates a run covers, from the last completed run and the lookback.

@@ -1,5 +1,6 @@
 """Turning a report's content into text."""
 
+from datetime import timedelta
 from typing import Protocol, runtime_checkable
 
 from job_radar.model import Recommendation, ReportContent
@@ -34,12 +35,14 @@ class MarkdownRenderer:
             "---",
             f"run: {content.run}",
             f"covers: [{window.start.isoformat()}, {window.end.isoformat()}]",
+            *self._gap_matter(content),
             f"recommended: {len(recs)}",
             "---",
             "",
             f"# job-radar report, {self._words.day(window.end, year=True)}",
             "",
             f"Covers postings from {self._words.span(window.start, window.end)}.",
+            *self._gap_note(content),
             "",
             f"## Recommended jobs ({len(recs)})",
             "",
@@ -52,6 +55,25 @@ class MarkdownRenderer:
         lines.extend(f"- {count.step}: {count.count}" for count in content.funnel)
         lines.extend(["", "Jobs the filter dropped, by reason: dropped.md"])
         return "\n".join(lines) + "\n"
+
+    @staticmethod
+    def _gap_matter(content: ReportContent) -> list[str]:
+        """The front matter line for days a long break left out, if any."""
+        gap = content.not_covered
+        return [f"not_covered: [{gap.start.isoformat()}, {gap.end.isoformat()}]"] if gap else []
+
+    def _gap_note(self, content: ReportContent) -> list[str]:
+        """Say which days a long break left out, and why, if any."""
+        gap = content.not_covered
+        if gap is None:
+            return []
+        days = (content.window.end - content.window.start).days
+        last = self._words.day(gap.start - timedelta(days=1))
+        return [
+            "",
+            f"Not covered: {self._words.span(gap.start, gap.end)}. The last run was on {last}, "
+            f"and a run reaches back at most {days} days.",
+        ]
 
     def _job(self, rank: int, rec: Recommendation) -> list[str]:
         """One job as a numbered list item: its primary posting, the reason, a link per posting."""

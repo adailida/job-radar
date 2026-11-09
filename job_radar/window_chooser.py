@@ -4,7 +4,6 @@ from datetime import date
 
 from job_radar.clock import Clock
 from job_radar.history import RunHistory
-from job_radar.model import Window
 from job_radar.prompter import Prompter
 from job_radar.window import WindowPlan, WindowPlanner, WindowReason
 
@@ -27,12 +26,12 @@ class WindowChooser:
         self._prompter = prompter
         self._clock = clock
 
-    def choose(self) -> Window | None:
-        """The window to fetch, or None if the user said no."""
+    def choose(self) -> WindowPlan | None:
+        """The plan for the run's window, or None if the user said no."""
         plan = self._planner.plan(self._clock.now().date(), self._history.last_window())
         self._prompter.tell(self._describe(plan))
         if plan.reason is WindowReason.SINCE_LAST_RUN or self._prompter.confirm("Continue?"):
-            return plan.window
+            return plan
         return None
 
     def _describe(self, plan: WindowPlan) -> str:
@@ -43,7 +42,6 @@ class WindowChooser:
             case WindowReason.FIRST_RUN:
                 return f"No earlier runs. Fetching the last {days} days: {dates}."
             case WindowReason.CAPPED:
-                # TODO(task 14): the report notes the dates the gap left out.
                 return (
                     f"The last run was on {self._day(plan.last_run)}, more than {days} days ago. "
                     f"Fetching only the last {days} days: {dates}."

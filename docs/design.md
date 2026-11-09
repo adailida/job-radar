@@ -361,7 +361,7 @@ output/                        (setting; default ./output, gitignored)
       05-describe.jsonl        the same jobs, with full descriptions
       06-recommend.jsonl       the top N recommendations at or above the minimum score
       07-report.jsonl          the Report: where it is, one-line summary
-      manifest.json            schema version; each finished step and its count, in order
+      manifest.json            schema version; the window and any days a long break left out; each finished step and its count, in order
       report.md                this run's report
       dropped.md               what the filter dropped, grouped by why
 ```
@@ -954,7 +954,7 @@ The run folder is created only after preflight passes, so a settings typo never 
 | `llm_failed` | LLM failed on 3 jobs: listed without classification or requirements |
 | `llm_pending` | Usage limit reached: 120 jobs carried over to the next run (resets 18:00) |
 
-Lookback capping and criteria changes are not alerts: they are notes in the report header and trends section.
+Lookback capping and criteria changes are not alerts: they are notes in the report header and trends section. Built (task 14): after a long break the report says, under "Covers postings from ...", "Not covered: 1 Oct to 21 Oct 2026. The last run was on 30 Sep, and a run reaches back at most 14 days.", and the front matter has `not_covered`.
 
 ### Failed run
 
@@ -1089,4 +1089,5 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Deleting runs lives in `RunFolders`, apart from the read-only `RunHistory` | One repository that reads and deletes | Most users of the history only read it (the window chooser); only the delete command gets the power to delete |
 | The next run offers to resume a failed run; nothing is asked when it fails | Ask "Delete its data?" when it fails (the earlier design) | One question instead of two, asked when the user wants to go on; `job-radar delete` covers the rest |
 | Only the newest run is offered for resuming | A list of failed runs to pick from | A failed run followed by another run is stale; its window has been fetched again |
+| The days a long break left out are worked out from the window plan once and saved in the manifest | Work them out again when the report is written | A resumed run (13b) has no plan in memory; the manifest keeps what the report needs. The field is optional, so older manifests still read |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |

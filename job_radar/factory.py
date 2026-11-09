@@ -96,11 +96,18 @@ class AppFactory:
         """The folder that holds one folder per run: demo runs keep their own."""
         return self._settings.output / ("demo" if demo else "runs")
 
-    def _pipeline(self, parts: Parts, runs: Path, window: Window, run_id: str | None) -> Pipeline:
+    def _pipeline(
+        self,
+        parts: Parts,
+        runs: Path,
+        window: Window,
+        not_covered: Window | None,
+        run_id: str | None,
+    ) -> Pipeline:
         """Build the steps in order for the run's window, in a new folder or the resumed one."""
         folder = runs / (run_id or self._clock.stamp())
         folder.mkdir(parents=True, exist_ok=run_id is not None)
-        checkpoints = FileCheckpoints(folder, window)
+        checkpoints = FileCheckpoints(folder, window, not_covered)
         normalizer = Normalizer()
         words = Words()
         steps: list[Step] = [
@@ -121,6 +128,7 @@ class AppFactory:
                 FileReportWriter(folder),
                 folder.name,
                 window,
+                not_covered,
                 self._settings.recommend.min_score,
             ),
         ]
