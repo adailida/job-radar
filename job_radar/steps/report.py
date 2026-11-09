@@ -5,6 +5,7 @@ from job_radar.cost import SpendLog
 from job_radar.model import Recommendation, Report, ReportContent, Window
 from job_radar.report_renderer import ReportRenderer
 from job_radar.report_writer import ReportWriter
+from job_radar.trends import TrendSource
 from job_radar.usage import PendingLog
 
 
@@ -12,11 +13,11 @@ class ReportStep:
     """Puts together what the run's report says, then has it formatted and written.
 
     The content is the recommended jobs, the run's window, any days a long
-    break left out, the funnel of counts, what paid sources spent and how many
-    jobs are carried over to the next run; the renderer decides only how it
-    looks. Stateless: holds only where it reads counts, spend and carried-over
-    jobs from, the renderer, where the report goes, and what it needs to know
-    about the run.
+    break left out, the market trends, the funnel of counts, what paid sources
+    spent and how many jobs are carried over to the next run; the renderer
+    decides only how it looks. Stateless: holds only where it reads counts,
+    trends, spend and carried-over jobs from, the renderer, where the report
+    goes, and what it needs to know about the run.
     """
 
     name = "report"
@@ -29,6 +30,7 @@ class ReportStep:
         writer: ReportWriter,
         spend: SpendLog,
         pending: PendingLog,
+        trends: TrendSource,
         run_id: str,
         window: Window,
         not_covered: Window | None,
@@ -40,6 +42,7 @@ class ReportStep:
         self._writer = writer
         self._spend = spend
         self._pending = pending
+        self._trends = trends
         self._run_id = run_id
         self._window = window
         self._not_covered = not_covered
@@ -56,6 +59,7 @@ class ReportStep:
             funnel=tuple(self._stats.funnel()),
             spends=tuple(self._spend.spends()),
             carried_over=len(self._pending.jobs()),
+            trends=self._trends.trends(),
         )
         location = self._writer.write(self._renderer.render(content))
         jobs = "job" if len(data) == 1 else "jobs"

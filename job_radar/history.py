@@ -53,6 +53,7 @@ class FileRunHistory:
                         window=manifest.window,
                         not_covered=manifest.not_covered,
                         completed=manifest.completed,
+                        config=manifest.config,
                         steps=manifest.steps,
                     )
                 )

@@ -180,3 +180,11 @@ def guard(*answers: str):
     from job_radar.usage import UsageLimitGuard
 
     return UsageLimitGuard(FakePrompter(*answers), MemoryPendingLog())
+
+
+class NoTrends:
+    """A trends source with nothing to show."""
+
+    def trends(self):
+        """No trends section."""
+        return None

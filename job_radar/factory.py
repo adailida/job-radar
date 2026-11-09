@@ -18,7 +18,7 @@ from job_radar.history import FileRunHistory, RunFolders
 from job_radar.html_text import HtmlText
 from job_radar.llm import ClaudeCli
 from job_radar.matching import JobMatcher
-from job_radar.model import Approval, CandidateProfile, SearchCriteria, Window
+from job_radar.model import Approval, CandidateProfile, RunConfig, SearchCriteria, Window
 from job_radar.normalize import Normalizer
 from job_radar.pipeline import Pipeline, Step
 from job_radar.places import PlaceCodes
@@ -50,6 +50,7 @@ from job_radar.steps.match import MatchStep
 from job_radar.steps.new_jobs_filter import NewJobsFilterStep
 from job_radar.steps.recommend import RecommendTopJobsStep
 from job_radar.steps.report import ReportStep
+from job_radar.trends import MarketTrends, TrendBuilder
 from job_radar.usage import FilePendingLog, LastRunPending, UsageLimitGuard
 from job_radar.window import WindowPlanner
 from job_radar.window_chooser import WindowChooser
@@ -134,8 +135,11 @@ class AppFactory:
         """Build the steps in order for the run's window, in a new folder or the resumed one."""
         folder = runs / (run_id or self._clock.stamp())
         folder.mkdir(parents=True, exist_ok=run_id is not None)
+        config = RunConfig(
+            searches=parts.criteria.searches, sources=tuple(s.name for s in parts.sources)
+        )
         checkpoints = FileCheckpoints(
-            folder, window, not_covered, keep={ExtractStep.name: FileSeenJobs.FILE}
+            folder, window, not_covered, keep={ExtractStep.name: FileSeenJobs.FILE}, config=config
         )
         normalizer = Normalizer()
         words = Words()
@@ -168,6 +172,14 @@ class AppFactory:
                 FileReportWriter(folder),
                 spend,
                 pending,
+                MarketTrends(
+                    FileRunHistory(runs),
+                    runs,
+                    checkpoints,
+                    window,
+                    config,
+                    TrendBuilder(self._settings.trend_period),
+                ),
                 folder.name,
                 window,
                 not_covered,

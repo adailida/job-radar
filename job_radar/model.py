@@ -321,6 +321,7 @@ class ReportContent(Model):
     funnel: tuple[StepCount, ...]  # each finished step and its count, in run order
     spends: tuple["Spend", ...] = ()  # what each paid source spent
     carried_over: int = 0  # jobs carried over to the next run by the usage limit
+    trends: "Trends | None" = None  # the market trends section
 
 
 class DroppedJob(Model):
@@ -348,6 +349,7 @@ class RunSummary(Model):
     not_covered: Window | None = None  # days a long break left out, before the window
     completed: bool
     steps: tuple[StepCount, ...]  # each finished step and its count, in run order
+    config: "RunConfig | None" = None  # what it searched for and where; None for older runs
 
 
 class SpendPlan(Model):
@@ -393,3 +395,76 @@ class Spend(Model):
     approval: Approval
     charged: int = 0
     credits_after: int | None = None  # None when the source was skipped
+
+
+class RunConfig(Model):
+    """What a run searched for and where: kept in its manifest, so later trends can tell."""
+
+    searches: tuple[Search, ...]
+    sources: tuple[str, ...]  # the boards it fetched from, by name
+
+
+class TrendPeriod(Model):
+    """The figures for one trend period: a week, a month or a quarter.
+
+    Shares are fractions from 0 to 1. Each figure keeps how many jobs it rests
+    on, so a thin one can be marked as a low sample.
+    """
+
+    start: date
+    end: date
+    covered_days: int  # days of the period inside some run's window
+    postings: int  # matched jobs dated in the period
+    per_day: float | None  # postings per covered day; None with no covered day
+    work_modes: dict[str, float]  # remote, hybrid, onsite: share of jobs that say
+    work_mode_base: int  # jobs that say their work mode
+    work_mode_unknown: int
+    salary_median: int | None  # yearly USD, from the midpoint of each range
+    salary_p25: int | None
+    salary_p75: int | None
+    salary_base: int  # jobs with a USD salary
+    salary_listed: float | None  # share of jobs listing any salary
+    seniority: dict[str, float]  # each level: share of jobs with a known level
+    seniority_base: int  # jobs with a known level
+    seniority_unknown: int  # jobs with no level, or no labels
+
+    @property
+    def days(self) -> int:
+        """How many days the period has."""
+        return (self.end - self.start).days + 1
+
+    @property
+    def partial(self) -> bool:
+        """Whether some of its days fell outside every run's window."""
+        return self.covered_days < self.days
+
+
+class TrendChange(Model):
+    """The latest period against the last complete one before it."""
+
+    against: date  # the start of the period compared with
+    per_day: float | None  # percent change in postings per covered day
+    work_modes: dict[str, float]  # change in each share, in points
+    salary_median: float | None  # percent change
+    seniority: dict[str, float]  # change in each share, in points
+
+
+class TrendNote(Model):
+    """A change to what runs searched for or where, so a jump isn't read as the market."""
+
+    day: date  # the last day of the run that changed it
+    changes: tuple[str, ...]  # "added source jobspipe", "changed search remote-us"
+
+
+class Trends(Model):
+    """The market trends section: recent periods, the change, and notes."""
+
+    period: str  # week, month or quarter
+    periods: tuple[TrendPeriod, ...]  # oldest first, at most six
+    change: TrendChange | None  # None when there's nothing complete to compare with
+    notes: tuple[TrendNote, ...]
+    low_sample: int  # a figure resting on fewer jobs than this is marked
+
+
+ReportContent.model_rebuild()
+RunSummary.model_rebuild()

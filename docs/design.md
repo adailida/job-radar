@@ -732,6 +732,8 @@ Prompt files live in `llm/prompts/`, each with a version recorded on every class
 
 Input: `history()` (matched jobs from completed runs, with classifications and extractions) plus this run's matched jobs in memory.
 
+Built so far (task 20): the market trends section. `MarketTrends` reads each completed run's `jobs.jsonl`, window and config (searches and sources, now kept in its manifest), adds this run's kept output (the extract step's, read before the run completes), and `TrendBuilder` works out the last six periods with a covered day (`trend_period`: week, month or quarter), a job counting once even if several runs found it. Figures: postings and postings per covered day; remote, hybrid and onsite shares of jobs that say, with the rest counted; salary median and 25th to 75th percentile from yearly USD midpoints (hourly times 2,080, monthly times 12; other currencies left out), and the share listing any salary; the seniority mix of labelled jobs, unknown counted apart. The change compares the latest period with the last complete period before it (percent for postings per day and salary, points for shares); with none, the report says there's nothing to compare yet. Notes list added or removed sources and added, removed or changed searches between runs, from the first period shown. Breakdowns by sector, domain and job type come later.
+
 ### Periods
 
 - Length from `trend_period`: `week`, `month` (default) or `quarter`
@@ -1132,4 +1134,6 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Carried-over jobs join after the filter, not before | Before the filter, as first planned | They passed the filter in their own run, and are usually dated before this run's window, which the filter would drop |
 | One `UsageLimitGuard` for classify, extract and rank; the LLM passes signal partial progress with `UsageLimitReached` | Each step handles the limit itself | One rule and one question, and the passes stay unaware of prompts and files |
 | Only the usage limit carries jobs over; other LLM errors fail the step | Carry over on any LLM error | A failed step resumes from its saved input; carrying over is for a limit that resets on its own |
+| Each run's searches and sources are kept in its manifest, and trends compare them run to run | Compare against the current profile only | A jump after adding JobsPipe or a search is otherwise read as the market; older manifests without it are skipped |
+| Only periods with a covered day are shown; a job dated in a period no run covered counts nowhere | Show every period back to the oldest posting | A period no run covered has no denominator for postings per day |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |
