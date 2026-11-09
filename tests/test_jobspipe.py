@@ -96,7 +96,7 @@ SEARCH = Search(
 def source(handler, filters=None, max_jobs=25, prompter=None) -> JobsPipeSource:
     """A source over a fake API, with no pauses."""
     client = BoardClient(httpx.Client(transport=httpx.MockTransport(handler)), 0, lambda s: None)
-    return JobsPipeSource(client, filters or {}, max_jobs, prompter or FakePrompter())
+    return JobsPipeSource(client, filters or {}, (max_jobs, None), prompter or FakePrompter())
 
 
 def test_query_sends_each_criterion_and_asks_for_unknowns_a_criterion_keeps():
@@ -125,7 +125,11 @@ class FakeApi:
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         if request.url.path == "/v1/account":
-            return httpx.Response(200, json={"credits_remaining": 100})
+            return httpx.Response(200, json={"credits_remaining": 100, "credits_used": 40})
+        if request.url.path == "/v1/jobs/export/estimate":
+            if self.status == 504:
+                return httpx.Response(504, json={"error": "Job search timed out."})
+            return httpx.Response(200, json={"rows": self.total})
         if self.status != 200:
             return httpx.Response(self.status, json={"error": "bad", "message": "No credits left."})
         body = json.loads(request.content)
@@ -153,10 +157,7 @@ def test_fetch_pages_with_the_cursor_and_stops_at_the_cap():
     assert [b["limit"] for b in api.bodies] == [25, 5]
     assert "cursor" not in api.bodies[0] and api.bodies[1]["cursor"] == "more"
     assert [p.page for p in pages] == [1, 2]
-    assert prompter.told == [
-        "JobsPipe: up to 30 jobs, so at most 30 credits (100 left).",
-        "JobsPipe: 30 jobs, 30 credits used, 70 left.",
-    ]
+    assert prompter.told == ["JobsPipe: 30 jobs, 30 credits used, 70 left."]
 
 
 def test_fetch_stops_when_the_results_run_out():
@@ -216,5 +217,38 @@ def test_live_estimate_answers_for_free():
 
 def test_with_match_if_missing_off_no_unknowns_are_asked_for():
     client = BoardClient(httpx.Client(), 0, lambda s: None)
-    strict = JobsPipeSource(client, {}, 25, FakePrompter(), match_if_missing=False)
+    strict = JobsPipeSource(client, {}, (25, None), FakePrompter(), match_if_missing=False)
     assert "include_unknown" not in strict.query(SEARCH, WINDOW)
+
+
+TWO = SearchCriteria(searches=(SEARCH, SEARCH.model_copy(update={"name": "seattle"})))
+
+
+def test_plan_adds_up_free_estimates_and_reads_the_credits():
+    plan = source(FakeApi(total=12), max_jobs=25).plan(TWO, WINDOW)
+    assert (plan.estimate, plan.estimated, plan.credits_left) == (24, True, 100)
+    assert (plan.per_run_max, plan.budget_left) == (25, 100)
+
+
+def test_a_monthly_budget_is_what_the_month_has_left():
+    client = BoardClient(
+        httpx.Client(transport=httpx.MockTransport(FakeApi(total=1))), 0, lambda s: None
+    )
+    paid = JobsPipeSource(client, {}, (2500, 10_000), FakePrompter())
+    assert paid.plan(TWO, WINDOW).budget_left == 10_000 - 40
+
+
+def test_when_jobspipe_cant_count_the_estimate_is_the_per_run_max():
+    plan = source(FakeApi(total=5, status=504), max_jobs=25).plan(TWO, WINDOW)
+    assert (plan.estimate, plan.estimated) == (25, False)
+
+
+def test_fetch_paid_spends_within_the_cap_and_says_what_it_cost():
+    paid = source(FakeApi(total=100), max_jobs=250).fetch_paid(TWO, WINDOW, cap=20)
+    assert (paid.charged, paid.credits_left) == (20, 80)
+    assert sum(len(json.loads(p.body)["data"]) for p in paid.pages) == 20
+
+
+def test_jobspipe_limits_come_from_the_plan_unless_the_settings_set_them():
+    assert JobsPipeSource.PLANS["free"] == (250, None)
+    assert JobsPipeSource.PLANS["seeker"] == (2500, 10_000)

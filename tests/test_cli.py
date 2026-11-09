@@ -1,7 +1,7 @@
 import json
 from datetime import date
 
-from fakes import WINDOW, FakePrompter, FakeStep, FixedClock
+from fakes import WINDOW, FakePrompter, FakeStep, FixedClock, NoCost
 
 from job_radar.app import JobRadarApp
 from job_radar.checkpoints import FileCheckpoints
@@ -32,7 +32,9 @@ class FailingFactory:
     def create(self, demo: bool = False) -> JobRadarApp:
         step = FakeStep("fetch", error=RuntimeError("board down"))
         pipeline = Pipeline([step], FileCheckpoints(self._folder, WINDOW))
-        return JobRadarApp(NoResume(), FixedWindow(), lambda window, gap, run_id: pipeline)
+        return JobRadarApp(
+            NoResume(), FixedWindow(), NoCost(), lambda window, gap, run_id, ok: pipeline
+        )
 
 
 class NoResume:

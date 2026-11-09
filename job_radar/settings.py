@@ -1,7 +1,7 @@
 """How runs work: every setting, read from the defaults file with the user's changes over it."""
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -36,7 +36,9 @@ class JobsPipeSettings(Model):
 
     enabled: bool
     api_key_env: str  # the variable in the environment or .env
-    max_jobs_per_run: int = Field(ge=1)  # one credit a job, so also the most a run spends
+    plan: Literal["free", "seeker"]  # sets the per-run max and the monthly budget
+    max_jobs_per_run: int | None = Field(ge=1)  # per-run max; None takes the plan's
+    monthly_budget: int | None = Field(ge=1)  # None takes the plan's
     delay_seconds: float = Field(ge=0)  # between requests
     # Also ask for jobs that don't say, where a criterion's if_missing keeps them.
     # Matches the local filter; false sends stricter queries, for fewer credits.

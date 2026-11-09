@@ -8,6 +8,7 @@ from job_radar.ats import AtsLinks
 from job_radar.checkpoints import Checkpoints, FileCheckpoints, RunStats
 from job_radar.cli import Cli
 from job_radar.clock import Clock
+from job_radar.cost import FileSpendLog
 from job_radar.drop_log import DropLog, FileDropLog
 from job_radar.factory import AppFactory
 from job_radar.history import FileRunHistory, RunHistory
@@ -50,7 +51,7 @@ CLIENT = BoardClient(httpx.Client())
 def steps():
     """One of each step, in run order."""
     return [
-        FetchStep([GetroSource("board", CLIENT)], SEARCH, WINDOW),
+        FetchStep([GetroSource("board", CLIENT)], SEARCH, WINDOW, [], FileSpendLog(FOLDER)),
         ConvertStep({"getro": GetroParser(PlaceCodes())}),
         DedupeStep(JobKey(Normalizer(), AtsLinks()), date(2026, 11, 5)),
         FilterStep(SEARCH, WINDOW, JobMatcher(Normalizer()), FileDropLog(FOLDER, Words())),
@@ -60,6 +61,7 @@ def steps():
             CHECKPOINTS,
             MarkdownRenderer(Words()),
             FileReportWriter(FOLDER),
+            FileSpendLog(FOLDER),
             "run",
             WINDOW,
             None,

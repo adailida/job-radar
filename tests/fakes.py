@@ -104,6 +104,11 @@ class FakePrompter:
         self.asked.append(question)
         return self._answers.pop(0)
 
+    def choose(self, question, choices, default: str) -> str:
+        """Remember the question and give the next answer."""
+        self.asked.append(question)
+        return self._answers.pop(0)
+
 
 class FakeHistory:
     """Run history with a set last window."""
@@ -127,3 +132,27 @@ class MemoryDropLog:
     def write(self, drops) -> None:
         """Keep the list."""
         self.drops = drops
+
+
+class MemorySpendLog:
+    """A spend log that keeps records in memory."""
+
+    def __init__(self, *spends):
+        """Start with these records."""
+        self.written = list(spends)
+
+    def write(self, spend) -> None:
+        """Keep the record."""
+        self.written.append(spend)
+
+    def spends(self):
+        """The records kept."""
+        return list(self.written)
+
+
+class NoCost:
+    """A cost check with no paid sources: approves nothing, asks nothing."""
+
+    def check(self, window):
+        """No approvals."""
+        return []

@@ -1,7 +1,7 @@
 from datetime import date
 
 import pytest
-from fakes import job, posting
+from fakes import MemorySpendLog, job, posting
 
 from job_radar.model import (
     CandidateProfile,
@@ -53,7 +53,9 @@ class ScoreByIdRanker:
 
 
 def test_fetch_takes_pages_from_every_board_in_order():
-    step = FetchStep([PagesSource("a", 2), PagesSource("b", 1)], SEARCH, WINDOW)
+    step = FetchStep(
+        [PagesSource("a", 2), PagesSource("b", 1)], SEARCH, WINDOW, [], MemorySpendLog()
+    )
     pages = step.run([])
     assert [(p.source, p.page) for p in pages] == [("a", 1), ("a", 2), ("b", 1)]
 

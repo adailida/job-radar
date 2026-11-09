@@ -2,7 +2,7 @@
 
 How the code is put together: which classes exist, what each one is responsible for, which others it knows, and where state lives. Every box is a real class, named as in the code. The reasons behind each part are in [design.md](design.md).
 
-**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads `local/settings.yaml` over the defaults and the searches from `local/profile.yaml`; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. PR #17 notes in the report the days a long break left out. PR #18 merges postings on the employer's own id, read from ATS links, and on company, title and country. PR #19 drops jobs an earlier completed run already found, in `NewJobsFilterStep`. PR #20 adds JobsPipe, a paid API, off by default and capped per run, and moves the default settings into `job_radar/default_settings.yaml`, which the app reads first. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
+**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads `local/settings.yaml` over the defaults and the searches from `local/profile.yaml`; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. PR #17 notes in the report the days a long break left out. PR #18 merges postings on the employer's own id, read from ATS links, and on company, title and country. PR #19 drops jobs an earlier completed run already found, in `NewJobsFilterStep`. PR #20 adds JobsPipe, a paid API, off by default and capped per run, and moves the default settings into `job_radar/default_settings.yaml`, which the app reads first. PR #21 agrees what paid sources may spend before anything is fetched. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
 
 The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, fetches their full descriptions, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, a made-up profile and keyword scoring in place of the LLM.
 
@@ -59,8 +59,14 @@ classDiagram
     class JobRadarApp {
         -offer: ResumeOffer
         -chooser: WindowChooser
-        -build: window, run to resume, to Pipeline
+        -cost: CostCheck
+        -build: window, run to resume, approvals, to Pipeline
         +run() RunResult
+    }
+    class CostCheck {
+        -sources: list~PaidSource~
+        -prompter: Prompter
+        +check(window) list~Approval~
     }
     class ResumeOffer {
         -history: RunHistory
@@ -236,6 +242,21 @@ classDiagram
         -sources: list~JobBoardSource~
         -criteria: SearchCriteria
         -window: Window
+        -approvals: dict~str, Approval~
+        -log: SpendLog
+    }
+    class PaidSource {
+        <<interface>>
+        +plan(criteria, window) SpendPlan
+        +fetch_paid(criteria, window, cap) PaidFetch
+    }
+    class SpendLog {
+        <<interface>>
+        +write(spend)
+        +spends() list~Spend~
+    }
+    class FileSpendLog {
+        -folder: Path
     }
     class JobBoardSource {
         <<Adapter>>
@@ -436,6 +457,11 @@ classDiagram
     FetchStep o-- JobBoardSource : holds, one per board
     JobBoardSource <|.. GetroSource : implements
     JobBoardSource <|.. JobsPipeSource : implements
+    PaidSource <|.. JobsPipeSource : implements
+    JobRadarApp o-- CostCheck : holds
+    CostCheck o-- PaidSource : holds
+    FetchStep o-- SpendLog : holds
+    SpendLog <|.. FileSpendLog : implements
     JobsPipeSource o-- BoardClient : holds, with the key
     JobBoardSource <|.. DemoSource : implements
     GetroSource o-- BoardClient : holds
@@ -475,6 +501,8 @@ classDiagram
     ReportWriter <|.. FileReportWriter : implements
 
     style FetchStep stroke:#2e7d32,stroke-width:3px
+    style FileSpendLog stroke:#2e7d32,stroke-width:3px
+    style CostCheck stroke:#2e7d32,stroke-width:3px
     style ConvertStep stroke:#2e7d32,stroke-width:3px
     style DedupeStep stroke:#2e7d32,stroke-width:3px
     style JobKey stroke:#2e7d32,stroke-width:3px
@@ -558,9 +586,11 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `Checkpoints` | Repository | Save and load each step's output for one run; record counts in the manifest; once the run succeeds, mark it completed and delete the outputs | models |
 | `RunStats` | Interface | Read-only: how many items each finished step produced | models |
 | `FileCheckpoints` | Implements both | One JSON Lines file per step, numbered in run order (`01-fetch.jsonl`), plus `manifest.json` (the window, each step's count, completed or not), in the run folder | its run folder |
-| `FetchStep` | Step | Fetch raw pages from every configured job board | `JobBoardSource` |
+| `FetchStep` | Step | Fetch raw pages from every configured job board; a paid one within its approval, or not at all when skipped, recording what it spent | `JobBoardSource`, `PaidSource`, `SpendLog` |
+| `CostCheck` | | Before anything is fetched: each paid source's free estimate against the per-run max, the budget and the credits left; go ahead on its own within them, else ask go ahead, skip or stop (Enter for skip) | `PaidSource`, `Prompter` |
+| `SpendLog`, `FileSpendLog` | Repository | Keep what each paid source spent in a run, in `spend.jsonl`; the report reads it | its run folder |
 | `JobBoardSource`, `GetroSource` | Adapter | Query one board's API, page by page; `GetroSource` stops at the page that reaches past the window | `BoardClient` |
-| `JobsPipeSource` | Adapter | One JobsPipe search per user search, with the criteria and the JobsPipe-only filters sent; cursor paging, never past the run's cap on jobs (one credit each); says the credits it may use, used and has left | `BoardClient`, `Prompter` |
+| `JobsPipeSource` | Adapter, `PaidSource` | One JobsPipe search per user search, with the criteria and the JobsPipe-only filters sent; cursor paging within the agreed cap. Its plan is free: the account's credits and an estimate of the matches; the plan (free, seeker) sets the per-run max and monthly budget unless settings override them | `BoardClient`, `Prompter` |
 | `JobsPipeParser` | Adapter | Turn JobsPipe records into `Posting`s: its country and state codes, work arrangement, yearly pay, full description | `PlaceCodes`, `HtmlText` |
 | `Secrets`, `EnvSecrets` | Interface | Read an API key from the environment, else from `.env` | the environment, `.env` |
 | `BoardClient` | | Send one board's requests at its pace (1s for Getro), retrying timeouts, server errors and rate limits | the board's API |
@@ -743,6 +773,7 @@ output/runs/2026-11-05T10-00-00/
     report.md
     dropped.md        # what the filter dropped, by reason
     jobs.jsonl        # after success: the jobs the filter passed, read by later runs as seen
+    spend.jsonl       # what each paid source spent: estimate, decision, credits used and left
 ```
 
 After a successful run only `manifest.json`, `report.md`, `dropped.md` and `jobs.jsonl` remain, and the manifest says the run completed. After a failed run everything stays, ready to resume.

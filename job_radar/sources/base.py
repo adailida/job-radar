@@ -2,7 +2,7 @@
 
 from typing import Protocol, runtime_checkable
 
-from job_radar.model import Posting, RawPage, SearchCriteria, Window
+from job_radar.model import PaidFetch, Posting, RawPage, SearchCriteria, SpendPlan, Window
 
 
 @runtime_checkable
@@ -16,6 +16,19 @@ class JobBoardSource(Protocol):
 
     def fetch(self, criteria: SearchCriteria, window: Window) -> list[RawPage]:
         """Query the board for the searches and window, page by page, unparsed."""
+        ...
+
+
+@runtime_checkable
+class PaidSource(JobBoardSource, Protocol):
+    """A board that charges for what it returns: it can say what a run will cost (Adapter)."""
+
+    def plan(self, criteria: SearchCriteria, window: Window) -> SpendPlan:
+        """What the searches would cost and the limits that apply, without spending anything."""
+        ...
+
+    def fetch_paid(self, criteria: SearchCriteria, window: Window, cap: int) -> PaidFetch:
+        """Fetch, spending at most `cap` credits, and say what it cost."""
         ...
 
 

@@ -1,6 +1,7 @@
 """Step 8: write the report."""
 
 from job_radar.checkpoints import RunStats
+from job_radar.cost import SpendLog
 from job_radar.model import Recommendation, Report, ReportContent, Window
 from job_radar.report_renderer import ReportRenderer
 from job_radar.report_writer import ReportWriter
@@ -10,9 +11,10 @@ class ReportStep:
     """Puts together what the run's report says, then has it formatted and written.
 
     The content is the recommended jobs, the run's window, any days a long
-    break left out, and the funnel of counts; the renderer decides only how it
-    looks. Stateless: holds only where it reads counts from, the renderer,
-    where the report goes, and what it needs to know about the run.
+    break left out, the funnel of counts and what paid sources spent; the
+    renderer decides only how it looks. Stateless: holds only where it reads
+    counts and spend from, the renderer, where the report goes, and what it
+    needs to know about the run.
     """
 
     name = "report"
@@ -23,6 +25,7 @@ class ReportStep:
         stats: RunStats,
         renderer: ReportRenderer,
         writer: ReportWriter,
+        spend: SpendLog,
         run_id: str,
         window: Window,
         not_covered: Window | None,
@@ -32,6 +35,7 @@ class ReportStep:
         self._stats = stats
         self._renderer = renderer
         self._writer = writer
+        self._spend = spend
         self._run_id = run_id
         self._window = window
         self._not_covered = not_covered
@@ -46,6 +50,7 @@ class ReportStep:
             min_score=self._min_score,
             recommendations=tuple(data),
             funnel=tuple(self._stats.funnel()),
+            spends=tuple(self._spend.spends()),
         )
         location = self._writer.write(self._renderer.render(content))
         jobs = "job" if len(data) == 1 else "jobs"
