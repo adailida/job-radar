@@ -38,10 +38,10 @@ class Cli:
     def main(self, argv: list[str]) -> int:
         """Parse the command line, run the chosen command, and return the exit code.
 
-        Exit codes: 0 when the run succeeded or the user called it off, 1 when
-        a step failed, 2 when the run could not be set up.
+        Exit codes: 0 when the command succeeded or the user called it off, 1
+        when a step failed or a run to delete doesn't exist, 2 when the run
+        could not be set up.
         """
-        # TODO(task 13): add the runs and delete commands.
         parser = argparse.ArgumentParser(
             prog="job-radar", description="Job search and job-market trends."
         )
@@ -53,7 +53,17 @@ class Cli:
             action="store_true",
             help="use made-up postings and a made-up profile: no network, no LLM",
         )
+        runs = commands.add_parser("runs", help="list earlier runs, newest first")
+        runs.add_argument("--demo", action="store_true", help="list demo runs instead")
+        delete = commands.add_parser("delete", help="delete earlier runs, after asking")
+        delete.add_argument("run_ids", nargs="*", metavar="run-id", help="as `runs` lists it")
+        delete.add_argument("--all", action="store_true", help="delete every run")
+        delete.add_argument("--demo", action="store_true", help="delete demo runs instead")
         args = parser.parse_args(argv)
+        if args.command == "runs":
+            return self._factory.runs_command(demo=args.demo).show()
+        if args.command == "delete":
+            return self._factory.runs_command(demo=args.demo).delete(args.run_ids, every=args.all)
         if args.command != "run":
             parser.print_help()
             return 0

@@ -2,7 +2,7 @@
 
 How the code is put together: which classes exist, what each one is responsible for, which others it knows, and where state lives. Every box is a real class, named as in the code. The reasons behind each part are in [design.md](design.md).
 
-**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads `local/settings.yaml` over the defaults and the searches from `local/profile.yaml`; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
+**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads `local/settings.yaml` over the defaults and the searches from `local/profile.yaml`; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
 
 The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, fetches their full descriptions, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, a made-up profile and keyword scoring in place of the LLM.
 
@@ -108,7 +108,8 @@ classDiagram
     AppFactory ..> SearchesFile : calls load, for a real run
     SearchesFile ..> SearchCriteria : creates
     SearchesFile o-- YamlFile : holds
-    Cli ..> AppFactory : calls create
+    Cli ..> AppFactory : calls create, or runs_command
+    Cli ..> RunsCommand : calls show, delete
     Cli ..> JobRadarApp : calls run
     Cli ..> RunResult : calls message, exit_code
     AppFactory ..> JobRadarApp : creates
@@ -169,14 +170,26 @@ classDiagram
     class RunHistory {
         <<Repository>>
         +last_window() Window
+        +runs() list~RunSummary~
     }
     class FileRunHistory {
         -folder: Path
     }
+    class RunFolders {
+        -folder: Path
+        +delete(run_id)
+    }
+    class RunsCommand {
+        -history: RunHistory
+        -folders: RunFolders
+        -prompter: Prompter
+        +show() int
+        +delete(run_ids, every) int
+    }
     class Prompter {
         <<interface>>
         +tell(message)
-        +confirm(question) bool
+        +confirm(question, default) bool
     }
     class TerminalPrompter
 
@@ -186,11 +199,16 @@ classDiagram
     WindowChooser o-- Prompter : holds
     WindowPlanner ..> WindowPlan : creates
     RunHistory <|.. FileRunHistory : implements
+    RunsCommand o-- RunHistory : holds
+    RunsCommand o-- RunFolders : holds
+    RunsCommand o-- Prompter : holds
     Prompter <|.. TerminalPrompter : implements
 
     style WindowChooser stroke:#2e7d32,stroke-width:3px
     style WindowPlanner stroke:#2e7d32,stroke-width:3px
     style FileRunHistory stroke:#2e7d32,stroke-width:3px
+    style RunFolders stroke:#2e7d32,stroke-width:3px
+    style RunsCommand stroke:#2e7d32,stroke-width:3px
     style TerminalPrompter stroke:#2e7d32,stroke-width:3px
 ```
 
@@ -472,7 +490,9 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `RunResult`, `RunSucceeded`, `RunFailed`, `RunCancelled` | Polymorphism | Say how a run ended, in words and as an exit code | nothing |
 | `WindowChooser` | | Tell the user which dates the run fetches and why; ask first on a first run or after a long break | `RunHistory`, `WindowPlanner`, `Prompter`, `Clock` |
 | `WindowPlanner` | | Decide the window from today, the last completed run and the lookback | `Window` |
-| `RunHistory`, `FileRunHistory` | Repository | Read-only: the window of the last completed run, from the run folders | the run folders |
+| `RunHistory`, `FileRunHistory` | Repository | Read-only: every run (id, window, completed or not, its steps) and the window of the last completed one, from the run folders | the run folders |
+| `RunFolders` | | Delete a run folder, only one that exists directly under the runs folder | the run folders |
+| `RunsCommand` | | `job-radar runs`: list runs, newest first. `job-radar delete`: delete runs after asking, Enter meaning no | `RunHistory`, `RunFolders`, `Prompter`, `Words` |
 | `Prompter`, `TerminalPrompter` | Interface | Tell the user things and ask yes or no in the terminal | the terminal |
 | `Pipeline` | Pipeline | Run the steps in order; skip steps already saved; save each output; turn an error into `RunFailed` and the final `Report` into `RunSucceeded`; delete the checkpoints on success | `Step`, `Checkpoints`, `Report`, `RunResult` |
 | `Step` | Interface | The shape every step shares | models |

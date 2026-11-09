@@ -42,3 +42,16 @@ def test_no_input_to_read_takes_the_default():
         raise EOFError
 
     assert TerminalPrompter(read=closed, write=print).confirm("Continue?") is True
+
+
+def test_a_no_default_shows_it_and_enter_means_no():
+    ask, lines = prompter("")
+    assert ask.confirm("Delete?", default=False) is False
+    assert lines == ["Delete? (y/n, Enter for n) "]
+
+
+def test_no_input_to_read_takes_a_no_default():
+    def closed(prompt: str) -> str:
+        raise EOFError
+
+    assert TerminalPrompter(read=closed, write=print).confirm("Delete?", default=False) is False

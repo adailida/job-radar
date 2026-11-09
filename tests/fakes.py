@@ -99,7 +99,7 @@ class FakePrompter:
         """Remember the message."""
         self.told.append(message)
 
-    def confirm(self, question: str) -> bool:
+    def confirm(self, question: str, default: bool = True) -> bool:
         """Remember the question and give the next answer."""
         self.asked.append(question)
         return self._answers.pop(0)

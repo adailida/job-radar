@@ -147,7 +147,7 @@ No free functions: every behaviour belongs to a class with one responsibility, o
 
 - `job-radar run`: one run
 - `job-radar run --demo`: one run on a made-up board and profile, with keyword scoring in place of the LLM: no network, no LLM, nothing from `local/`. For trying the tool and for the end-to-end tests. A flag, not a setting: a demo is a one-off choice for one command. Demo runs keep their own run folders and history under `output/demo/`, so they never move a real run's window
-- Later: `job-radar runs` lists runs with their status; `job-radar delete <run-id>` deletes a run after confirmation
+- `job-radar runs` lists runs, newest first: status, window, and what a run recommended or the last step a failed one finished. `job-radar delete <run-id>...` deletes runs after confirmation; `--all` deletes every run. `--demo` works on demo runs
 
 ### Layout
 
@@ -417,7 +417,7 @@ class ReportWriter(Protocol):       # where the finished report goes
 
 - `FileCheckpoints` implements both `Checkpoints` and `RunStats`; `FileReportWriter` writes `report.md`. `AppFactory` creates them with the run's folder, so they never start or track a run: they are born for one
 - Only `Pipeline` uses `Checkpoints`. `ReportStep` gets the same object as `RunStats`, so it can read the counts but not save or delete
-- `RunHistory` is read-only and starts with one method, `last_window()`, which `FileRunHistory` reads from the manifests. Listing and deleting runs and the caches are added with task 13
+- `RunHistory` is read-only and starts with one method, `last_window()`, which `FileRunHistory` reads from the manifests. Listing runs (`runs()`) came with task 13a; deleting is `RunFolders`, a separate class, since it changes the folders
 
 ### Keeping other backends possible (SQLite later)
 
@@ -582,7 +582,7 @@ class Prompter(Protocol):
     def choose(self, question: str, options: Sequence[str], default: str | None = None) -> str: ...  # task 17
 ```
 
-- `confirm` covers yes/no questions (the window, deleting a run, the failed-run prompt). It shows `(y/n, Enter for y)`: always lowercase, with the default spelled out. Any other answer asks again
+- `confirm` covers yes/no questions (the window, deleting a run, the failed-run prompt). It shows `(y/n, Enter for y)`, or `(y/n, Enter for n)` when no is the default: always lowercase, with the default spelled out. Any other answer asks again. Deleting defaults to no
 - `choose` covers the cost-check outcomes (section 12)
 - With no input to read, as in a script, `TerminalPrompter` takes the default
 
@@ -1085,4 +1085,6 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | `JobMatcher` checks one job against one search and names the first criterion it fails | The checks inside `FilterStep` | One responsibility each; the dropped list (task 11b) needs the reason |
 | `keywords` move after the describe step | Describe every job before the filter | Descriptions take a request per job; the filter cuts 380 jobs to 10 first |
 | The filter hands the jobs it dropped, with why, to a `DropLog`, which writes `dropped.md` next to the report | The report rebuilds the list from the dedupe and filter outputs; dropped jobs in the report itself | The report would need other steps' outputs by name and the matcher again. The list is long (329 titles in two weeks), so it gets its own file; the report links it. Jobs dated before the window are only counted, since a board like Fast Forward sends everything it has |
+| Deleting a run asks with no as the default, also when there's no input to read | Yes as the default, like the other questions | A stray Enter or a script must never delete runs; the other questions only start or skip work |
+| Deleting runs lives in `RunFolders`, apart from the read-only `RunHistory` | One repository that reads and deletes | Most users of the history only read it (the window chooser); only the delete command gets the power to delete |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |

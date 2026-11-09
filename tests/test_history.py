@@ -1,9 +1,10 @@
 from datetime import date
 
+import pytest
 from fakes import job
 
 from job_radar.checkpoints import FileCheckpoints
-from job_radar.history import FileRunHistory
+from job_radar.history import FileRunHistory, RunFolders
 from job_radar.model import Window
 
 
@@ -45,3 +46,34 @@ def test_unreadable_and_empty_run_folders_are_skipped(tmp_path):
     (old / "manifest.json").write_text('{"schema": 1, "steps": []}')
     (tmp_path / "2026-11-03T09-00-00").mkdir()
     assert FileRunHistory(tmp_path).last_window() == window(1)
+
+
+def test_runs_lists_completed_and_failed_newest_first(tmp_path):
+    run(tmp_path, "2026-11-01T09-00-00", 1, completed=True)
+    run(tmp_path, "2026-11-03T09-00-00", 3, completed=False)
+    (tmp_path / "2026-11-04T09-00-00").mkdir()
+    runs = FileRunHistory(tmp_path).runs()
+    assert [(r.id, r.completed, r.window.end.day) for r in runs] == [
+        ("2026-11-03T09-00-00", False, 3),
+        ("2026-11-01T09-00-00", True, 1),
+    ]
+    assert [count.step for count in runs[0].steps] == ["dedupe"]
+
+
+def test_no_runs_folder_means_no_runs(tmp_path):
+    assert FileRunHistory(tmp_path / "runs").runs() == []
+
+
+def test_run_folders_delete_one_run_and_nothing_else(tmp_path):
+    run(tmp_path, "2026-11-01T09-00-00", 1, completed=True)
+    run(tmp_path, "2026-11-03T09-00-00", 3, completed=True)
+    RunFolders(tmp_path).delete("2026-11-01T09-00-00")
+    assert [p.name for p in tmp_path.iterdir()] == ["2026-11-03T09-00-00"]
+
+
+@pytest.mark.parametrize("run_id", ["2026-11-09T00-00-00", "..", "", "../x", "."])
+def test_run_folders_refuse_anything_but_an_existing_run(tmp_path, run_id):
+    run(tmp_path, "2026-11-01T09-00-00", 1, completed=True)
+    with pytest.raises(KeyError):
+        RunFolders(tmp_path).delete(run_id)
+    assert [p.name for p in tmp_path.iterdir()] == ["2026-11-01T09-00-00"]
