@@ -27,12 +27,14 @@ from job_radar.report_writer import FileReportWriter
 from job_radar.resume import ResumeOffer
 from job_radar.runs_command import RunsCommand
 from job_radar.searches import DEMO_SEARCHES, SearchesFile
+from job_radar.secrets import Secrets
 from job_radar.seen import FileSeenJobs
 from job_radar.settings import Settings
 from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber
 from job_radar.sources.demo import DemoParser, DemoSource
 from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
 from job_radar.sources.http import BoardClient
+from job_radar.sources.jobspipe import JobsPipeParser, JobsPipeSource
 from job_radar.steps.convert import ConvertStep
 from job_radar.steps.dedupe import DedupeStep, JobKey
 from job_radar.steps.describe import DescribeStep
@@ -44,6 +46,7 @@ from job_radar.steps.report import ReportStep
 from job_radar.window import WindowPlanner
 from job_radar.window_chooser import WindowChooser
 from job_radar.words import Words
+from job_radar.yaml_file import ConfigError
 
 
 @dataclass(frozen=True)
@@ -63,15 +66,23 @@ class AppFactory:
 
     Wires concrete classes together, so every other class depends only on
     interfaces. Stateless: holds only the settings, the user's folder, the
-    clock and the prompter.
+    clock, the prompter and where secrets are read.
     """
 
     USER_AGENT = "job-radar (+https://github.com/adailida/job-radar)"
 
-    def __init__(self, settings: Settings, local: Path, clock: Clock, prompter: Prompter) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        local: Path,
+        clock: Clock,
+        prompter: Prompter,
+        secrets: Secrets,
+    ) -> None:
         """Keep the settings, the user's folder, the clock and the prompter to build from."""
         self._settings = settings
         self._local = local
+        self._secrets = secrets
         self._clock = clock
         self._prompter = prompter
 
@@ -142,6 +153,27 @@ class AppFactory:
         ]
         return Pipeline(steps, checkpoints)
 
+    def _jobspipe(self) -> JobsPipeSource:
+        """The JobsPipe source, with its key from the environment or `.env`."""
+        jobspipe = self._settings.sources.jobspipe
+        key = self._secrets.get(jobspipe.api_key_env)
+        if not key:
+            raise ConfigError(
+                f"{jobspipe.api_key_env} is not set: add it to .env, "
+                "or set sources.jobspipe.enabled: false in local/settings.yaml"
+            )
+        http = httpx.Client(
+            headers={"User-Agent": self.USER_AGENT, "Authorization": f"Bearer {key}"}, timeout=60
+        )
+        client = BoardClient(http, jobspipe.delay_seconds)
+        return JobsPipeSource(
+            client,
+            jobspipe.filters,
+            jobspipe.max_jobs_per_run,
+            self._prompter,
+            jobspipe.match_if_missing,
+        )
+
     def _demo(self) -> Parts:
         """The boards, searches, ranker and profile of a demo run."""
         return Parts(
@@ -154,24 +186,29 @@ class AppFactory:
         )
 
     def _real(self) -> Parts:
-        """The boards, ranker and profile of a real run: Fast Forward, Claude and the user's files.
+        """The boards, ranker and profile of a real run: the boards, Claude and the user's files.
 
-        Reads the searches, the CV and the preferences and checks `claude` is
-        logged in first, so a missing file or login stops the run before
-        anything is fetched.
+        Reads the searches, the CV, the preferences and any API key, then
+        checks `claude` is logged in, so a missing file, key or login stops the
+        run before anything is fetched. JobsPipe joins Fast Forward when it is on.
         """
         criteria = SearchesFile(self._local / "profile.yaml").load()
         profile = ProfileLoader(self._local).load()
+        http = httpx.Client(headers={"User-Agent": self.USER_AGENT}, timeout=20)
+        getro = BoardClient(http)
+        network = self._settings.sources.getro.network
+        sources: list[JobBoardSource] = [GetroSource(network, getro)]
+        parsers: list[JobBoardParser] = [GetroParser(PlaceCodes())]
+        if self._settings.sources.jobspipe.enabled:
+            sources.append(self._jobspipe())
+            parsers.append(JobsPipeParser(PlaceCodes(), HtmlText()))
         llm_settings = self._settings.llm
         llm = ClaudeCli(llm_settings.model, llm_settings.timeout_seconds)
         llm.check()
         ranker = LlmRanker(llm, llm_settings.batch_size, llm_settings.max_description_chars)
-        http = httpx.Client(headers={"User-Agent": self.USER_AGENT}, timeout=20)
-        getro = BoardClient(http)
-        network = self._settings.sources.getro.network
         return Parts(
-            [GetroSource(network, getro)],
-            [GetroParser(PlaceCodes())],
+            sources,
+            parsers,
             [GetroDescriber(network, getro, HtmlText())],
             criteria,
             ranker,

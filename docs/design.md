@@ -339,10 +339,18 @@ Each source applies what it can server-side, to save credits. The Filter stage t
 - Request delay per source in settings (Getro: 1s, from its robots.txt crawl delay)
 - A failed paid fetch can't refund credits already spent. JobsPipe doesn't charge for repeats within the month, so a retry next run mostly costs nothing
 
-### To check while building
+### Checked while building
 
-- Whether JobsPipe's API reports credits used this month, or only credits left
-- Whether Getro's search API filters by date. If not, fetch the whole board (~1,500 jobs, free); the seen check and window filter handle the rest
+- JobsPipe reports credits used this month: `GET /v1/account` (free) gives the plan, credits used and left; every search response gives `credits_charged` and `credits_remaining`. `POST /v1/jobs/export/estimate` counts the matches for the same filters, free. Its sandbox returns two made-up records, too few for fixtures
+- Getro's search API doesn't filter by date: the whole board is fetched (~1,500 jobs, free); the seen check and window filter handle the rest
+
+### JobsPipe (built, task 16)
+
+- Off by default (`sources.jobspipe.enabled`); the key from `JOBSPIPE_API_KEY` in the environment or `.env`. On without a key is a setup error
+- One search per user search: roles to `job_title_or`, excluded titles to `job_title_not`, work mode to `work_arrangement_or`, countries to `job_country_code_or` and US or Canadian regions to `region_or`, a USD minimum to `min_salary_usd`, the window's start to `posted_at_gte`. A criterion whose `if_missing` keeps jobs also sends `include_unknown`, unless `match_if_missing: false`
+- `filters` in settings are JobsPipe-only, sent as written (tech occupations, no agencies, ghost score, mission phrases, seniority)
+- `max_jobs_per_run` (25) caps the jobs returned, and so the credits, until task 17's cost checks
+- Measured Nov 9 with the owner's searches and filters: about 84 jobs a day with unknowns asked for, about 18 without
 
 ## 5. Run data storage
 
@@ -485,10 +493,11 @@ local/                     gitignored as a whole
   cv.pdf                   the CV: PDF, Markdown or plain text
   settings.yaml            only the settings the user overrides
 .env                       API keys
+job_radar/
+  default_settings.yaml    every setting with its default, commented: read first, every run
 examples/
   profile.example.yaml
-  cv.example.md            a fictional person
-  settings.example.yaml    every setting with its default, commented
+  cv.example.md            a fictional person (later)
 ```
 
 - One gitignored folder for everything personal: the repo is public, and one rule covers any personal file added later
@@ -522,7 +531,7 @@ searches:                                 # a job matches if it matches any sear
 
 ### Settings
 
-Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`), `recommend` (`top_n`, `min_score`) and `sources.getro.network`. The others come with their tasks; [examples/settings.example.yaml](../examples/settings.example.yaml) lists what exists.
+Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`), `recommend` (`top_n`, `min_score`) and `sources.getro.network`. The others come with their tasks; [job_radar/default_settings.yaml](../job_radar/default_settings.yaml) holds what exists.
 
 ```yaml
 domains:                    # cause areas or fields: used by the domains filter and report headings
@@ -568,7 +577,7 @@ sources:
 
 ### Loading and validation
 
-- Defaults live in the Pydantic settings model only. A test checks that `settings.example.yaml` parses and matches them
+- Defaults live in `job_radar/default_settings.yaml` only, read first on every run. The Pydantic model holds types and limits and no defaults, so a setting missing from that file is an error
 - The user's file is deep-merged over the defaults
 - Unknown keys are errors, so typos are caught. Errors name the path: `sources.jobspipe.plan: must be one of free, seeker`
 
@@ -1097,4 +1106,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | A place with no country code counts by its text in the fuzzy key | Leave it out of the key; one "unknown" for every such place | "Remote" and a posting with no place at all are different facts; leaving it out would merge them |
 | Seen jobs are the filter's output of completed runs, kept as `jobs.jsonl` by `FileCheckpoints` on success | A separate writer; a store outside run folders | The output is already saved as a checkpoint, so keeping one file costs nothing; deleting a run makes its jobs unseen with no extra logic |
 | Dropping seen jobs is its own step, `new_jobs_filter`, after dedupe | Inside dedupe | One responsibility each, and the funnel shows how many jobs were new |
+| JobsPipe-only narrowing lives in settings (`sources.jobspipe.filters`), passed through as written, not in the profile | Mission phrases as profile keywords | Fast Forward lists only mission orgs; the phrases are needed only to narrow JobsPipe's mainstream feed. Passing filters through needs no code per JobsPipe field |
+| Keys come from the environment, else `.env`, through a `Secrets` interface | `python-dotenv`; settings | No new dependency for a NAME=value file; the environment wins for one-off runs; tests pass a plain dict |
+| Defaults are a real YAML file the app reads (`job_radar/default_settings.yaml`), the user's file merged over it | Defaults in the model, with an example file a test keeps in sync (the earlier choice) | Changed Nov 9 at the owner's ask: the full config you read is the one the app uses. Still one place for defaults: the model has none |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |

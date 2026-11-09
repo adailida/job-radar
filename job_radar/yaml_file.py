@@ -28,6 +28,10 @@ class YamlFile:
 
     def load[M: BaseModel](self, kind: type[M]) -> M:
         """Parse the file and check it against the model. An empty file is an empty mapping."""
+        return self.check(kind, self.data())
+
+    def data(self) -> dict:
+        """The file's keys and values, unchecked. An empty file is an empty mapping."""
         try:
             data = yaml.safe_load(self._path.read_text(encoding="utf-8"))
         except yaml.YAMLError as error:
@@ -36,6 +40,10 @@ class YamlFile:
             data = {}
         if not isinstance(data, dict):
             raise ConfigError(f"{self._path}: expected keys and values at the top level")
+        return data
+
+    def check[M: BaseModel](self, kind: type[M], data: dict) -> M:
+        """Check data read from this file (or merged with it) against the model."""
         try:
             return kind.model_validate(data)
         except ValidationError as error:

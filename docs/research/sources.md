@@ -147,3 +147,11 @@ Not in the MVP
 - LinkedIn: no API, scraping is against its terms. Covered partly through JobsPipe
 - Wellfound: no public API, not in JobsPipe's source list
 - Email alerts and per-site setups: dropped
+
+## JobsPipe API (checked 2026-11-09)
+
+- `POST /v1/jobs/search`, Bearer key, cursor paging, newest first; Free plan pages hold 25
+- 1 credit per job returned that the account hasn't paid for this calendar month; repeats and empty searches are free
+- Free calls: `GET /v1/account` (credits used and left this month), `POST /v1/jobs/export/estimate` (match count and the most it could cost)
+- Records carry full descriptions, country and state codes, work arrangement, yearly pay in its currency, ISCO occupation codes
+- Volumes, one day, the owner's two searches (remote US, Seattle) with engineering roles: about 1,000 as is; about 575 with tech occupations, no agencies, ghost score at most 40; about 21 with mission phrases in the description; 14-day phrase searches time out on their side

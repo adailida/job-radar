@@ -2,7 +2,7 @@
 
 How the code is put together: which classes exist, what each one is responsible for, which others it knows, and where state lives. Every box is a real class, named as in the code. The reasons behind each part are in [design.md](design.md).
 
-**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads `local/settings.yaml` over the defaults and the searches from `local/profile.yaml`; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. PR #17 notes in the report the days a long break left out. PR #18 merges postings on the employer's own id, read from ATS links, and on company, title and country. PR #19 drops jobs an earlier completed run already found, in `NewJobsFilterStep`. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
+**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads `local/settings.yaml` over the defaults and the searches from `local/profile.yaml`; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. PR #17 notes in the report the days a long break left out. PR #18 merges postings on the employer's own id, read from ATS links, and on company, title and country. PR #19 drops jobs an earlier completed run already found, in `NewJobsFilterStep`. PR #20 adds JobsPipe, a paid API, off by default and capped per run, and moves the default settings into `job_radar/default_settings.yaml`, which the app reads first. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
 
 The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, fetches their full descriptions, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, a made-up profile and keyword scoring in place of the LLM.
 
@@ -246,6 +246,21 @@ classDiagram
         -network: str
         -client: BoardClient
     }
+    class JobsPipeSource {
+        -client: BoardClient
+        -filters: dict
+        -max_jobs: int
+        -prompter: Prompter
+        +query(search, window) dict
+    }
+    class JobsPipeParser
+    class Secrets {
+        <<interface>>
+        +get(name) str
+    }
+    class EnvSecrets {
+        -path: Path
+    }
     class BoardClient {
         -http: httpx.Client
         -delay: float
@@ -420,10 +435,15 @@ classDiagram
     Step <|.. ReportStep : implements
     FetchStep o-- JobBoardSource : holds, one per board
     JobBoardSource <|.. GetroSource : implements
+    JobBoardSource <|.. JobsPipeSource : implements
+    JobsPipeSource o-- BoardClient : holds, with the key
     JobBoardSource <|.. DemoSource : implements
     GetroSource o-- BoardClient : holds
     ConvertStep o-- JobBoardParser : holds, one per board
     JobBoardParser <|.. GetroParser : implements
+    JobBoardParser <|.. JobsPipeParser : implements
+    JobsPipeParser o-- PlaceCodes : holds
+    Secrets <|.. EnvSecrets : implements
     JobBoardParser <|.. DemoParser : implements
     DedupeStep o-- JobKey : holds
     JobKey o-- Normalizer : holds
@@ -477,6 +497,9 @@ classDiagram
     style MarkdownRenderer stroke:#2e7d32,stroke-width:3px
     style DemoSource stroke:#2e7d32,stroke-width:3px
     style GetroSource stroke:#2e7d32,stroke-width:3px
+    style EnvSecrets stroke:#2e7d32,stroke-width:3px
+    style JobsPipeParser stroke:#2e7d32,stroke-width:3px
+    style JobsPipeSource stroke:#2e7d32,stroke-width:3px
     style GetroParser stroke:#2e7d32,stroke-width:3px
     style DemoParser stroke:#2e7d32,stroke-width:3px
     style KeywordRanker stroke:#2e7d32,stroke-width:3px
@@ -518,7 +541,7 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 |---|---|---|---|
 | `Cli` | Entry point | Turn the command line into a call; print the result; return the exit code | `AppFactory`, `JobRadarApp`, `RunResult` |
 | `AppFactory` | Factory | Build the app for one command, real or demo. The only class that knows concrete classes | all of them |
-| `SettingsFile` | | Read `local/settings.yaml` over the defaults in `Settings`; no file means every default | `YamlFile`, `Settings` |
+| `SettingsFile` | | Read `job_radar/default_settings.yaml`, then merge `local/settings.yaml` over it at any depth; no local file means every default. `Settings` holds only types and limits | `YamlFile`, `Settings` |
 | `SearchesFile` | | Read the searches from `local/profile.yaml`, filling each from `common`; required for a real run | `YamlFile`, `SearchCriteria` |
 | `YamlFile` | | Read one YAML file into a model; errors name the file and the key's path | `pyyaml`, models |
 | `JobRadarApp` | | Resume the last run if it failed and the user says yes, or agree a new window; have the pipeline built for it, launch it, and hand back how it ended | `ResumeOffer`, `WindowChooser`, `Pipeline`, `RunResult` |
@@ -537,6 +560,9 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `FileCheckpoints` | Implements both | One JSON Lines file per step, numbered in run order (`01-fetch.jsonl`), plus `manifest.json` (the window, each step's count, completed or not), in the run folder | its run folder |
 | `FetchStep` | Step | Fetch raw pages from every configured job board | `JobBoardSource` |
 | `JobBoardSource`, `GetroSource` | Adapter | Query one board's API, page by page; `GetroSource` stops at the page that reaches past the window | `BoardClient` |
+| `JobsPipeSource` | Adapter | One JobsPipe search per user search, with the criteria and the JobsPipe-only filters sent; cursor paging, never past the run's cap on jobs (one credit each); says the credits it may use, used and has left | `BoardClient`, `Prompter` |
+| `JobsPipeParser` | Adapter | Turn JobsPipe records into `Posting`s: its country and state codes, work arrangement, yearly pay, full description | `PlaceCodes`, `HtmlText` |
+| `Secrets`, `EnvSecrets` | Interface | Read an API key from the environment, else from `.env` | the environment, `.env` |
 | `BoardClient` | | Send one board's requests at its pace (1s for Getro), retrying timeouts, server errors and rate limits | the board's API |
 | `ConvertStep` | Step | Send each raw page to the parser for its board | `JobBoardParser` |
 | `JobBoardParser`, `GetroParser` | Adapter | Turn one board's records into `Posting`s, places with their codes | the board's format, `PlaceCodes` |

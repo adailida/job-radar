@@ -103,7 +103,7 @@ One line each for now; each task gets its detail, against the class names in arc
 
 - [x] **10. Settings file:** YAML with defaults, unknown keys rejected, an example file
   - `local/settings.yaml` over the defaults (nested: `llm`, `recommend`, `sources`), and the searches from `local/profile.yaml` (`common` and `searches`, roles only); errors name the file and the key's path
-  - `examples/settings.example.yaml` (every default; a test checks it matches) and `examples/profile.example.yaml`
+  - `examples/profile.example.yaml`; the defaults moved to `job_radar/default_settings.yaml` in task 16, read first on every run
   - Fetch and filter take all the searches; a job is kept if any matches. The demo has its own search in code
 - [x] **11a. Search criteria:** excluded titles, work mode, locations (ISO codes, read from the place text by `PlaceCodes`), minimum salary, each with `if_missing`; `JobMatcher` names the criterion a job fails
 - [x] **11b. Dropped by the filter:** a `dropped.md` next to the report, titles by the reason they were dropped, so silent misses show; the report links it
@@ -114,7 +114,7 @@ One line each for now; each task gets its detail, against the class names in arc
 - [x] **14. Time window in the report:** when the lookback cap cut a gap, the report says so and which dates it covers (the window itself is task 4)
 - [x] **15a. Stronger keys:** an ATS key from Greenhouse, Lever, Ashby and Workable links, a fuzzy key on company, title and country; postings sharing any key merge, transitively
 - [x] **15b. Only new jobs:** each completed run keeps the jobs its filter passed (`jobs.jsonl`); `NewJobsFilterStep` (`new_jobs_filter`) after dedupe drops jobs an earlier completed run kept (fuzzy keys within 60 days, ATS keys always); `new_only` setting
-- [ ] **16. JobsPipe:** `JobsPipeSource` and `JobsPipeParser`, fixtures recorded with a few credits
+- [x] **16. JobsPipe:** `JobsPipeSource` and `JobsPipeParser`, fixtures recorded with a few credits; off by default, key from `.env`, a per-run cap on jobs, JobsPipe-only filters in settings
 - [ ] **17. Cost checks:** estimate, limits, ask before spending, monthly spend
 - [ ] **18. Classify and extract:** seniority, domain and requirements from the LLM, cached
 - [ ] **19. Usage-limit carry-over:** jobs the LLM couldn't reach move to the next run

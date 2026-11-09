@@ -8,6 +8,7 @@ from job_radar import __version__
 from job_radar.clock import Clock
 from job_radar.factory import AppFactory
 from job_radar.prompter import TerminalPrompter
+from job_radar.secrets import EnvSecrets
 from job_radar.settings import SettingsFile
 from job_radar.yaml_file import ConfigError
 
@@ -28,7 +29,8 @@ class Cli:
         except ConfigError as error:
             print(f"Could not set up the run: {error}")
             return 2
-        factory = AppFactory(settings, Cli.LOCAL, Clock(), TerminalPrompter())
+        secrets = EnvSecrets(Path(".env"))
+        factory = AppFactory(settings, Cli.LOCAL, Clock(), TerminalPrompter(), secrets)
         return Cli(factory).main(sys.argv[1:])
 
     def __init__(self, factory: AppFactory) -> None:
