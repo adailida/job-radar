@@ -85,9 +85,11 @@ Goal: `job-radar run` fetches Fast Forward, recommends the top N jobs against th
   - Tests, with a fake `Llm` and a fake command runner: batching and order; the prompt's contents; each kind of bad answer retried, then the step fails; the command's flags, folder, errors and login check; each profile case; live check (opt-in)
   - Acceptance: Runs: only filtered postings go to the LLM, in batches
 
-- [ ] **8. Report**
-  - `ReportStep` complete: the funnel and the top N with score, title, company, location, work mode, salary, link and reason
-  - Tests: golden-file report; `RunSucceeded` shows the report location
+- [x] **8. Report**
+  - `ReportStep` complete: the funnel and the top N with score, title, company, location, work mode, salary, posted date, link and reason; YAML front matter
+  - `ReportContent` built by the step and formatted by `MarkdownRenderer`, which decides nothing
+  - `min_score` setting (40): only jobs at or above it are recommended; with none, the report says so
+  - Tests: golden-file report; salary and date wording; the step's content; minimum score; `RunSucceeded` shows the report location
   - Acceptance: Runs: each run writes one report and saves its run data
 
 - [ ] **9. First real run, limited**
@@ -99,7 +101,7 @@ Goal: `job-radar run` fetches Fast Forward, recommends the top N jobs against th
 One line each for now; each task gets its detail, against the class names in architecture.md, when it starts.
 
 - [ ] **10. Settings file:** YAML with defaults, unknown keys rejected, an example file
-- [ ] **11. Full search criteria:** locations, work mode, keywords, excluded titles, salary, `if_missing`
+- [ ] **11. Full search criteria:** locations, work mode, keywords, excluded titles, salary, `if_missing`; a "Dropped by the filter" list in the report, so silent role misses ("Engineer, Data", "ML Engineer") show
 - [ ] **12. Terminal prompts:** ask for missing or invalid profile fields (`Prompter` exists since task 4)
 - [ ] **13. Run history:** `job-radar runs` and `job-radar delete`; choosing to resume a failed run, and `Pipeline` resuming after the last finished step (moved from task 4 on Nov 5: nothing can choose a failed run before this task)
 - [ ] **14. Time window in the report:** when the lookback cap cut a gap, the report says so and which dates it covers (the window itself is task 4)
