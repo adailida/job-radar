@@ -44,6 +44,8 @@ A real run needs, in `local/` (never committed):
 
 and Claude Code logged in.
 
+If a run fails, run the same command again: it offers to resume after the last step that finished.
+
 Each run says which dates it fetches: the last 14 days on a first run, since the last run after that. On a first run, or after a long break, it asks before going ahead.
 
 Each run writes `output/runs/<run-id>/report.md`, with `dropped.md` next to it. Add `--demo` to `runs` or `delete` for demo runs.

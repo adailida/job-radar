@@ -2,7 +2,7 @@
 
 How the code is put together: which classes exist, what each one is responsible for, which others it knows, and where state lives. Every box is a real class, named as in the code. The reasons behind each part are in [design.md](design.md).
 
-**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads `local/settings.yaml` over the defaults and the searches from `local/profile.yaml`; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
+**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads `local/settings.yaml` over the defaults and the searches from `local/profile.yaml`; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
 
 The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, fetches their full descriptions, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, a made-up profile and keyword scoring in place of the LLM.
 
@@ -57,9 +57,15 @@ classDiagram
         +searches: tuple~Search~
     }
     class JobRadarApp {
+        -offer: ResumeOffer
         -chooser: WindowChooser
-        -build: window to Pipeline
+        -build: window, run to resume, to Pipeline
         +run() RunResult
+    }
+    class ResumeOffer {
+        -history: RunHistory
+        -prompter: Prompter
+        +offer() RunSummary
     }
     class RunResult {
         <<abstract>>
@@ -116,6 +122,8 @@ classDiagram
     AppFactory ..> Pipeline : creates, for the agreed window
     AppFactory ..> FileCheckpoints : creates
     JobRadarApp ..> Pipeline : has it built, calls run
+    JobRadarApp o-- ResumeOffer : holds
+    ResumeOffer o-- RunHistory : holds
     JobRadarApp ..> RunCancelled : creates
     Pipeline o-- Step : holds, in order
     Pipeline o-- Checkpoints : holds
@@ -486,7 +494,8 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `SettingsFile` | | Read `local/settings.yaml` over the defaults in `Settings`; no file means every default | `YamlFile`, `Settings` |
 | `SearchesFile` | | Read the searches from `local/profile.yaml`, filling each from `common`; required for a real run | `YamlFile`, `SearchCriteria` |
 | `YamlFile` | | Read one YAML file into a model; errors name the file and the key's path | `pyyaml`, models |
-| `JobRadarApp` | | Agree the window, have the pipeline built for it, launch it, and hand back how it ended | `WindowChooser`, `Pipeline`, `RunResult` |
+| `JobRadarApp` | | Resume the last run if it failed and the user says yes, or agree a new window; have the pipeline built for it, launch it, and hand back how it ended | `ResumeOffer`, `WindowChooser`, `Pipeline`, `RunResult` |
+| `ResumeOffer` | | When the newest run didn't complete, ask whether to resume it (Enter for yes) | `RunHistory`, `Prompter`, `Words` |
 | `RunResult`, `RunSucceeded`, `RunFailed`, `RunCancelled` | Polymorphism | Say how a run ended, in words and as an exit code | nothing |
 | `WindowChooser` | | Tell the user which dates the run fetches and why; ask first on a first run or after a long break | `RunHistory`, `WindowPlanner`, `Prompter`, `Clock` |
 | `WindowPlanner` | | Decide the window from today, the last completed run and the lookback | `Window` |
@@ -494,7 +503,7 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `RunFolders` | | Delete a run folder, only one that exists directly under the runs folder | the run folders |
 | `RunsCommand` | | `job-radar runs`: list runs, newest first. `job-radar delete`: delete runs after asking, Enter meaning no | `RunHistory`, `RunFolders`, `Prompter`, `Words` |
 | `Prompter`, `TerminalPrompter` | Interface | Tell the user things and ask yes or no in the terminal | the terminal |
-| `Pipeline` | Pipeline | Run the steps in order; skip steps already saved; save each output; turn an error into `RunFailed` and the final `Report` into `RunSucceeded`; delete the checkpoints on success | `Step`, `Checkpoints`, `Report`, `RunResult` |
+| `Pipeline` | Pipeline | Run the steps in order; skip the steps already saved and read the last of them back; save each output; turn an error into `RunFailed` and the final `Report` into `RunSucceeded`; delete the checkpoints on success | `Step`, `Checkpoints`, `Report`, `RunResult` |
 | `Step` | Interface | The shape every step shares | models |
 | `Checkpoints` | Repository | Save and load each step's output for one run; record counts in the manifest; once the run succeeds, mark it completed and delete the outputs | models |
 | `RunStats` | Interface | Read-only: how many items each finished step produced | models |
@@ -556,6 +565,8 @@ sequenceDiagram
     Note over cli,f: a setup error stops here: Cli prints it and exits with 2
     f-->>cli: JobRadarApp
     cli->>app: run()
+    app->>app: ResumeOffer.offer(): if the newest run failed, ask "Resume it?"
+    Note over app: yes: build the pipeline in that run's folder, with its window, and run it (below)
     app->>wc: choose()
     wc->>h: last_window()
     h-->>wc: the last completed run's window, or none
@@ -576,7 +587,11 @@ sequenceDiagram
         f->>f: make the run folder, build the steps, FileCheckpoints and Pipeline
         f-->>app: Pipeline
         app->>p: run()
-        loop each step, in order
+        opt resuming
+            p->>cp: has(step), from the first step on
+            p->>cp: load(the last saved step), once
+        end
+        loop each step not saved yet, in order
             p->>s: run(data)
             s-->>p: output, passed on in memory as the next data
             p->>cp: save(step, output)
@@ -596,7 +611,7 @@ sequenceDiagram
 ```
 
 - `Cli` never checks which result it got; each result knows its own message and exit code
-- A failed run keeps every saved step. Resuming after the last one that finished comes in task 13: the pipeline will skip the saved steps and load the last saved output from disk, once
+- A failed run keeps every saved step. Running the same command again offers to resume it: the pipeline skips the saved steps and loads the last saved output from disk, once
 - Outputs pass between steps in memory; the disk is only written, except when resuming
 - The window: a first run fetches the lookback (14 days). A later run starts one day before the last completed run's last day: that day again, since the last run may have been early in it, and one more, for postings listed a day late. Never further back than the lookback. Repeats are removed once jobs already seen are recognised (task 15)
 
