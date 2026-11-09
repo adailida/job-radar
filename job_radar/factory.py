@@ -11,12 +11,13 @@ from job_radar.checkpoints import FileCheckpoints
 from job_radar.clock import Clock
 from job_radar.history import FileRunHistory
 from job_radar.html_text import HtmlText
+from job_radar.llm import ClaudeCli
 from job_radar.model import CandidateProfile, Model, Search, Window
 from job_radar.normalize import Normalizer
 from job_radar.pipeline import Pipeline, Step
-from job_radar.profile import DEMO_PROFILE
+from job_radar.profile import DEMO_PROFILE, ProfileLoader
 from job_radar.prompter import Prompter
-from job_radar.ranking import JobRanker, KeywordRanker
+from job_radar.ranking import JobRanker, KeywordRanker, LlmRanker
 from job_radar.report_writer import FileReportWriter
 from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber
 from job_radar.sources.demo import DemoParser, DemoSource
@@ -43,7 +44,9 @@ class Settings(Model):
     search: Search = Search(name="default", roles=())
     lookback_days: int = 14  # how far back a run may reach: a first run, or after a long break
     model: str = "haiku"
-    batch_size: int = 20
+    batch_size: int = 20  # jobs per LLM prompt
+    llm_timeout: float = 120.0  # seconds to wait for one LLM answer
+    description_chars: int = 4000  # how much of each description the LLM sees
     top_n: int = 10
 
 
@@ -109,15 +112,22 @@ class AppFactory:
         return Parts([DemoSource()], [DemoParser()], [], KeywordRanker(), DEMO_PROFILE)
 
     def _real(self) -> Parts:
-        """The boards, ranker and profile of a real run: Fast Forward, from the settings."""
+        """The boards, ranker and profile of a real run: Fast Forward, Claude and the user's files.
+
+        Reads the CV and preferences and checks `claude` is logged in first, so
+        a missing file or login stops the run before anything is fetched.
+        """
+        profile = ProfileLoader(self._settings.local).load()
+        llm = ClaudeCli(self._settings.model, self._settings.llm_timeout)
+        llm.check()
+        ranker = LlmRanker(llm, self._settings.batch_size, self._settings.description_chars)
         http = httpx.Client(headers={"User-Agent": self.USER_AGENT}, timeout=20)
         getro = BoardClient(http)
         network = self._settings.getro_network
-        # TODO(task 7b): LlmRanker over ClaudeCli, and the profile from ProfileLoader.
         return Parts(
             [GetroSource(network, getro)],
             [GetroParser()],
             [GetroDescriber(network, getro, HtmlText())],
-            KeywordRanker(),
-            DEMO_PROFILE,
+            ranker,
+            profile,
         )

@@ -78,9 +78,11 @@ Goal: `job-radar run` fetches Fast Forward, recommends the top N jobs against th
   - Fixtures: two recorded job responses, one without a description
   - Tests: `HtmlText` cases; the describer on fixtures, with 404, inactive, retries and failures; the step describes, passes through, keeps order and says how long; live check (opt-in)
 
-- [ ] **7b. Recommend**
-  - `ProfileLoader` (CV PDF, preferences Markdown); `ClaudeCli` (verify the `claude -p` flags); `LlmRanker` with batches, JSON checks, one retry; real runs switch from `KeywordRanker` and the demo profile
-  - Tests, with a fake `Llm`: batching; a bad answer retried, then the step fails; top N kept; missing CV is a setup error
+- [x] **7b. Recommend**
+  - `ProfileLoader`: `cv.pdf`, `cv.md` or `cv.txt`, and `preferences.md`, from `local/`; missing, empty or scanned files are setup errors
+  - `ClaudeCli`: flags verified on Claude Code 2.1.319; one plain turn from an empty folder, 120s limit, optional JSON schema; the login checked with `claude auth status` before the run
+  - `LlmRanker`: 20 jobs a prompt under short ids, descriptions cut to 4,000 characters, a JSON schema; a bad answer asked again once with what was wrong, then the step fails; real runs switch from `KeywordRanker` and the demo profile
+  - Tests, with a fake `Llm` and a fake command runner: batching and order; the prompt's contents; each kind of bad answer retried, then the step fails; the command's flags, folder, errors and login check; each profile case; live check (opt-in)
   - Acceptance: Runs: only filtered postings go to the LLM, in batches
 
 - [ ] **8. Report**

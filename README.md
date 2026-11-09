@@ -32,7 +32,9 @@ Each run fetches postings, merges duplicates across sources, drops ones you've a
 Works now:
 
     job-radar run --demo   # a run on made-up postings: no network, no LLM, no CV needed
-    job-radar run          # real Fast Forward jobs, ranked by keyword against a sample profile until your CV and the LLM are wired in
+    job-radar run          # real Fast Forward jobs, ranked by Claude against your CV and preferences
+
+A real run needs your CV as `local/cv.pdf` (or `cv.md`, `cv.txt`), your ideal job in your own words in `local/preferences.md`, and Claude Code logged in. The `local/` folder is never committed.
 
 Each run says which dates it fetches: the last 14 days on a first run, since the last run after that. On a first run, or after a long break, it asks before going ahead.
 

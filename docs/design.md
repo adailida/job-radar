@@ -644,7 +644,7 @@ Each run records how many merges came from each kind of key, and `jobs.jsonl` ke
 
 ```python
 class Llm(Protocol):                # any language model
-    def complete(self, system: str, prompt: str) -> str: ...
+    def complete(self, system: str, prompt: str, schema: dict | None = None) -> str: ...
 
 class JobRanker(Protocol):          # Strategy: scores jobs against the CV and preferences
     def score(self, jobs: Sequence[Job], profile: CandidateProfile) -> list[Recommendation]: ...
@@ -652,14 +652,16 @@ class JobRanker(Protocol):          # Strategy: scores jobs against the CV and p
 
 - `ClaudeCli` implements `Llm`; a per-token API backend later implements only `complete`
 - `LlmRanker` implements `JobRanker`: it builds the prompts, sends jobs in batches, and checks the JSON answers. `RecommendTopJobsStep` keeps the best N and knows nothing about the LLM
-- JSON checking stays with the class that asks, so `Llm` stays one method. If Classify and Extract (task 18) repeat it, it moves to a shared class then
+- With a JSON schema, the model is held to that shape (`claude -p --json-schema`; the per-token API has the same). The class that asks still checks what it needs (the right ids, each once), so `Llm` stays one method. If Classify and Extract (task 18) repeat the checks, they move to a shared class then
 
 ### Claude CLI backend
 
-- `claude -p` with the prompt on stdin, the model from settings (`haiku`), JSON output, no tools, one turn: a pure completion. Exact flags verified against the installed version while building
-- Timeout per call (120 seconds) and small concurrency (2 by default), to go easy on subscription limits
-- `claude` missing or not logged in: error "LLM not available", checked before Plan, so no credits are spent first
-- Remaining subscription usage: check while building whether `claude` reports it in a scriptable form. If so, add a low-usage warning like `low_credits`
+- `claude -p --model haiku --output-format json --tools "" --system-prompt <ours> --no-session-persistence --strict-mcp-config --setting-sources ""`, with `--json-schema` when the caller gives one: one turn, no tools, nothing saved, no MCP servers or settings. The prompt goes on stdin. Verified on Claude Code 2.1.319
+- Run from an empty temporary folder: from the repo folder the same call reads the project's CLAUDE.md (1,568 input tokens against 981)
+- `--bare` can't be used: it reads only an API key, never the subscription login
+- Timeout per call (120 seconds). Calls go one at a time for now; concurrency (2) comes when runs send enough jobs to need it
+- `claude` missing or not logged in: a setup error, checked with `claude auth status` (free) before the window is agreed, so nothing is fetched first
+- Remaining subscription usage: `claude` doesn't report it in a scriptable form (2.1.319), so no low-usage warning yet
 
 ### Batches and failures
 
@@ -1042,7 +1044,10 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | A job the board no longer has (404) or no longer lists as active keeps an empty description | Drop it; fail the run | Dropping is the filter's job, and one closed job shouldn't fail a run; the ranker still sees the title |
 | Pacing and retries in one `BoardClient`, shared by a board's source and describer | Each class retries on its own | One retry rule per board, written once |
 | HTML turned into text with the standard library's `html.parser` | BeautifulSoup, html2text | No new dependency; job descriptions use a handful of tags |
-| Until task 7b, a real run ranks with `KeywordRanker` against the demo profile | Real runs wait for task 7b | Real postings flow end to end now; each later task swaps one part |
+| The ranker asks with a JSON schema | Plain text answers parsed by the ranker | The CLI holds the answer to the shape, so fewer retries and no code fences to strip; one optional parameter on `Llm` |
+| A bad ranking answer is asked again once, with what was wrong, then the step fails | Split the batch and warn (section 9) | Warnings come in task 24; until then a failure is loud and the run can be resumed (task 13) |
+| Ranking sees each description cut to 4,000 characters, 20 jobs a prompt | The full description; the Extract cap of 8,000 | About 25,000 tokens a prompt; the start of a posting says most of what fit depends on |
+| The CV is `cv.pdf`, `cv.md` or `cv.txt` in `local/`, the preferences `preferences.md`; both required | A path in a profile file; preferences optional | The profile file comes with settings (task 10). Ranking without preferences would judge experience only, so a missing file is more likely a mistake |
 | Title asides in brackets dropped only when about place or work mode | Drop every bracketed aside | Real Fast Forward titles use brackets to tell roles apart ("Specialist (Media and Communication)") |
 | Until country codes exist, the job key compares places as written | Leave places out of the key | Same title in different cities is common on Fast Forward (one org posts a role per district); leaving places out would merge them |
 | `Clock.now()` returns local time with its UTC offset | UTC; naive local time | Run folders and report dates match the user's clock; saved times stay unambiguous |
