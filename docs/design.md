@@ -385,7 +385,7 @@ output/                        (setting; default ./output, gitignored)
 - One JSON Lines file per step, named after the step and numbered in the order the steps ran, so the folder lists them in run order: one record per line, easy to `grep` and hand to an LLM
 - After a successful run only `manifest.json`, `report.md`, `dropped.md` and `jobs.jsonl` remain. A failed run keeps everything, ready to resume
 - The report sits in the run folder, so deleting a run deletes its report. The terminal prints its path
-- Later, outside any run folder: the CV analysis cache (section 10), the spend ledger if the API lacks monthly usage (section 12), and a lock for one run at a time
+- Outside any run folder: the CV comparison cache, `output/cache/gaps.jsonl` (built, task 22; demo runs keep `demo-gaps.jsonl`; section 10). Later: the spend ledger if the API lacks monthly usage (section 12), and a lock for one run at a time
 
 ### What a run stores
 
@@ -537,7 +537,7 @@ searches:                                 # a job matches if it matches any sear
 
 ### Settings
 
-Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`), `recommend` (`top_n`, `min_score`), `report.requirements_per_type` and `sources.getro.network`. The others come with their tasks; [job_radar/default_settings.yaml](../job_radar/default_settings.yaml) holds what exists.
+Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`), `recommend` (`top_n`, `min_score`), `report.requirements_per_type`, `report.gap_suggestions` and `sources.getro.network`. The others come with their tasks; [job_radar/default_settings.yaml](../job_radar/default_settings.yaml) holds what exists.
 
 ```yaml
 domains:                    # cause areas or fields: used by the domains filter and report headings
@@ -554,6 +554,7 @@ report:
   format: markdown
   group_by: job_type        # job_type | domain | both: headings in "New openings" only
   requirements_per_type: 20 # rows per type in "What employers ask for"
+  gap_suggestions: 5        # gaps shown with how to gain them in "Experience to gain"
 alerts:
   low_credits: 500          # the only alert threshold; other alerts are fixed (section 13)
 lookback_days: 14
@@ -724,7 +725,7 @@ Built (task 21): `RequirementNames` applies the cleanup when "What employers ask
 
 ### CV
 
-The Extract prompt also runs on the CV text, returning the requirements it covers, with estimated years per skill. Cached by the CV's content hash, so it re-runs only when the CV changes. When a requirement counts as covered: section 10.
+Planned: the Extract prompt also runs on the CV text, returning the requirements it covers, with estimated years per skill, cached by the CV's content hash. Dropped in task 22 at the owner's ask: the CV text goes straight into the one call that compares it with the requirements (section 10), so there is no separate CV extraction.
 
 ### Prompts
 
@@ -782,6 +783,13 @@ Built (task 21): the section, right after "Market trends". `MarketRuns` gives bo
 4. Shown: missing and partly covered requirements, most frequent first, with share and suggestion; covered ones listed and marked
 
 The CV's requirements and coverage judgments are cached by CV content hash plus requirement name (section 5), so they stay stable and cost nothing on later runs.
+
+Built (task 22), with steps 1 and 2 replaced at the owner's ask: there is no separate CV extraction and no exact match first. One LLM call takes the requirements "What employers ask for" lists this run (every type, up to `requirements_per_type` each), the CV text and `preferences.md`, and judges each requirement covered, partly or missing with a one-line reason, catching synonyms and implied experience. The same call writes a one-line "how to gain it" suggestion for every gap (missing or partly) that fits the preferences, such as hands-on or mission work; the report shows it for the top `report.gap_suggestions` (5) gaps only. Asking for every gap, not only the top 5, keeps the cache complete: a gap that later climbs into the top 5 already has its suggestion, with no extra call. Years requirements go in with the median years asked ("software engineering, 5 years").
+
+- Classes: `CvGaps` (the report's `GapSource`) reads the cache, has the judge judge only the requirements it lacks, keeps the answers and has `GapBuilder` put the section together. `GapJudge` is a Strategy: `LlmGapJudge` asks the model (short ids `r1`, `r2`, most asked first, a JSON schema, one retry with what was wrong); `KeywordGapJudge` is the no-LLM judge for `--demo` and tests (covered when the CV names the requirement as a whole word, else missing, with one fixed suggestion). `FileGapCache` holds the cache file. `ReportStep` passes the asks section it already has to `CvGaps` and puts both into `ReportContent`; `MarkdownRenderer` only formats
+- Cache: `output/cache/gaps.jsonl`, outside the run folders, so deleting runs keeps it; one line per requirement, keyed by the CV's SHA-256 content hash plus the requirement's type and name in one form (`RequirementNames`), with the judgment, its suggestion and the prompt version. Only requirements new to the list cost a call; none new means no call. A new CV is judged afresh, and adding its judgments drops the old CV's. A changed `preferences.md`, or a changed median of years asked, doesn't re-judge a cached requirement. A line that can't be read is skipped and judged again
+- Shown after "What employers ask for": a table Requirement, Share, Status ("missing: reason", "partly: reason"), How to gain it, gaps most asked first (missing and partly together, by share), then "Covered:" with the covered names. With no requirements yet, the section says so; when every requirement is covered, it says that instead of a table
+- Failures: a bad answer twice, or an `LlmError`, leaves the section with what earlier runs judged and a note that N requirements couldn't be compared this run; at the usage limit the call is skipped with a note (no carry-over: it is one call). Either way the run goes on, and the next run tries them again
 
 ## 11. Report and format layer
 
@@ -1049,7 +1057,9 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Salary as median and 25th to 75th percentile of yearly midpoints, main currency | Min and max | Robust to outliers; no exchange rates |
 | History not re-matched when criteria change; change noted in the report | Re-match history with current criteria | Unmatched jobs were never extracted, so re-matching only narrows; the requirements ask to keep and annotate |
 | Requirement shares over a rolling window of one trend period | This run's jobs only; calendar period | Independent of run cadence; enough sample early in a period |
-| CV coverage: exact match, then one LLM call with reasons and suggestions, cached by CV hash | Exact match only; LLM for everything | Catches synonyms and implied experience at one call per new requirement |
+| CV coverage: one LLM call on the requirements, the CV text and the preferences, with reasons and suggestions, cached by CV hash and requirement | Extract the CV's requirements first, exact match, then the LLM for the rest (the earlier choice); exact match only | Changed Nov 10 at the owner's ask: a separate CV extraction is a second prompt to keep right, and the comparison call catches synonyms and implied experience anyway. Still one call per new requirement, none once the list settles |
+| The comparison call writes a suggestion for every gap; the report shows the top 5 | Suggestions for the top 5 gaps only, as first planned | A gap that climbs into the top 5 later already has one in the cache; otherwise it would stay empty, or cost a call with nothing new to judge |
+| A failed CV comparison doesn't fail the run: the section shows what was judged before and says what wasn't | Fail the report step; carry over at the usage limit | The report is still worth having; the next run asks again, and it is only one call |
 | `ReportBuilder` decides everything; renderer only formats | Logic in the Markdown renderer | A new format is a short file; logic tested once, Markdown by golden files |
 | Jobs as list items | A table per group | Seven columns wrap badly in terminals and editors |
 | YAML front matter with key facts | No metadata | Note tools show it as properties; an LLM reads key facts directly |

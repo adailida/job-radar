@@ -10,6 +10,7 @@ from fakes import (
     MemorySpendLog,
     MemoryWriter,
     NoAsks,
+    NoGaps,
     NoTrends,
     job,
 )
@@ -191,6 +192,7 @@ def test_report_step_puts_the_run_into_the_content_and_writes_the_rendered_text(
         MemoryPendingLog(),
         NoTrends(),
         NoAsks(),
+        NoGaps(),
         RUN,
         WINDOW,
         None,

@@ -274,3 +274,25 @@ def test_how_many_requirements_the_report_lists_is_a_setting(tmp_path):
     report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
     tools = report[report.index("### Tools") :].split("\n\n")[1]
     assert tools.splitlines() == ["| Requirement | Share |", "|---|---|", "| Python | 25% (2) |"]
+
+
+def test_a_demo_run_reports_experience_to_gain(tmp_path):
+    demo_cli(tmp_path, FakePrompter(True)).main(["run", "--demo"])
+    report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
+    section = report.index("## Experience to gain")
+    assert report.index("## What employers ask for") < section < report.index("## About this run")
+    assert (
+        "| machine learning | 12% (1) | missing: not named in the CV "
+        "| Use it in a small project of your own. |"
+    ) in report
+    assert "Covered: Python." in report
+    assert (tmp_path / "cache" / "demo-gaps.jsonl").is_file()
+    assert not (tmp_path / "cache" / "gaps.jsonl").exists()
+
+
+def test_how_many_gaps_show_how_to_gain_them_is_a_setting(tmp_path):
+    settings = SettingsFile.defaults(output=str(tmp_path), report={"gap_suggestions": 0})
+    factory = AppFactory(settings, tmp_path / "local", FixedClock(10), FakePrompter(True), {})
+    Cli(factory).main(["run", "--demo"])
+    report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
+    assert "| machine learning | 12% (1) | missing: not named in the CV |  |" in report

@@ -26,6 +26,7 @@ class ReportSettings(Model):
     """How the report is laid out."""
 
     requirements_per_type: int = Field(ge=1)  # rows per type in "What employers ask for"
+    gap_suggestions: int = Field(ge=0)  # gaps shown with how to gain them in "Experience to gain"
 
 
 class RecommendSettings(Model):

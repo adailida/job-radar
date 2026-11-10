@@ -12,6 +12,16 @@ from job_radar.clock import Clock
 from job_radar.cost import FileSpendLog
 from job_radar.drop_log import DropLog, FileDropLog
 from job_radar.factory import AppFactory
+from job_radar.gaps import (
+    CvGaps,
+    FileGapCache,
+    GapBuilder,
+    GapCache,
+    GapJudge,
+    GapSource,
+    KeywordGapJudge,
+    LlmGapJudge,
+)
 from job_radar.history import FileRunHistory, RunHistory
 from job_radar.html_text import HtmlText
 from job_radar.llm import ClaudeCli, Llm
@@ -64,6 +74,8 @@ RUNS = MarketRuns(
 )
 TRENDS = MarketTrends(RUNS, TrendBuilder("month"))
 ASKS = MarketAsks(RUNS, AskBuilder("month", 20, RequirementNames()), WINDOW.end)
+GAP_CACHE = FileGapCache(FOLDER / "gaps.jsonl")
+GAPS = CvGaps(PROFILE, KeywordGapJudge(), GAP_CACHE, GapBuilder(RequirementNames(), 5))
 
 
 def steps():
@@ -83,6 +95,7 @@ def steps():
             FilePendingLog(FOLDER),
             TRENDS,
             ASKS,
+            GAPS,
             "run",
             WINDOW,
             None,
@@ -102,6 +115,10 @@ IMPLEMENTATIONS = [
     (CHECKPOINTS, KeptJobs),
     (TRENDS, TrendSource),
     (ASKS, AskSource),
+    (GAPS, GapSource),
+    (GAP_CACHE, GapCache),
+    (LlmGapJudge(LLM), GapJudge),
+    (KeywordGapJudge(), GapJudge),
     (RUNS, RunsSource),
     (RANKER, JobRanker),
     (KeywordRanker(), JobRanker),

@@ -15,6 +15,7 @@ from job_radar.clock import Clock
 from job_radar.cost import CostCheck, FileSpendLog
 from job_radar.drop_log import FileDropLog
 from job_radar.extract import Extractor, KeywordExtractor, LlmExtractor
+from job_radar.gaps import CvGaps, FileGapCache, GapBuilder, GapJudge, KeywordGapJudge, LlmGapJudge
 from job_radar.history import FileRunHistory, RunFolders
 from job_radar.html_text import HtmlText
 from job_radar.llm import ClaudeCli
@@ -61,7 +62,7 @@ from job_radar.yaml_file import ConfigError
 
 @dataclass(frozen=True)
 class Parts:
-    """What differs between a real run and a demo run: boards, searches, ranker and profile."""
+    """What differs between a real run and a demo run: boards, searches, LLM parts and profile."""
 
     sources: list[JobBoardSource]
     parsers: list[JobBoardParser]
@@ -70,6 +71,7 @@ class Parts:
     classifier: Classifier
     extractor: Extractor
     ranker: JobRanker
+    judge: GapJudge
     profile: CandidateProfile
 
 
@@ -113,7 +115,8 @@ class AppFactory:
         offer = ResumeOffer(history, self._prompter, Words())
         paid = [source for source in parts.sources if isinstance(source, PaidSource)]
         cost = CostCheck(paid, parts.criteria, self._prompter)
-        return JobRadarApp(offer, chooser, cost, partial(self._pipeline, parts, runs))
+        pipeline = partial(self._pipeline, parts, runs, self._gap_cache(demo))
+        return JobRadarApp(offer, chooser, cost, pipeline)
 
     def runs_command(self, demo: bool = False) -> RunsCommand:
         """Build the `runs` and `delete` commands, for real runs or demo runs."""
@@ -124,10 +127,15 @@ class AppFactory:
         """The folder that holds one folder per run: demo runs keep their own."""
         return self._settings.output / ("demo" if demo else "runs")
 
+    def _gap_cache(self, demo: bool) -> Path:
+        """The file keeping the CV comparison, outside the run folders; demo runs keep their own."""
+        return self._settings.output / "cache" / ("demo-gaps.jsonl" if demo else "gaps.jsonl")
+
     def _pipeline(
         self,
         parts: Parts,
         runs: Path,
+        gap_cache: Path,
         window: Window,
         not_covered: Window | None,
         run_id: str | None,
@@ -150,6 +158,13 @@ class AppFactory:
         market = MarketRuns(FileRunHistory(runs), runs, checkpoints, window, config)
         period = self._settings.trend_period
         per_type = self._settings.report.requirements_per_type
+        names = RequirementNames()
+        gaps = CvGaps(
+            parts.profile,
+            parts.judge,
+            FileGapCache(gap_cache),
+            GapBuilder(names, self._settings.report.gap_suggestions),
+        )
         steps: list[Step] = [
             FetchStep(parts.sources, parts.criteria, window, approvals, spend),
             ConvertStep({parser.source: parser for parser in parts.parsers}),
@@ -177,7 +192,8 @@ class AppFactory:
                 spend,
                 pending,
                 MarketTrends(market, TrendBuilder(period)),
-                MarketAsks(market, AskBuilder(period, per_type, RequirementNames()), window.end),
+                MarketAsks(market, AskBuilder(period, per_type, names), window.end),
+                gaps,
                 folder.name,
                 window,
                 not_covered,
@@ -219,7 +235,7 @@ class AppFactory:
         )
 
     def _demo(self) -> Parts:
-        """The boards, searches, ranker and profile of a demo run."""
+        """The boards, searches, LLM parts and profile of a demo run: no LLM, nothing local."""
         return Parts(
             [DemoSource()],
             [DemoParser(PlaceCodes())],
@@ -228,6 +244,7 @@ class AppFactory:
             TitleClassifier(),
             KeywordExtractor(),
             KeywordRanker(),
+            KeywordGapJudge(),
             DEMO_PROFILE,
         )
 
@@ -271,5 +288,6 @@ class AppFactory:
             classifier,
             extractor,
             ranker,
+            LlmGapJudge(llm),
             profile,
         )

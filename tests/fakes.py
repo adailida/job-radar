@@ -196,3 +196,13 @@ class NoAsks:
     def asks(self):
         """No what employers ask for section."""
         return None
+
+
+class NoGaps:
+    """An experience to gain source with nothing to show."""
+
+    def gaps(self, asks):
+        """An empty section."""
+        from job_radar.model import Gaps
+
+        return Gaps(rows=())

@@ -48,6 +48,8 @@ JobsPipe (paid, off by default) adds LinkedIn, Indeed and employers' own ATS. Pu
 
 The report also has a market trends section: postings per day, work mode, salary and seniority by month (`trend_period` in `settings.yaml`: week, month or quarter), compared with the last complete period.
 
+It then compares what employers ask for with your CV, in "Experience to gain": each requirement covered, partly or missing, with a reason, and how to gain the five most asked gaps (`report.gap_suggestions`). Claude judges each requirement once per CV, kept in `output/cache/gaps.jsonl`, so later runs ask only about new requirements; a changed CV is judged again.
+
 A run shows only jobs no earlier run found (set `new_only: false` in `settings.yaml` to see them all again). Deleting a run makes its jobs new again.
 
 If your Claude usage limit runs out mid-run, the run asks whether to finish with what's done and carry the rest over to the next run, or stop and resume after the reset.
