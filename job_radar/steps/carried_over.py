@@ -1,4 +1,4 @@
-"""Step 6: add the jobs the last run carried over when it hit the LLM's usage limit."""
+"""Step 6: add the jobs the last run carried over, at the LLM's usage limit or over its cap."""
 
 from job_radar.model import Job
 from job_radar.usage import PendingJobs

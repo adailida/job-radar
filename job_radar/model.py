@@ -335,6 +335,7 @@ class AlertCode(StrEnum):
     CREDITS_LOW = "credits_low"  # a paid source has fewer credits left than the setting
     LLM_FAILED = "llm_failed"  # the LLM couldn't label, read or rank some jobs
     LLM_PENDING = "llm_pending"  # the usage limit carried jobs over to the next run
+    LLM_CAPPED = "llm_capped"  # jobs over the LLM cap were carried over to the next run
     GAPS_SKIPPED = "gaps_skipped"  # some requirements weren't compared with the CV
     RUN_UNREADABLE = "run_unreadable"  # an earlier run folder can't be read
     KEPT_JOBS_UNREADABLE = "kept_jobs_unreadable"  # an earlier run's kept jobs can't be read
@@ -387,7 +388,7 @@ class ReportContent(Model):
     openings: tuple[OpeningGroup, ...] = ()  # this run's new matched jobs, by group
     funnel: tuple[StepCount, ...]  # each finished step and its count, in run order
     spends: tuple["Spend", ...] = ()  # what each paid source spent
-    carried_over: int = 0  # jobs carried over to the next run by the usage limit
+    carried_over: int = 0  # jobs carried over to the next run by the usage limit or the LLM cap
     trends: "Trends | None" = None  # the market trends section
     asks: "Asks | None" = None  # the what employers ask for section
     gaps: "Gaps | None" = None  # the experience to gain section

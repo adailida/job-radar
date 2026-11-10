@@ -370,18 +370,19 @@ output/                        (setting; default ./output, gitignored)
       05-filter.jsonl          jobs that match the search
       06-carried_over.jsonl    the same jobs, plus those the last run carried over
       07-describe.jsonl        the same jobs, with full descriptions
-      08-classify.jsonl        the same jobs, with labels: seniority, job type, domain, sector
-      09-match.jsonl           jobs that meet every criterion of a search, labels included
-      10-extract.jsonl         the same jobs, with their requirements
-      11-recommend.jsonl       the top N recommendations at or above the minimum score
-      12-report.jsonl          the Report: where it is, one-line summary
+      08-llm_cap.jsonl         the jobs that go on to the LLM: all, or the first ones up to the cap
+      09-classify.jsonl        the same jobs, with labels: seniority, job type, domain, sector
+      10-match.jsonl           jobs that meet every criterion of a search, labels included
+      11-extract.jsonl         the same jobs, with their requirements
+      12-recommend.jsonl       the top N recommendations at or above the minimum score
+      13-report.jsonl          the Report: where it is, one-line summary
       manifest.json            schema version; the window and any days a long break left out; each finished step and its count, in order
       report.md                this run's report
       dropped.md               what the filter dropped, grouped by why
       jobs.jsonl               after success: the extract step's output (matched jobs, labels, requirements), kept so later runs know these jobs
       source_counts.jsonl      how many postings each source gave, for the report's header
       spend.jsonl              what each paid source spent: estimate, decision, credits used and left
-      pending.jsonl            jobs the usage limit stopped, carried over to the next run
+      pending.jsonl            jobs the usage limit stopped or the LLM cap held back, carried over to the next run
 ```
 
 - One JSON Lines file per step, named after the step and numbered in the order the steps ran, so the folder lists them in run order: one record per line, easy to `grep` and hand to an LLM
@@ -505,7 +506,7 @@ job_radar/
   default_settings.yaml    every setting with its default, commented: read first, every run
 examples/
   profile.example.yaml
-  cv.example.md            a fictional person (later)
+  cv.example.md            a fictional person's CV
 ```
 
 - One gitignored folder for everything personal: the repo is public, and one rule covers any personal file added later
@@ -539,7 +540,7 @@ searches:                                 # a job matches if it matches any sear
 
 ### Settings
 
-Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`), `recommend` (`top_n`, `min_score`), `report.group_by`, `report.requirements_per_type`, `report.gap_suggestions`, `alerts.low_credits` and `sources.getro.network`. The others come with their tasks; [job_radar/default_settings.yaml](../job_radar/default_settings.yaml) holds what exists.
+Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`, `max_jobs_per_run`), `recommend` (`top_n`, `min_score`), `report.group_by`, `report.requirements_per_type`, `report.gap_suggestions`, `alerts.low_credits` and `sources.getro.network`. The others come with their tasks; [job_radar/default_settings.yaml](../job_radar/default_settings.yaml) holds what exists.
 
 ```yaml
 domains:                    # cause areas or fields: used by the domains filter and report headings
@@ -568,7 +569,7 @@ llm:
   classify_batch: 50
   extract_batch: 10
   max_description_chars: 4000
-  max_jobs_per_run: 1000    # above this, the run asks before Extract
+  max_jobs_per_run: 60      # above this, the run asks before Classify
   concurrency: 2
   timeout_seconds: 120
 store: {backend: files, path: output}
@@ -605,7 +606,7 @@ class Prompter(Protocol):
 ```
 
 - `confirm` covers yes/no questions (the window, deleting a run, the failed-run prompt). It shows `(y/n, Enter for y)`, or `(y/n, Enter for n)` when no is the default: always lowercase, with the default spelled out. Any other answer asks again. Deleting defaults to no
-- `choose` covers the cost-check outcomes (section 12)
+- `choose` covers the cost-check outcomes (section 12), the usage limit and the LLM cap (section 9)
 - With no input to read, as in a script, `TerminalPrompter` takes the default
 
 ## 8. Cross-source dedup and job identity
@@ -700,7 +701,7 @@ class JobRanker(Protocol):          # Strategy: scores jobs against the CV and p
 
 ### Usage limit and pending jobs
 
-Built (task 19): `ClaudeCli` raises `UsageLimit` when an error answer matches a usage-limit pattern (not yet seen on a real limit; to confirm in task 26). The ranker, classifier and extractor then raise `UsageLimitReached` with what they did and the jobs from the unfinished batch on, and one `UsageLimitGuard` asks, for every step alike: "N jobs not ranked: usage limit reached. Finish with what's done and carry them over, or stop? (f/s, Enter for f)". Finish: the step passes on what's done and the rest go to `pending.jsonl`; stop: the step fails, and the same command resumes it after the reset. The next run's `carried_over` step adds them after the filter (see the decision below), skipping any this run found again. The report says how many were carried over. An unreachable LLM (other errors) still fails the step, so it is resumed rather than carried over.
+Built (task 19): `ClaudeCli` raises `UsageLimit` when an error answer matches a usage-limit pattern (not yet seen on a real limit; to confirm in task 26). The ranker, classifier and extractor then raise `UsageLimitReached` with what they did and the jobs from the unfinished batch on, and one `UsageLimitGuard` asks, for every step alike: "N jobs not ranked: usage limit reached. Finish with what's done and carry them over, or stop? (f/s, Enter for f)". Finish: the step passes on what's done and the rest go to `pending.jsonl`; stop: the step fails, and the same command resumes it after the reset. The next run's `carried_over` step adds them after the filter (see the decision below), skipping any this run found again. The report says how many were carried over. An unreachable LLM (other errors) still fails the step, so it is resumed rather than carried over. The LLM cap (volume guard, below) carries jobs over the same way.
 
 
 - When the subscription usage limit is hit mid-run, the run stops calling the LLM and asks: "N jobs not processed. Finish now and carry them over, or stop?" Default: finish
@@ -711,7 +712,7 @@ Built (task 19): `ClaudeCli` raises `UsageLimit` when an error answer matches a 
 
 ### Volume guard
 
-Before Extract, the run shows how many jobs and calls it is about to make. Above `llm.max_jobs_per_run` (default 1,000) it asks first, like the credit check.
+Built (task 26): a safety cap on the jobs one run sends to the LLM, `llm.max_jobs_per_run` (60), checked by its own step, `llm_cap`, after describe and right before classify, the first LLM step and the one that sees the most jobs. Under the cap nothing is asked. Over it, the run asks: "75 jobs would go to Claude, over the cap of 60. Send them all, only the first 60, or stop? (a/f/s, Enter for f)". All: every job goes on. First: the first 60, in the order they come, go on; the rest go to the run's `pending.jsonl` with their descriptions, like jobs the usage limit stopped, so the next run's `carried_over` step takes them, the report's carried-over line counts them, and an `llm_capped` warning says how many. Stop: the step fails before any LLM call, and the same command resumes it and asks again (with a changed cap, if `local/settings.yaml` now says one). The cap starts low for the first real runs and goes up as they show what a run costs in usage.
 
 ### Seniority values
 
@@ -821,7 +822,7 @@ class ReportContent(Model):
     openings: tuple[OpeningGroup] # headings from group_by, jobs inside (or groups, for both)
     funnel: tuple[StepCount]      # counts per step
     spends: tuple[Spend]          # what each paid source spent
-    carried_over: int             # jobs the usage limit carried over
+    carried_over: int             # jobs the usage limit or the LLM cap carried over
     trends: Trends                # table, partial-period notes, criteria change notes
     asks: Asks                    # top requirements by type, with shares and changes
     gaps: Gaps                    # missing and partly covered rows, covered list
@@ -1019,6 +1020,7 @@ A source fails when it raises after its retries. `BoardClient` says why in a few
 | `credits_low` | fetch step | JobsPipe credits running low: 80 left (alerts.low_credits is 100). |
 | `llm_failed` | classify, extract and recommend steps | The LLM couldn't label 3 of 40 jobs: their seniority and domain count as not given. Also "couldn't read the requirements of" (left out of What employers ask for) and "couldn't rank" (they can't be recommended) |
 | `llm_pending` | `UsageLimitGuard` | Usage limit reached: 12 jobs not ranked, carried over to the next run. |
+| `llm_capped` | `llm_cap` step | Over the LLM cap: 15 of 75 jobs not sent to Claude, carried over to the next run (llm.max_jobs_per_run is 60). |
 | `gaps_skipped` | `CvGaps` | Experience to gain: 5 requirements weren't compared with your CV (the LLM gave no usable answer). The next run asks again. |
 | `no_new_jobs` | report step | No new jobs matched your searches. |
 | `run_unreadable` | `FileRunHistory` | Run 2026-11-01T09-00-00 can't be read, so it is left out: its manifest.json is not as expected (window: Field required). `job-radar delete` removes it. |
@@ -1194,6 +1196,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Carried-over jobs join after the filter, not before | Before the filter, as first planned | They passed the filter in their own run, and are usually dated before this run's window, which the filter would drop |
 | One `UsageLimitGuard` for classify, extract and rank; the LLM passes signal partial progress with `UsageLimitReached` | Each step handles the limit itself | One rule and one question, and the passes stay unaware of prompts and files |
 | Only the usage limit carries jobs over; other LLM errors fail the step | Carry over on any LLM error | A failed step resumes from its saved input; carrying over is for a limit that resets on its own |
+| A cap on the jobs one run sends to the LLM (`llm.max_jobs_per_run`, 60), in its own `llm_cap` step right before classify; over it, ask: all, the first 60 (the rest carried over in `pending.jsonl`, a warning), or stop (Enter for the first 60) | Before Extract at 1,000, as first planned; a cap inside each LLM step; cut silently | Classify is the first LLM call and sees the most jobs, so one check bounds every pass; carrying over reuses the usage-limit path, so nothing is lost; asking keeps a surprise volume from using the subscription unseen. Set low for the first real runs (task 26) |
 | Each run's searches and sources are kept in its manifest, and trends compare them run to run | Compare against the current profile only | A jump after adding JobsPipe or a search is otherwise read as the market; older manifests without it are skipped |
 | Only periods with a covered day are shown; a job dated in a period no run covered counts nowhere | Show every period back to the oldest posting | A period no run covered has no denominator for postings per day |
 | "What employers ask for" uses a rolling window of 7, 30 or 91 days ending on the run's last day | Calendar periods, as the trends use | Independent of how often the user runs, and not tiny early in a month; the trends already show calendar periods |

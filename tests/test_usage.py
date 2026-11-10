@@ -193,4 +193,4 @@ def test_the_report_says_how_many_jobs_were_carried_over():
         run="r", window=window, min_score=40, recommendations=(), funnel=(), carried_over=3
     )
     text = MarkdownRenderer(Words()).render(content)
-    assert "3 jobs carried over to the next run (usage limit)." in text
+    assert "3 jobs carried over to the next run (usage limit or LLM cap)." in text

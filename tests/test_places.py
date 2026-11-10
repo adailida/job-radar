@@ -18,6 +18,7 @@ from job_radar.places import PlaceCodes
         ("Lukula, Democratic Republic of the Congo", "CD", None),
         ("brasília - brasilia, federal district, brazil", "BR", None),
         ("Hong Kong", "HK", None),
+        ("Yangon, Myanmar (Burma)", "MM", "MM-06"),
         ("Remote", None, None),
         ("", None, None),
     ],

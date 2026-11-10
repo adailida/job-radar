@@ -17,6 +17,8 @@ llm:
   classify_description_chars: 1000  # labelling reads only the start of each description
   extract_batch_size: 10  # jobs per prompt when finding what matched jobs ask for
   extract_description_chars: 8000  # how much of each description that reads
+  max_jobs_per_run: 60    # a safety cap: over this many jobs for the LLM, the run asks
+                          # whether to send them all, only the first ones, or stop
 
 # What the LLM labels each job with. The descriptions guide it; searches and the
 # report use the names. Change, add or remove entries freely.

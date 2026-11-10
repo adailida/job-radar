@@ -50,6 +50,7 @@ from job_radar.steps.dedupe import DedupeStep, JobKey
 from job_radar.steps.describe import DescribeStep
 from job_radar.steps.fetch import FetchStep
 from job_radar.steps.filter import FilterStep
+from job_radar.steps.llm_cap import LlmCapStep
 from job_radar.steps.recommend import RecommendTopJobsStep
 from job_radar.steps.report import ReportStep
 from job_radar.trends import (
@@ -95,6 +96,7 @@ def steps():
         DedupeStep(JobKey(Normalizer(), AtsLinks()), date(2026, 11, 5)),
         FilterStep(SEARCH, WINDOW, JobMatcher(Normalizer()), FileDropLog(FOLDER, Words())),
         DescribeStep({"getro": GetroDescriber("board", CLIENT, HtmlText())}, TerminalPrompter()),
+        LlmCapStep(60, TerminalPrompter(), FilePendingLog(FOLDER), WARNINGS),
         RecommendTopJobsStep(RANKER, PROFILE, 10, 40, GUARD, WARNINGS),
         ReportStep(
             CHECKPOINTS,
