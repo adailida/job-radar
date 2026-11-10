@@ -120,7 +120,7 @@ One line each for now; each task gets its detail, against the class names in arc
 - [x] **18b. Extract:** requirements (skills, tools, certifications, years) from matched jobs, 10 a prompt, kept with the job
 - [x] **19. Usage-limit carry-over:** jobs the LLM couldn't reach move to the next run: `UsageLimit` from `claude`, one `UsageLimitGuard` (finish and carry over, or stop), `pending.jsonl`, a `carried_over` step after the filter, a report line
 - [x] **20. Trends:** periods, coverage, comparisons, low-sample notes; each run's searches and sources kept in its manifest, changes noted
-- [ ] **21. What employers ask for:** requirement shares over a rolling window
+- [x] **21. What employers ask for:** requirement shares over a rolling window
 - [ ] **22. Experience to gain:** CV against requirements, with reasons and suggestions
 - [ ] **23. Complete report:** every section, grouping, terminal summary
 - [ ] **24. Complete errors and warnings:** every error and warning, at the top of the report and in the terminal

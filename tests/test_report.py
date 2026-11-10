@@ -3,7 +3,16 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from fakes import WINDOW, FakeStats, MemoryPendingLog, MemorySpendLog, MemoryWriter, NoTrends, job
+from fakes import (
+    WINDOW,
+    FakeStats,
+    MemoryPendingLog,
+    MemorySpendLog,
+    MemoryWriter,
+    NoAsks,
+    NoTrends,
+    job,
+)
 
 from job_radar.model import (
     Approval,
@@ -181,6 +190,7 @@ def test_report_step_puts_the_run_into_the_content_and_writes_the_rendered_text(
         MemorySpendLog(),
         MemoryPendingLog(),
         NoTrends(),
+        NoAsks(),
         RUN,
         WINDOW,
         None,

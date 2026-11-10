@@ -5,8 +5,10 @@ from decimal import Decimal
 from typing import Protocol, runtime_checkable
 
 from job_radar.model import (
+    Asks,
     Recommendation,
     ReportContent,
+    RequirementType,
     Seniority,
     Spend,
     SpendDecision,
@@ -31,6 +33,13 @@ class MarkdownRenderer:
     Plain text only: words instead of symbols, "to" for ranges, no HTML.
     Stateless: holds only how facts and dates are put into words.
     """
+
+    ASK_HEADINGS = {
+        RequirementType.SKILL: "Skills",
+        RequirementType.TOOL: "Tools",
+        RequirementType.CERTIFICATION: "Certifications",
+        RequirementType.YEARS: "Years of experience",
+    }
 
     def __init__(self, words: Words) -> None:
         """Keep how facts and dates are put into words."""
@@ -62,6 +71,8 @@ class MarkdownRenderer:
             lines.extend(self._job(rank, rec))
         if content.trends is not None:
             lines.extend(["", *self._trends(content.trends)])
+        if content.asks is not None:
+            lines.extend(["", *self._asks(content.asks)])
         lines.extend(["", "## About this run", "", "Items each step produced:", ""])
         lines.extend(f"- {count.step}: {count.count}" for count in content.funnel)
         if content.spends:
@@ -194,6 +205,56 @@ class MarkdownRenderer:
             )
         lines.append(f"A figure on fewer than {low} jobs is marked as a low sample.")
         return lines
+
+    def _asks(self, asks: Asks) -> list[str]:
+        """The what employers ask for section: the window, then a table per requirement type."""
+        days = (asks.window.end - asks.window.start).days + 1
+        span = self._words.span(asks.window.start, asks.window.end)
+        lines = ["## What employers ask for", ""]
+        if not asks.jobs:
+            return [*lines, f"No matched job with requirements in the {days} days from {span}."]
+        jobs = "job" if asks.jobs == 1 else "jobs"
+        low = " (low sample)" if asks.jobs < asks.low_sample else ""
+        lines.append(f"In the {days} days from {span}: {asks.jobs} matched {jobs}{low}.")
+        compare = asks.previous_jobs > 0
+        for kind, heading in self.ASK_HEADINGS.items():
+            rows = [row for row in asks.rows if row.type is kind]
+            if not rows:
+                continue
+            header = ["Requirement", "Share", *(["Change"] if compare else [])]
+            lines.extend(["", f"### {heading}", "", "| " + " | ".join(header) + " |"])
+            lines.append("|" + "---|" * len(header))
+            for row in rows:
+                name = row.name
+                if kind is RequirementType.YEARS:
+                    name += f": {self._years(row.median_years)}"
+                cells = [name, f"{self._share(row.share)} ({row.jobs})"]
+                if compare:
+                    cells.append(self._points(row.change))
+                lines.append("| " + " | ".join(cells) + " |")
+        lines.append("")
+        before = self._words.span(asks.previous.start, asks.previous.end)
+        if compare:
+            jobs = "job" if asks.previous_jobs == 1 else "jobs"
+            lines.append(
+                f"Change: in points, against the {days} days from {before} "
+                f"({asks.previous_jobs} {jobs})."
+            )
+        else:
+            lines.append(
+                f"No change yet: no matched job with requirements in the {days} days before."
+            )
+        lines.append("Share: of the matched jobs with requirements; failed extractions left out.")
+        lines.append(f"Fewer than {asks.low_sample} jobs in the window is a low sample.")
+        return lines
+
+    @staticmethod
+    def _years(median: float | None) -> str:
+        """A median number of years in words: "5 years", "1 year", "years not given"."""
+        if median is None:
+            return "years not given"
+        number = f"{median:g}"
+        return f"{number} year" if number == "1" else f"{number} years"
 
     @staticmethod
     def _period_at(periods: list[TrendPeriod], start) -> TrendPeriod:

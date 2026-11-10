@@ -188,3 +188,11 @@ class NoTrends:
     def trends(self):
         """No trends section."""
         return None
+
+
+class NoAsks:
+    """A what employers ask for source with nothing to show."""
+
+    def asks(self):
+        """No what employers ask for section."""
+        return None
