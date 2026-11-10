@@ -5,7 +5,11 @@ from decimal import Decimal
 from typing import Protocol, runtime_checkable
 
 from job_radar.model import (
+    AskRow,
     Asks,
+    Gaps,
+    GapSkip,
+    GapStatus,
     Recommendation,
     ReportContent,
     RequirementType,
@@ -73,6 +77,8 @@ class MarkdownRenderer:
             lines.extend(["", *self._trends(content.trends)])
         if content.asks is not None:
             lines.extend(["", *self._asks(content.asks)])
+        if content.gaps is not None:
+            lines.extend(["", *self._gaps(content.gaps)])
         lines.extend(["", "## About this run", "", "Items each step produced:", ""])
         lines.extend(f"- {count.step}: {count.count}" for count in content.funnel)
         if content.spends:
@@ -225,10 +231,7 @@ class MarkdownRenderer:
             lines.extend(["", f"### {heading}", "", "| " + " | ".join(header) + " |"])
             lines.append("|" + "---|" * len(header))
             for row in rows:
-                name = row.name
-                if kind is RequirementType.YEARS:
-                    name += f": {self._years(row.median_years)}"
-                cells = [name, f"{self._share(row.share)} ({row.jobs})"]
+                cells = [self._requirement(row), f"{self._share(row.share)} ({row.jobs})"]
                 if compare:
                     cells.append(self._points(row.change))
                 lines.append("| " + " | ".join(cells) + " |")
@@ -247,6 +250,65 @@ class MarkdownRenderer:
         lines.append("Share: of the matched jobs with requirements; failed extractions left out.")
         lines.append(f"Fewer than {asks.low_sample} jobs in the window is a low sample.")
         return lines
+
+    def _gaps(self, gaps: Gaps) -> list[str]:
+        """The experience to gain section: any note, a table of gaps, then the covered ones."""
+        lines = ["## Experience to gain"]
+        if not gaps.rows and gaps.skipped is None:
+            return [*lines, "", "No requirements to compare with your CV yet."]
+        if gaps.skipped is not None:
+            count = gaps.not_compared
+            some = f"{count} requirement" if count == 1 else f"{count} requirements"
+            why = {
+                GapSkip.FAILED: (
+                    f"{some} couldn't be compared with your CV this run: "
+                    "the LLM gave no usable answer"
+                ),
+                GapSkip.USAGE_LIMIT: (
+                    f"{some} weren't compared with your CV this run: "
+                    "the LLM's usage limit is reached"
+                ),
+            }[gaps.skipped]
+            lines.extend(["", f"Note: {why}. They are compared on the next run."])
+        if not gaps.rows:
+            return lines
+        missing = [row for row in gaps.rows if row.status is not GapStatus.COVERED]
+        covered = [row for row in gaps.rows if row.status is GapStatus.COVERED]
+        lines.append("")
+        if missing:
+            lines.append("| Requirement | Share | Status | How to gain it |")
+            lines.append("|---|---|---|---|")
+            for row in missing:
+                asked = row.requirement
+                cells = [
+                    self._cell(self._requirement(asked)),
+                    f"{self._share(asked.share)} ({asked.jobs})",
+                    self._cell(f"{row.status.value}: {row.reason}"),
+                    self._cell(row.suggestion or ""),
+                ]
+                lines.append("| " + " | ".join(cells) + " |")
+        else:
+            lines.append("Your CV covers every requirement compared.")
+        if covered:
+            names = ", ".join(self._requirement(row.requirement) for row in covered)
+            lines.extend(["", f"Covered: {names}."])
+        lines.append("")
+        lines.append(
+            "Share: as in What employers ask for. Each requirement is compared with your CV once; "
+            "a changed CV is compared again."
+        )
+        return lines
+
+    def _requirement(self, row: AskRow) -> str:
+        """A requirement's name; for years, with the median asked: "engineering: 5 years"."""
+        if row.type is RequirementType.YEARS:
+            return f"{row.name}: {self._years(row.median_years)}"
+        return row.name
+
+    @staticmethod
+    def _cell(text: str) -> str:
+        """Text safe inside a table cell: a pipe would start a new column."""
+        return text.replace("|", "\\|")
 
     @staticmethod
     def _years(median: float | None) -> str:

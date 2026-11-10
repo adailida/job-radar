@@ -121,7 +121,10 @@ One line each for now; each task gets its detail, against the class names in arc
 - [x] **19. Usage-limit carry-over:** jobs the LLM couldn't reach move to the next run: `UsageLimit` from `claude`, one `UsageLimitGuard` (finish and carry over, or stop), `pending.jsonl`, a `carried_over` step after the filter, a report line
 - [x] **20. Trends:** periods, coverage, comparisons, low-sample notes; each run's searches and sources kept in its manifest, changes noted
 - [x] **21. What employers ask for:** requirement shares over a rolling window
-- [ ] **22. Experience to gain:** CV against requirements, with reasons and suggestions
+- [x] **22. Experience to gain:** CV against requirements, with reasons and suggestions
+  - One LLM call with this run's requirements, the CV text and the preferences; no separate CV extraction (dropped at the owner's ask): covered, partly or missing with a reason, and how to gain each gap
+  - Kept in `output/cache/gaps.jsonl` by CV hash and requirement: only new requirements cost a call; a failed call or the usage limit leaves a note, not a failed run
+  - The section after "What employers ask for": gaps most asked first, the top `gap_suggestions` (5) with how to gain them, then the covered ones; `KeywordGapJudge` for `--demo`
 - [ ] **23. Complete report:** every section, grouping, terminal summary
 - [ ] **24. Complete errors and warnings:** every error and warning, at the top of the report and in the terminal
 

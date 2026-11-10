@@ -323,6 +323,7 @@ class ReportContent(Model):
     carried_over: int = 0  # jobs carried over to the next run by the usage limit
     trends: "Trends | None" = None  # the market trends section
     asks: "Asks | None" = None  # the what employers ask for section
+    gaps: "Gaps | None" = None  # the experience to gain section
 
 
 class DroppedJob(Model):
@@ -488,6 +489,47 @@ class Asks(Model):
     previous_jobs: int  # jobs with requirements in the window before; 0 means no change yet
     rows: tuple[AskRow, ...]  # by type, then most asked first
     low_sample: int  # fewer jobs than this in the window is a low sample
+
+
+class GapStatus(StrEnum):
+    """How far the CV shows a requirement."""
+
+    COVERED = "covered"
+    PARTLY = "partly"  # some of it, such as fewer years than asked or a related tool
+    MISSING = "missing"
+
+
+class GapJudgment(Model):
+    """How one requirement compares with the CV, and how to gain it when it's a gap."""
+
+    status: GapStatus
+    reason: str  # one line
+    suggestion: str | None = None  # how to gain it; only for some gaps
+    prompt_version: str
+
+
+class GapRow(Model):
+    """One requirement in the experience to gain section: what employers ask, against the CV."""
+
+    requirement: AskRow
+    status: GapStatus
+    reason: str
+    suggestion: str | None  # only for the most asked gaps
+
+
+class GapSkip(StrEnum):
+    """Why some requirements weren't compared with the CV this run."""
+
+    FAILED = "failed"  # the LLM gave no usable answer, or no answer at all
+    USAGE_LIMIT = "usage_limit"  # the LLM's usage limit is reached
+
+
+class Gaps(Model):
+    """The experience to gain section: what employers ask for, against the CV."""
+
+    rows: tuple[GapRow, ...]  # gaps (missing, partly) most asked first, then covered ones
+    skipped: GapSkip | None = None  # why some requirements weren't compared, if any
+    not_compared: int = 0  # requirements left out because they weren't compared
 
 
 ReportContent.model_rebuild()

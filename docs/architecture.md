@@ -2,7 +2,7 @@
 
 How the code is put together: which classes exist, what each one is responsible for, which others it knows, and where state lives. Every box is a real class, named as in the code. The reasons behind each part are in [design.md](design.md).
 
-**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads `local/settings.yaml` over the defaults and the searches from `local/profile.yaml`; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. PR #17 notes in the report the days a long break left out. PR #18 merges postings on the employer's own id, read from ATS links, and on company, title and country. PR #19 drops jobs an earlier completed run already found, in `NewJobsFilterStep`. PR #20 adds JobsPipe, a paid API, off by default and capped per run, and moves the default settings into `job_radar/default_settings.yaml`, which the app reads first. PR #21 agrees what paid sources may spend before anything is fetched. PR #22 labels each job (seniority, job type, domain, sector) and adds a match step for the `seniority` and `domains` criteria. PR #23 finds what each matched job asks for: skills, tools, certifications and years. PR #24 carries jobs the LLM's usage limit stopped over to the next run. PR #25 adds market trends to the report: periods, coverage, figures, the change and notes on changed searches or sources. PR #26 adds the What employers ask for section. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
+**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads `local/settings.yaml` over the defaults and the searches from `local/profile.yaml`; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. PR #17 notes in the report the days a long break left out. PR #18 merges postings on the employer's own id, read from ATS links, and on company, title and country. PR #19 drops jobs an earlier completed run already found, in `NewJobsFilterStep`. PR #20 adds JobsPipe, a paid API, off by default and capped per run, and moves the default settings into `job_radar/default_settings.yaml`, which the app reads first. PR #21 agrees what paid sources may spend before anything is fetched. PR #22 labels each job (seniority, job type, domain, sector) and adds a match step for the `seniority` and `domains` criteria. PR #23 finds what each matched job asks for: skills, tools, certifications and years. PR #24 carries jobs the LLM's usage limit stopped over to the next run. PR #25 adds market trends to the report: periods, coverage, figures, the change and notes on changed searches or sources. PR #26 adds the What employers ask for section. PR #27 adds the Experience to gain section. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
 
 The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, fetches their full descriptions, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, a made-up profile and keyword scoring in place of the LLM.
 
@@ -465,6 +465,7 @@ classDiagram
         -writer: ReportWriter
         -trends: TrendSource
         -asks: AskSource
+        -gaps: GapSource
         -run_id: str
         -window: Window
         -min_score: int
@@ -506,6 +507,39 @@ classDiagram
     }
     class RequirementNames {
         +key(name) str
+    }
+    class GapSource {
+        <<interface>>
+        +gaps(asks) Gaps
+    }
+    class CvGaps {
+        -profile: CandidateProfile
+        -judge: GapJudge
+        -cache: GapCache
+        -builder: GapBuilder
+    }
+    class GapBuilder {
+        -names: RequirementNames
+        -suggestions: int
+        +key(row) RequirementKey
+        +ranked(rows) list~AskRow~
+        +build(rows, judged, skipped) Gaps
+    }
+    class GapJudge {
+        <<Strategy>>
+        +judge(asked, profile) list~GapJudgment~
+    }
+    class LlmGapJudge {
+        -llm: Llm
+    }
+    class KeywordGapJudge
+    class GapCache {
+        <<Repository>>
+        +judged(cv) dict
+        +add(cv, judged)
+    }
+    class FileGapCache {
+        -path: Path
     }
     class ReportRenderer {
         <<interface>>
@@ -615,6 +649,17 @@ classDiagram
     MarketAsks o-- RunsSource : holds
     MarketAsks o-- AskBuilder : holds
     AskBuilder o-- RequirementNames : holds
+    ReportStep o-- GapSource : holds
+    GapSource <|.. CvGaps : implements
+    CvGaps o-- CandidateProfile : holds
+    CvGaps o-- GapJudge : holds
+    GapJudge <|.. LlmGapJudge : implements
+    GapJudge <|.. KeywordGapJudge : implements
+    LlmGapJudge o-- Llm : holds
+    CvGaps o-- GapCache : holds
+    GapCache <|.. FileGapCache : implements
+    CvGaps o-- GapBuilder : holds
+    GapBuilder o-- RequirementNames : holds
     ReportStep o-- ReportRenderer : holds
     ReportStep ..> ReportContent : creates
     ReportRenderer <|.. MarkdownRenderer : implements
@@ -659,6 +704,11 @@ classDiagram
     style MarketAsks stroke:#2e7d32,stroke-width:3px
     style AskBuilder stroke:#2e7d32,stroke-width:3px
     style RequirementNames stroke:#2e7d32,stroke-width:3px
+    style CvGaps stroke:#2e7d32,stroke-width:3px
+    style GapBuilder stroke:#2e7d32,stroke-width:3px
+    style LlmGapJudge stroke:#2e7d32,stroke-width:3px
+    style KeywordGapJudge stroke:#2e7d32,stroke-width:3px
+    style FileGapCache stroke:#2e7d32,stroke-width:3px
     style FileReportWriter stroke:#2e7d32,stroke-width:3px
     style MarkdownRenderer stroke:#2e7d32,stroke-width:3px
     style DemoSource stroke:#2e7d32,stroke-width:3px
@@ -764,13 +814,17 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `KeywordRanker` | Strategy | Score a job by the share of its title words found in the profile, for `--demo` and tests | models |
 | `Llm`, `ClaudeCli` | Interface | Send one prompt to a language model; `ClaudeCli` runs `claude -p` on the subscription, one plain turn from an empty folder, and checks the login before a run | `claude` |
 | `ProfileLoader` | | Read the CV (`cv.pdf`, `cv.md` or `cv.txt`) and `preferences.md` from `local/` into a `CandidateProfile`; say what's missing | `local/` |
-| `ReportStep` | Step | Put together what the report says (`ReportContent`: the run, its window, the recommended jobs, the market trends, what employers ask for, the funnel), then have it formatted and written | `RunStats`, `TrendSource`, `AskSource`, `ReportRenderer`, `ReportWriter` |
+| `ReportStep` | Step | Put together what the report says (`ReportContent`: the run, its window, the recommended jobs, the market trends, what employers ask for, how the CV compares with it, the funnel), then have it formatted and written | `RunStats`, `TrendSource`, `AskSource`, `GapSource`, `ReportRenderer`, `ReportWriter` |
 | `RunsSource`, `MarketRuns` | Interface | Gather the runs the market sections look at: the completed runs (their `jobs.jsonl`, windows and configs) and this run (its kept output); free | `RunHistory`, `KeptJobs` |
 | `TrendSource`, `MarketTrends` | Interface | Have the trends worked out over those runs | `RunsSource`, `TrendBuilder` |
 | `TrendBuilder` | | Work out the trend periods (week, month or quarter), each one's covered days, figures (postings per covered day, work mode, salary, seniority), the change against the last complete period, and notes on changed searches or sources | models |
 | `AskSource`, `MarketAsks` | Interface | Have what employers ask for counted over those runs' matched jobs, for the window ending on the run's last day; free | `RunsSource`, `AskBuilder` |
 | `AskBuilder` | | Count the requirements of the matched jobs with an extraction in a rolling window one trend period long, against the window before: per type the top N with share, change in points, median years and the ids of the jobs they came from | `RequirementNames`, models |
 | `RequirementNames` | | Put requirement names in one form (case, punctuation, version numbers, a trailing "programming" or "language", a few aliases), so spellings of one thing count as one | nothing |
+| `GapSource`, `CvGaps` | Interface | Compare what employers ask for with the CV for the experience to gain section: judge only the requirements the cache lacks for this CV, in one call, keep the answers; when the call fails or the usage limit is reached, say so and go on | `GapJudge`, `GapCache`, `GapBuilder`, `CandidateProfile` |
+| `GapBuilder` | | Put the section together: gaps (missing, partly) most asked first, then the covered ones; a suggestion only on the top N gaps (5); count what wasn't compared | `RequirementNames`, models |
+| `GapJudge`, `LlmGapJudge`, `KeywordGapJudge` | Strategy | Judge each requirement covered, partly or missing against the CV, with a reason and, for each gap, how to gain it: `LlmGapJudge` one prompt with the CV and preferences, a JSON schema, one retry with what was wrong; `KeywordGapJudge` the CV naming it, for `--demo` | `Llm` |
+| `GapCache`, `FileGapCache` | Repository | Keep the judgments by CV content hash and requirement, in `output/cache/gaps.jsonl`, outside the run folders; a new CV's judgments replace the old ones | its file |
 | `ReportRenderer`, `MarkdownRenderer` | Interface | Format a report's content and decide nothing about it; `MarkdownRenderer` writes YAML front matter, then Markdown | `Words` |
 | `DropLog`, `FileDropLog` | Interface | Keep the list of jobs the filter dropped; `FileDropLog` writes `dropped.md`, grouped by why, titles sorted | its run folder, `Words` |
 | `Words` | | Put work modes, places, pay and dates into the same plain words in every file a run writes | models |
@@ -935,3 +989,5 @@ output/runs/2026-11-05T10-00-00/
 ```
 
 After a successful run only `manifest.json`, `report.md`, `dropped.md` and `jobs.jsonl` remain, and the manifest says the run completed. After a failed run everything stays, ready to resume.
+
+Outside the run folders, `output/cache/gaps.jsonl` keeps how each requirement compares with your CV (demo runs: `demo-gaps.jsonl`), so deleting runs keeps it.
