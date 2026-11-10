@@ -13,6 +13,7 @@ class JobBoardSource(Protocol):
     """
 
     name: str  # "getro", "jobspipe"; also the name of its parser's source
+    label: str  # its name for people, in the report: "Fast Forward", "JobsPipe"
 
     def fetch(self, criteria: SearchCriteria, window: Window) -> list[RawPage]:
         """Query the board for the searches and window, page by page, unparsed."""

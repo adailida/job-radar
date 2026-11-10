@@ -292,3 +292,9 @@ def test_live_fast_forward_job_still_describes():
     postings = GetroParser(PlaceCodes()).parse(pages[0])
     text = GetroDescriber("997", client, HtmlText()).describe(postings[0])
     assert "<p>" not in text
+
+
+def test_a_board_is_named_for_people_by_its_network():
+    client = BoardClient(httpx.Client())
+    assert GetroSource("997", client).label == "Fast Forward"
+    assert GetroSource("123", client).label == "Getro board 123"

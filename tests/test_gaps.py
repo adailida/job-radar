@@ -3,7 +3,16 @@ import json
 from datetime import date
 
 import pytest
-from fakes import FakeStats, MemoryPendingLog, MemorySpendLog, MemoryWriter, NoTrends
+from fakes import (
+    FakeStats,
+    MemoryPendingLog,
+    MemorySourceCountLog,
+    MemorySpendLog,
+    MemoryWriter,
+    NoTrends,
+    SetKeptJobs,
+    grouper,
+)
 
 from job_radar.asks import RequirementNames
 from job_radar.gaps import (
@@ -474,6 +483,10 @@ def step(asks_source, gaps_source, renderer) -> ReportStep:
         WINDOW,
         None,
         40,
+        {},
+        MemorySourceCountLog(),
+        SetKeptJobs(),
+        grouper(),
     )
 
 

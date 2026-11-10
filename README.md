@@ -46,6 +46,8 @@ and Claude Code logged in.
 
 JobsPipe (paid, off by default) adds LinkedIn, Indeed and employers' own ATS. Put `JOBSPIPE_API_KEY=...` in `.env` (never committed) and set `sources.jobspipe.enabled: true` in `settings.yaml`; Before fetching, a run estimates what JobsPipe will cost (for free) and checks it against the per-run max, the monthly budget and the credits left; over a limit, it asks whether to go ahead, skip JobsPipe this run, or stop. The plan (`free` or `seeker`) sets the limits unless `max_jobs_per_run` and `monthly_budget` say otherwise.
 
+Each report has the same sections in the same order: alerts, the recommended jobs, every new opening that matched (grouped by job type; `report.group_by` in `settings.yaml` can say `domain` or `both`), market trends, what employers ask for, experience to gain, and about this run. The header says how many postings each source gave and what a paid one cost. At the end the terminal says, for example, "Run finished: 23 new openings, 10 recommended, 0 alerts." and where the report is.
+
 The report also has a market trends section: postings per day, work mode, salary and seniority by month (`trend_period` in `settings.yaml`: week, month or quarter), compared with the last complete period.
 
 It then compares what employers ask for with your CV, in "Experience to gain": each requirement covered, partly or missing, with a reason, and how to gain the five most asked gaps (`report.gap_suggestions`). Claude judges each requirement once per CV, kept in `output/cache/gaps.jsonl`, so later runs ask only about new requirements; a changed CV is judged again.

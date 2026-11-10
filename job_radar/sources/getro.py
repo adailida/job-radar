@@ -31,11 +31,17 @@ class GetroSource:
     name = "getro"
     SEARCH = "https://api.getro.com/api/v2/collections/{network}/search/jobs"
     PAGE_SIZE = 200  # the most the search returns per page
+    BOARDS = {"997": "Fast Forward"}  # the boards known by name, by network id
 
     def __init__(self, network: str, client: BoardClient) -> None:
         """Keep the board's network id and the client that paces and retries requests."""
         self._network = network
         self._client = client
+
+    @property
+    def label(self) -> str:
+        """The board's name for people: "Fast Forward", or "Getro board 123" for one not known."""
+        return self.BOARDS.get(self._network, f"Getro board {self._network}")
 
     def fetch(self, criteria: SearchCriteria, window: Window) -> list[RawPage]:
         """Fetch pages, newest jobs first, until one reaches back past the window's start.

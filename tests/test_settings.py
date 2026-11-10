@@ -79,3 +79,14 @@ def test_a_bad_settings_file_stops_the_command_as_a_setup_error(tmp_path, monkey
     monkeypatch.setattr(Cli, "LOCAL", tmp_path)
     assert Cli.start() == 2
     assert capsys.readouterr().out.startswith("Could not set up the run: ")
+
+
+@pytest.mark.parametrize("group_by", ["job_type", "domain", "both"])
+def test_new_openings_can_be_grouped_by_job_type_domain_or_both(tmp_path, group_by):
+    assert load(tmp_path, f"report: {{group_by: {group_by}}}\n").report.group_by == group_by
+    assert SettingsFile.defaults().report.group_by == "job_type"
+
+
+def test_any_other_grouping_is_an_error_naming_its_path(tmp_path):
+    with pytest.raises(ConfigError, match=r"report.group_by: input should be 'job_type', 'domain'"):
+        load(tmp_path, "report: {group_by: sector}\n")

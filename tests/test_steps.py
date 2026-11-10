@@ -1,7 +1,7 @@
 from datetime import date
 
 import pytest
-from fakes import MemorySpendLog, guard, job, posting
+from fakes import MemorySourceCountLog, MemorySpendLog, guard, job, posting
 
 from job_radar.model import (
     CandidateProfile,
@@ -10,6 +10,7 @@ from job_radar.model import (
     Recommendation,
     Search,
     SearchCriteria,
+    SourceCount,
     Window,
 )
 from job_radar.steps.convert import ConvertStep
@@ -61,13 +62,25 @@ def test_fetch_takes_pages_from_every_board_in_order():
 
 
 def test_convert_sends_each_page_to_its_boards_parser():
-    step = ConvertStep({"a": OnePostingParser("a"), "b": OnePostingParser("b")})
+    step = ConvertStep(
+        {"a": OnePostingParser("a"), "b": OnePostingParser("b")}, MemorySourceCountLog()
+    )
     pages = [RawPage(source="b", page=1, body=""), RawPage(source="a", page=2, body="")]
     assert [p.key for p in step.run(pages)] == ["b:1", "a:2"]
 
 
+def test_convert_counts_the_postings_each_board_gave_a_board_with_none_too():
+    counts = MemorySourceCountLog()
+    step = ConvertStep({"a": OnePostingParser("a"), "b": OnePostingParser("b")}, counts)
+    step.run([RawPage(source="a", page=1, body=""), RawPage(source="a", page=2, body="")])
+    assert counts.counts() == [
+        SourceCount(source="a", postings=2),
+        SourceCount(source="b", postings=0),
+    ]
+
+
 def test_convert_fails_on_a_board_without_parser():
-    step = ConvertStep({"a": OnePostingParser("a")})
+    step = ConvertStep({"a": OnePostingParser("a")}, MemorySourceCountLog())
     with pytest.raises(ValueError, match="no parser for source 'x'"):
         step.run([RawPage(source="x", page=1, body="")])
 

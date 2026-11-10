@@ -36,6 +36,7 @@ The report has the same sections every run (content only; formatting in section 
 Covers 2026-10-27 to 2026-11-03. Sources: JobsPipe, Fast Forward
 
 ## Alerts                   problems from this run, if any
+## Recommended jobs         the top N against the CV and preferences, with a score and why
 ## New openings             matching postings not seen before, under job type, domain or both:
                             title, company, location or remote, salary, source, link,
                             searches matched
@@ -264,7 +265,7 @@ class Recommendation:       # one recommended job
 
 class Report:               # the finished report
     location: str           # e.g. a file path
-    summary: str            # "12 recommendations from 340 postings"
+    summary: str            # "23 new openings, 10 recommended, 0 alerts"
 
 class StepCount:            # how many items one finished step produced
     step: str
@@ -378,12 +379,13 @@ output/                        (setting; default ./output, gitignored)
       report.md                this run's report
       dropped.md               what the filter dropped, grouped by why
       jobs.jsonl               after success: the extract step's output (matched jobs, labels, requirements), kept so later runs know these jobs
+      source_counts.jsonl      how many postings each source gave, for the report's header
       spend.jsonl              what each paid source spent: estimate, decision, credits used and left
       pending.jsonl            jobs the usage limit stopped, carried over to the next run
 ```
 
 - One JSON Lines file per step, named after the step and numbered in the order the steps ran, so the folder lists them in run order: one record per line, easy to `grep` and hand to an LLM
-- After a successful run only `manifest.json`, `report.md`, `dropped.md` and `jobs.jsonl` remain. A failed run keeps everything, ready to resume
+- After a successful run only `manifest.json`, `report.md`, `dropped.md`, `jobs.jsonl` and `source_counts.jsonl` remain, with `spend.jsonl` and `pending.jsonl` when the run has them. A failed run keeps everything, ready to resume
 - The report sits in the run folder, so deleting a run deletes its report. The terminal prints its path
 - Outside any run folder: the CV comparison cache, `output/cache/gaps.jsonl` (built, task 22; demo runs keep `demo-gaps.jsonl`; section 10). Later: the spend ledger if the API lacks monthly usage (section 12), and a lock for one run at a time
 
@@ -537,7 +539,7 @@ searches:                                 # a job matches if it matches any sear
 
 ### Settings
 
-Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`), `recommend` (`top_n`, `min_score`), `report.requirements_per_type`, `report.gap_suggestions` and `sources.getro.network`. The others come with their tasks; [job_radar/default_settings.yaml](../job_radar/default_settings.yaml) holds what exists.
+Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`), `recommend` (`top_n`, `min_score`), `report.group_by`, `report.requirements_per_type`, `report.gap_suggestions` and `sources.getro.network`. The others come with their tasks; [job_radar/default_settings.yaml](../job_radar/default_settings.yaml) holds what exists.
 
 ```yaml
 domains:                    # cause areas or fields: used by the domains filter and report headings
@@ -795,19 +797,34 @@ Built (task 22), with steps 1 and 2 replaced at the owner's ask: there is no sep
 
 ### A renderer that only formats
 
-All numbers, sort orders, grouping and wording choices are made before the renderer. The report step assembles a `ReportContent` (immutable model) from the stage outputs; the renderer only formats it. A second format (JSON, HTML) is then a short file, logic is tested without Markdown, and the Markdown is tested with golden files. While the content is only the run, its window, the recommended jobs and the funnel, `ReportStep` assembles it itself; a `ReportBuilder` takes that over once sections need real logic (trends, requirements).
+All numbers, sort orders, grouping and wording choices are made before the renderer. The report step assembles a `ReportContent` (immutable model) from the stage outputs; the renderer only formats it. A second format (JSON, HTML) is then a short file, logic is tested without Markdown, and the Markdown is tested with golden files. `ReportStep` assembles the content itself: each section with real logic has its own class (`TrendSource`, `AskSource`, `GapSource`, `OpeningGrouper`), so no `ReportBuilder` was needed.
+
+Built (task 23): every section, always present, in this order: Alerts, Recommended jobs, New openings, Market trends, What employers ask for, Experience to gain, About this run. A section with nothing to show says so ("None." under Alerts).
+
+- Header: the window, any days a long break left out, then a sources line: "Sources: Fast Forward 200 postings, JobsPipe 18 postings (18 credits)." The convert step records each source's postings (zero included) in `source_counts.jsonl`; credits come from the spend log, and a skipped paid source reads "JobsPipe skipped by you". Front matter adds `sources` (by source key), `new_openings`, `recommended` and `alerts`
+- Alerts: "None." until task 24 fills it with the run's warnings
+- New openings: every matched job of this run (the extract step's kept output, carried-over jobs included), one line each: title, company, work mode, places, salary, posted date, the score when it was recommended, and a link per posting. `OpeningGrouper` puts them under `report.group_by` (`job_type` by default, `domain`, or `both`: domains as subheadings inside job types), names as the settings write them, in the settings' order, then "Other" (a label the settings don't have), then "Not labelled" (no label, or the LLM couldn't label it); empty groups are left out, newest posted first
+- Links are labelled with each source's name for people (`label` on the source: "Fast Forward" for Getro network 997, "JobsPipe", "Demo board"); the data keeps the source keys. The paid sources lines use the same names
+- Terminal, at the end: "Run finished: 23 new openings, 10 recommended, 0 alerts." then "Report: <path>". The report step writes the summary line into the `Report`; `RunSucceeded` puts its message together
 
 The full content, section by section as later tasks add them:
 
 ```python
 class ReportContent(Model):
-    header: Header                # date, window covered, lookback note, sources with counts and credits
-    alerts: list[Alert]
-    openings: list[OpeningGroup]  # headings from group_by, jobs inside
-    trends: TrendSection          # table, partial-period notes, criteria change notes, breakdowns
-    requirements: dict[RequirementType, list[RequirementRow]]
-    gaps: GapSection              # missing and partly covered rows, covered list
-    funnel: Funnel                # counts per stage
+    run: str                      # the header: the run, the window covered, any lookback note
+    window: Window
+    not_covered: Window | None
+    sources: tuple[SourceSummary] # name for people, postings, credits or skipped
+    alerts: tuple[Alert]
+    min_score: int
+    recommendations: tuple[Recommendation]
+    openings: tuple[OpeningGroup] # headings from group_by, jobs inside (or groups, for both)
+    funnel: tuple[StepCount]      # counts per step
+    spends: tuple[Spend]          # what each paid source spent
+    carried_over: int             # jobs the usage limit carried over
+    trends: Trends                # table, partial-period notes, criteria change notes
+    asks: Asks                    # top requirements by type, with shares and changes
+    gaps: Gaps                    # missing and partly covered rows, covered list
 
 class ReportRenderer(Protocol):
     def render(self, content: ReportContent) -> str: ...
@@ -1156,3 +1173,11 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | A job asking a requirement's years twice counts its highest in the median | Every mention | One job, one figure, as with the shares |
 | Both market sections read their runs through one `MarketRuns` | Each section reads the run folders itself | One place knows how runs are read; each section only counts |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |
+| Postings per source are counted by the convert step, in `source_counts.jsonl` next to `spend.jsonl` | Counted by the fetch step; the report reads the convert step's output by name | The fetch step has only raw pages, and postings first exist in the convert step; a record of its own keeps the report from knowing other steps' outputs, and stays after the run |
+| A source's name for people is its `label`; the factory hands the report a map from source key to label | Names hard-coded in the renderer; a setting per source | Each source knows its own board ("Fast Forward" is Getro network 997); the data keeps stable keys. A job carried over from a source that is now off shows its key |
+| New openings are this run's matched jobs, with a score only on the recommended ones | Keep every job's score from the recommend step | The recommend step's output is the top N; keeping every score would change what it saves. Recommended jobs show both in their section and in their group |
+| Grouped by both, domains are subheadings inside job types | One heading per pair ("engineering, climate") | Each job type reads as one block; pairs would repeat each job type once per domain |
+| "Other" (a label the settings don't name) and "Not labelled" (no label) are separate groups, in that order | Unlabelled jobs under "Other" | "Other" says the job fits none of your types; "Not labelled" says the LLM couldn't tell, which is worth seeing apart |
+| Group headings use the names as the settings write them ("engineering-management") | Capitalised or prettified names | The names are the user's; the same name appears in `profile.yaml` and in the report |
+| A new opening's line includes the salary | Title, company, place, date, score and link only | The acceptance criteria ask for the salary on each job in the report |
+| The demo classifier labels job types from title words | Leave job types unknown in the demo | The demo run shows real grouping, and the end-to-end test checks it |

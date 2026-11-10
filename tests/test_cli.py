@@ -60,24 +60,58 @@ class BrokenFactory:
         raise FileNotFoundError("local/cv.pdf not found")
 
 
+KEPT = ["dropped.md", "jobs.jsonl", "manifest.json", "report.md", "source_counts.jsonl"]
+SECTIONS = [
+    "## Alerts",
+    "## Recommended jobs",
+    "## New openings",
+    "## Market trends",
+    "## What employers ask for",
+    "## Experience to gain",
+    "## About this run",
+]
+
+
 def test_demo_run_end_to_end(tmp_path, capsys):
     prompter = FakePrompter(True)
     assert demo_cli(tmp_path, prompter).main(["run", "--demo"]) == 0
     folder = tmp_path / "demo" / FIRST_RUN
     out = capsys.readouterr().out
-    assert out == f"Run finished: 3 jobs recommended.\nReport: {folder / 'report.md'}\n"
+    assert out == (
+        f"Run finished: 8 new openings, 3 recommended, 0 alerts.\nReport: {folder / 'report.md'}\n"
+    )
     assert prompter.asked == ["Continue?"]
-    assert sorted(p.name for p in folder.iterdir()) == [
-        "dropped.md",
-        "jobs.jsonl",
-        "manifest.json",
-        "report.md",
-    ]
+    assert sorted(p.name for p in folder.iterdir()) == KEPT
     report = (folder / "report.md").read_text()
     assert "## Recommended jobs (3)" in report
     assert "1. **Senior Data Engineer**, Brightwater Trust (score 100)" in report
     assert "Covers postings from 22 Oct to 5 Nov 2026." in report
     assert "- convert: 12" in report
+
+
+def test_a_demo_run_has_every_section_in_order(tmp_path):
+    demo_cli(tmp_path, FakePrompter(True)).main(["run", "--demo"])
+    report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
+    headings = [line.split(" (")[0] for line in report.splitlines() if line.startswith("## ")]
+    assert headings == SECTIONS
+    assert "sources: {demo: 12}\nnew_openings: 8\nrecommended: 3\nalerts: 0\n" in report
+    assert "\nSources: Demo board 12 postings.\n" in report
+    assert "## Alerts\n\nNone.\n" in report
+    assert "## New openings (8)\n\n### engineering (7)\n\n" in report
+    assert "### engineering-management (1)\n\n- **Engineering Manager, Data Platform**" in report
+    assert (
+        "- **Platform Engineer**, Commons Ledger. Remote. Remote, US. $130k to $160k a year. "
+        "Posted 5 Nov. Recommended, score 100. "
+        "[Demo board](https://example.org/commons-ledger/jobs/4)\n"
+    ) in report
+
+
+def test_new_openings_are_grouped_as_the_settings_say(tmp_path):
+    settings = SettingsFile.defaults(output=str(tmp_path), report={"group_by": "both"})
+    factory = AppFactory(settings, tmp_path / "local", FixedClock(10), FakePrompter(True), {})
+    Cli(factory).main(["run", "--demo"])
+    report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
+    assert "### engineering (7)\n\n#### Not labelled (7)\n\n- " in report
 
 
 def test_each_run_writes_one_report_and_saves_its_run_data(tmp_path):
@@ -86,12 +120,7 @@ def test_each_run_writes_one_report_and_saves_its_run_data(tmp_path):
     folders = sorted((tmp_path / "demo").iterdir())
     assert [f.name for f in folders] == [FIRST_RUN, "2026-11-05T15-00-00"]
     for folder in folders:
-        assert sorted(p.name for p in folder.iterdir()) == [
-            "dropped.md",
-            "jobs.jsonl",
-            "manifest.json",
-            "report.md",
-        ]
+        assert sorted(p.name for p in folder.iterdir()) == KEPT
         manifest = json.loads((folder / "manifest.json").read_text())
         assert manifest["completed"] is True
         assert [step["step"] for step in manifest["steps"]][-1] == "report"
@@ -130,6 +159,19 @@ def test_next_run_fetches_since_the_last_one_without_asking(tmp_path):
     counts = {step["step"]: step["count"] for step in manifest["steps"]}
     # The first run found 8 of the 12 jobs: only the 4 it didn't keep are new.
     assert (counts["convert"], counts["new_jobs_filter"], counts["filter"]) == (12, 4, 0)
+
+
+def test_the_report_lists_every_matching_posting_not_seen_in_an_earlier_run(tmp_path, capsys):
+    demo_cli(tmp_path, FakePrompter(True)).main(["run", "--demo"])
+    first = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
+    assert "## New openings (8)" in first
+    demo_cli(tmp_path, FakePrompter(), hour=15).main(["run", "--demo"])
+    second = (tmp_path / "demo" / "2026-11-05T15-00-00" / "report.md").read_text()
+    assert "## New openings (0)\n\nNo new job matched your searches this run.\n" in second
+    assert capsys.readouterr().out.endswith(
+        "Run finished: 0 new openings, 0 recommended, 0 alerts.\n"
+        f"Report: {tmp_path / 'demo' / '2026-11-05T15-00-00' / 'report.md'}\n"
+    )
 
 
 def test_saying_no_runs_nothing(tmp_path, capsys):

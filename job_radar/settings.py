@@ -25,6 +25,7 @@ class LlmSettings(Model):
 class ReportSettings(Model):
     """How the report is laid out."""
 
+    group_by: Literal["job_type", "domain", "both"]  # the headings in "New openings"
     requirements_per_type: int = Field(ge=1)  # rows per type in "What employers ask for"
     gap_suggestions: int = Field(ge=0)  # gaps shown with how to gain them in "Experience to gain"
 
