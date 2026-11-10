@@ -130,7 +130,13 @@ One line each for now; each task gets its detail, against the class names in arc
   - A sources line in the header, with postings per source (counted by the convert step, `source_counts.jsonl`) and credits from the spend log; display names on links ("Fast Forward", "JobsPipe", "Demo board")
   - New openings: every matched job of the run, one line each, grouped by `report.group_by` (`job_type`, `domain` or `both`) by `OpeningGrouper`: settings order, then "Other", then "Not labelled", empty groups out, newest first
   - Terminal: "Run finished: 23 new openings, 10 recommended, 0 alerts." and the report path
-- [ ] **24. Complete errors and warnings:** every error and warning, at the top of the report and in the terminal
+- [x] **24. Complete errors and warnings:** every error and warning, at the top of the report and in the terminal
+  - One failing source is a warning and the run goes on; only when every source tried fails does it stop: "No source returned data: JobsPipe failed (...), Fast Forward failed (...)". A paid source whose cost check fails is left out the same way
+  - Warnings in `warnings.jsonl` in the run folder (`FileWarningLog`), each once: a source failed, returned nothing or was skipped by you; credits below `alerts.low_credits` (100); the monthly budget reached; the LLM couldn't label, read or rank some jobs (the ranker now splits a bad batch like the others); jobs carried over at the usage limit; requirements not compared with the CV; no new jobs matched; an unreadable run folder or kept jobs file. The report's Alerts lists them; the terminal ends with a line per alert. Outside a run, `TerminalWarnings` tells them once
+  - Errors with the fix: settings and profile errors name the file, the key and where every key is listed; unreadable CV, missing API key, `claude` missing or logged out; "Another run is in progress (pid N)" (exit 2)
+  - One run at a time: `output/run.lock` with the process id, a dead process's lock removed, released however the run ends
+  - Unexpected errors: one line, the traceback in `error.log` in the run folder (a step) or the output folder (outside any step); Ctrl+C prints one line
+  - Tests: failing fake sources (one, all); each warning recorded and shown in Alerts and the terminal; the lock (taken, released on success and failure, stale removed, live blocks); `error.log` and one line; setup error messages; unreadable runs and kept jobs
 
 ## Phase 3: MVP ready
 

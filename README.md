@@ -58,6 +58,8 @@ If your Claude usage limit runs out mid-run, the run asks whether to finish with
 
 If a run fails, run the same command again: it offers to resume after the last step that finished.
 
+Problems that don't stop a run are listed under Alerts at the top of the report, and at the end in the terminal: a source that failed or returned nothing (the other sources still run), credits running low (`alerts.low_credits` in `settings.yaml`, 100 by default), the monthly budget reached, jobs the LLM couldn't label, read or rank, jobs carried over at the usage limit, no new jobs matched. A run stops only when it can't do anything useful (no source returned data) or can't start (invalid settings or profile, unreadable CV, missing API key, `claude` not logged in, another run in progress), with one message saying what to fix. An unexpected error shows one line and writes the details to `error.log`. Only one run goes at a time.
+
 Each run says which dates it fetches: the last 14 days on a first run, since the last run after that. On a first run, or after a long break, it asks before going ahead.
 
 Each run writes `output/runs/<run-id>/report.md`, with `dropped.md` next to it. Add `--demo` to `runs` or `delete` for demo runs.

@@ -475,19 +475,21 @@ def test_every_section_is_there_even_with_nothing_to_show():
 
 
 @pytest.mark.parametrize(
-    ("openings", "recommended", "summary"),
+    ("openings", "recommended", "summary", "alerts"),
     [
-        (0, 0, "0 new openings, 0 recommended, 0 alerts"),
-        (1, 1, "1 new opening, 1 recommended, 0 alerts"),
-        (23, 10, "23 new openings, 10 recommended, 0 alerts"),
+        (0, 0, "0 new openings, 0 recommended, 1 alert", "- No new jobs matched your searches.\n"),
+        (1, 1, "1 new opening, 1 recommended, 0 alerts", ""),
+        (23, 10, "23 new openings, 10 recommended, 0 alerts", ""),
     ],
 )
 def test_the_terminal_summary_counts_openings_recommended_jobs_and_alerts(
-    openings, recommended, summary
+    openings, recommended, summary, alerts
 ):
     jobs = [job(str(n)) for n in range(openings)]
     recs = [Recommendation(job=j, score=50, reason="r") for j in jobs[:recommended]]
     [report] = report_step(KeepingRenderer(), jobs=jobs).run(recs)
     assert report.summary == summary
-    message = RunSucceeded(location=report.location, summary=report.summary).message()
-    assert message == f"Run finished: {summary}.\nReport: memory/report.md"
+    message = RunSucceeded(
+        location=report.location, summary=report.summary, alerts=report.alerts
+    ).message()
+    assert message == f"Run finished: {summary}.\n{alerts}Report: memory/report.md"
