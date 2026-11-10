@@ -123,6 +123,44 @@ def test_a_job_found_by_two_runs_counts_once():
     assert trends.periods[-1].postings == 2
 
 
+def test_one_run_adds_to_each_period_its_postings_are_dated_in():
+    # Acceptance (Market trends): each posting counts toward the period of its posting date
+    # (the date a run first saw it, when missing), so one run can add to several periods.
+    jobs = [
+        job("1", posted=date(2026, 10, 30)),
+        job("2", posted=None, first_seen=date(2026, 11, 9)),
+        job("3", posted=date(2026, 11, 2)),
+    ]
+    october, november = MONTHS.build([run(date(2026, 10, 26), date(2026, 11, 9), jobs)]).periods
+    assert (october.postings, november.postings) == (1, 2)
+
+
+def test_how_often_the_user_runs_doesnt_change_the_figures():
+    jobs = [job(str(n), posted=date(2026, 10, 1 + n)) for n in range(20)]
+    once = MONTHS.build([run(date(2026, 10, 1), date(2026, 10, 31), jobs)])
+    often = MONTHS.build(
+        [
+            run(date(2026, 10, 1), date(2026, 10, 10), jobs[:10]),
+            run(date(2026, 10, 9), date(2026, 10, 20), jobs[8:18]),
+            run(date(2026, 10, 19), date(2026, 10, 31), jobs[17:]),
+        ]
+    )
+    assert often == once
+
+
+def test_a_later_run_can_still_add_postings_to_an_earlier_period_and_the_current_is_partial():
+    # Acceptance (Market trends): a posting dated last month but found only now counts
+    # toward last month; the current period is marked as partial.
+    october_run = run(date(2026, 10, 1), date(2026, 10, 31), [job("1", posted=date(2026, 10, 5))])
+    before = MONTHS.build([october_run])
+    late = job("2", posted=date(2026, 10, 30), first_seen=date(2026, 11, 9))
+    after = MONTHS.build([october_run, run(date(2026, 11, 1), date(2026, 11, 9), [late])])
+    assert before.periods[0].postings == 1
+    october, november = after.periods
+    assert (october.postings, october.partial) == (2, False)
+    assert (november.postings, november.partial) == (0, True)
+
+
 def test_work_mode_shares_leave_out_jobs_that_dont_say():
     jobs = [
         job("1", mode=WorkMode.REMOTE),
@@ -274,6 +312,26 @@ def test_market_trends_add_this_run_to_the_completed_ones(tmp_path):
     runs = MarketRuns(history, seen, this_run, window, config())
     trends = MarketTrends(runs, MONTHS).trends()
     assert (trends.periods[-1].postings, trends.periods[-1].covered_days) == (2, 9)
+
+
+def test_a_failed_run_doesnt_count_toward_the_trends(tmp_path):
+    # Acceptance (Runs): a failed run doesn't count toward trends.
+    failed = tmp_path / "2026-11-05T10-00-00"
+    failed.mkdir()
+    FileCheckpoints(
+        failed,
+        Window(start=date(2026, 11, 1), end=date(2026, 11, 5)),
+        keep={"extract": "jobs.jsonl"},
+    ).save("extract", [job("1", posted=date(2026, 11, 2))])
+    now = tmp_path / "2026-11-09T10-00-00"
+    now.mkdir()
+    window = Window(start=date(2026, 11, 8), end=date(2026, 11, 9))
+    this_run = FileCheckpoints(now, window, keep={"extract": "jobs.jsonl"})
+    this_run.save("extract", [job("2")])
+    history = FileRunHistory(tmp_path, MemoryWarningLog())
+    seen = FileSeenJobs(history, tmp_path, MemoryWarningLog())
+    trends = MarketTrends(MarketRuns(history, seen, this_run, window, config()), MONTHS).trends()
+    assert (trends.periods[-1].postings, trends.periods[-1].covered_days) == (1, 2)
 
 
 def period(start: date, end: date, covered: int, postings: int, **figures) -> TrendPeriod:

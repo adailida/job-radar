@@ -443,6 +443,46 @@ def test_groups_inside_groups_get_a_lower_heading():
     ) in MarkdownRenderer(Words()).render(report)
 
 
+def test_each_job_shows_title_company_location_or_remote_salary_if_posted_source_and_link():
+    # Acceptance (Job search): each job in the report shows title, company, location or
+    # remote, salary if posted, source, and a link to the posting.
+    onsite = posting(
+        "1",
+        "Data Engineer",
+        locations=(Location(text="Oakland, CA"),),
+        work_mode=WorkMode.ONSITE,
+        salary=salary("120000", "150000"),
+    )
+    remote = posting("x-2", "Platform Engineer", source="jobspipe")
+    first = rec(80, "Fits.", onsite)
+    second = Job(id="b", keys=(), postings=(remote,), first_seen=date(2026, 11, 9))
+    report = ReportContent(
+        run=RUN,
+        window=NOV,
+        sources=SOURCES,
+        min_score=40,
+        recommendations=(first,),
+        openings=(
+            OpeningGroup(
+                name="Other", openings=(Opening(job=first.job, score=80), Opening(job=second))
+            ),
+        ),
+        funnel=(),
+    )
+    text = MarkdownRenderer(Words()).render(report)
+    assert (
+        "1. **Data Engineer**, Example Org (score 80)\n"
+        "   On-site. Oakland, CA. $120k to $150k a year.\n"
+        "   Fits.\n"
+        "   [Fast Forward](https://example.org/jobs/1)\n"
+    ) in text
+    assert (
+        "- **Data Engineer**, Example Org. On-site. Oakland, CA. $120k to $150k a year. "
+        "Recommended, score 80. [Fast Forward](https://example.org/jobs/1)\n"
+        "- **Platform Engineer**, Example Org. Remote. [JobsPipe](https://example.org/jobs/x-2)\n"
+    ) in text
+
+
 def test_links_carry_the_source_name_for_people():
     both = rec(70, "r", posting("1", "Engineer"), posting("x-1", "Engineer", source="jobspipe"))
     report = ReportContent(

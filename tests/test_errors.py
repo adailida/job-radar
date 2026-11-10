@@ -192,7 +192,7 @@ def test_errors_stop_the_run_with_a_clear_message_for_invalid_settings(
 
 def test_errors_stop_the_run_with_a_clear_message_for_invalid_user_input(tmp_path, capsys):
     # Acceptance (Problem alerts): errors stop the run with a clear message: user input
-    # invalid (terminal prompts for it come with task 12).
+    # missing or invalid.
     local = tmp_path / "local"
     local.mkdir()
     (local / "profile.yaml").write_text("searches:\n  one:\n    rols: [engineer]\n")

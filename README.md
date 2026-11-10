@@ -67,6 +67,7 @@ Each run writes `output/runs/<run-id>/report.md`, with `dropped.md` next to it. 
 ## Docs
 
 - [Requirements](docs/requirements.md): what it does, acceptance criteria, non-goals
+- [Acceptance](docs/acceptance.md): each acceptance criterion with the tests that prove it, and its status
 - [Design](docs/design.md): architecture, data model, decisions and alternatives
 - [Architecture](docs/architecture.md): diagrams of the components and of one run, with where state lives
 - [Tasks](docs/tasks.md): build steps

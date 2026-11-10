@@ -149,8 +149,8 @@ class FakeApi:
         return httpx.Response(200, json={"metadata": meta, "data": data})
 
 
-def test_fetch_pages_with_the_cursor_and_stops_at_the_cap():
-    api, prompter = FakeApi(total=100), FakePrompter()
+def test_fetch_pages_with_the_cursor_up_to_the_cap():
+    api, prompter = FakeApi(total=30), FakePrompter()
     pages = source(api, max_jobs=30, prompter=prompter).fetch(
         SearchCriteria(searches=(SEARCH,)), WINDOW
     )
@@ -158,6 +158,33 @@ def test_fetch_pages_with_the_cursor_and_stops_at_the_cap():
     assert "cursor" not in api.bodies[0] and api.bodies[1]["cursor"] == "more"
     assert [p.page for p in pages] == [1, 2]
     assert prompter.told == ["JobsPipe: 30 jobs, 30 credits used, 70 left."]
+
+
+def test_a_fetch_is_never_partial():
+    # Acceptance (Cost): a fetch is never partial: a source is fetched in full or not at all.
+    api, prompter = FakeApi(total=100), FakePrompter()
+    with pytest.raises(JobsPipeError) as over:
+        source(api, max_jobs=30, prompter=prompter).fetch_paid(
+            SearchCriteria(searches=(SEARCH,)), WINDOW, cap=30
+        )
+    assert str(over.value) == (
+        "found more jobs than the 30 approved, so none are used, as a fetch is all or nothing "
+        "(30 credits used; jobs paid for are free again this month)"
+    )
+    assert prompter.told == ["JobsPipe: 30 jobs, 30 credits used, 70 left."]
+
+
+def test_a_search_the_cap_leaves_unasked_fails_the_fetch_too():
+    api = FakeApi(total=100)
+    with pytest.raises(JobsPipeError, match="more jobs than the 25 approved"):
+        source(api).fetch_paid(TWO, WINDOW, cap=25)
+    assert len(api.bodies) == 1
+
+
+def test_a_cap_of_nothing_fetches_nothing():
+    api = FakeApi(total=5)
+    assert source(api).fetch_paid(TWO, WINDOW, cap=0).pages == ()
+    assert api.bodies == []
 
 
 def test_fetch_stops_when_the_results_run_out():
@@ -199,6 +226,28 @@ def test_jobspipe_on_without_a_key_is_a_setup_error(tmp_path):
     )
     with pytest.raises(ConfigError, match="JOBSPIPE_API_KEY is not set: add it to .env"):
         factory.create(demo=False)
+
+
+def test_a_run_fetches_from_jobspipe_and_fast_forward(tmp_path, monkeypatch):
+    # Acceptance (Job search): a run fetches from JobsPipe and Fast Forward (JobsPipe on).
+    from job_radar.llm import ClaudeCli
+
+    monkeypatch.setattr(ClaudeCli, "check", lambda self: None)
+    local = tmp_path / "local"
+    local.mkdir()
+    (local / "profile.yaml").write_text("searches: {all: {}}\n")
+    (local / "cv.md").write_text("A CV.\n")
+    (local / "preferences.md").write_text("A job.\n")
+    factory = AppFactory(
+        SettingsFile.defaults(output=str(tmp_path), sources={"jobspipe": {"enabled": True}}),
+        local,
+        None,
+        FakePrompter(),
+        {"JOBSPIPE_API_KEY": "jp_test"},
+    )
+    parts = factory._real()
+    assert [s.name for s in parts.sources] == ["getro", "jobspipe"]
+    assert [p.source for p in parts.parsers] == ["getro", "jobspipe"]
 
 
 @pytest.mark.live
@@ -244,9 +293,9 @@ def test_when_jobspipe_cant_count_the_estimate_is_the_per_run_max():
 
 
 def test_fetch_paid_spends_within_the_cap_and_says_what_it_cost():
-    paid = source(FakeApi(total=100), max_jobs=250).fetch_paid(TWO, WINDOW, cap=20)
-    assert (paid.charged, paid.credits_left) == (20, 80)
-    assert sum(len(json.loads(p.body)["data"]) for p in paid.pages) == 20
+    paid = source(FakeApi(total=10), max_jobs=250).fetch_paid(TWO, WINDOW, cap=20)
+    assert (paid.charged, paid.credits_left) == (10, 90)
+    assert sum(len(json.loads(p.body)["data"]) for p in paid.pages) == 10
 
 
 def test_jobspipe_limits_come_from_the_plan_unless_the_settings_set_them():

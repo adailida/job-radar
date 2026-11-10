@@ -229,6 +229,29 @@ def test_runs_lists_demo_runs_and_delete_removes_one(tmp_path, capsys):
     assert list((tmp_path / "demo").iterdir()) == []
 
 
+def test_a_deleted_runs_postings_count_as_unseen_again_and_its_data_drops_out_of_the_trends(
+    tmp_path,
+):
+    # Acceptance (Runs): the user can delete any earlier run, after a confirmation prompt.
+    # Its postings count as unseen again, and its data drops out of the trends.
+    settings = SettingsFile.defaults(output=str(tmp_path), recommend={"top_n": 3})
+
+    def cli(day: int, prompter: FakePrompter) -> Cli:
+        """The real command on this day of November, with this user."""
+        return Cli(AppFactory(settings, tmp_path / "local", FixedClock(10, day), prompter, {}))
+
+    cli(5, FakePrompter(True)).main(["run", "--demo"])
+    deleting = FakePrompter(True)
+    assert cli(5, deleting).main(["delete", "--demo", FIRST_RUN]) == 0
+    assert deleting.asked == [f"Delete run {FIRST_RUN} (completed, 22 Oct to 5 Nov 2026)?"]
+    cli(20, FakePrompter(True)).main(["run", "--demo"])
+    report = (tmp_path / "demo" / "2026-11-20T10-00-00" / "report.md").read_text()
+    assert "## New openings (8)" in report
+    trends = report[report.index("## Market trends") : report.index("## What employers")]
+    assert "|  | Nov (partial, 15 of 30 days) |\n" in trends
+    assert "Oct" not in trends
+
+
 def test_a_failed_demo_run_is_resumed_by_the_same_command(tmp_path, capsys, monkeypatch):
     real_run = RecommendTopJobsStep.run
 
