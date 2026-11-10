@@ -1,5 +1,7 @@
 """Turning a board's free-text places into country and region codes."""
 
+import re
+
 import pycountry
 
 from job_radar.model import Location
@@ -45,14 +47,20 @@ class PlaceCodes:
         return location.model_copy(update={"country": country, "region": region})
 
     def _country(self, text: str) -> str | None:
-        """The country code a name or code stands for, or None."""
-        alias = self.ALIASES.get(text.lower())
-        if alias:
-            return alias
-        try:
-            return pycountry.countries.lookup(text).alpha_2
-        except LookupError:
-            return None
+        """The country code a name or code stands for, or None.
+
+        A name with an aside in brackets ("Myanmar (Burma)") is also tried
+        without it.
+        """
+        for name in dict.fromkeys((text, re.sub(r"\s*\([^)]*\)\s*$", "", text))):
+            alias = self.ALIASES.get(name.lower())
+            if alias:
+                return alias
+            try:
+                return pycountry.countries.lookup(name).alpha_2
+            except LookupError:
+                continue
+        return None
 
     def _us_region(self, text: str) -> str | None:
         """The US state a code or name stands for ("WA", "Washington"), or None."""

@@ -147,9 +147,13 @@ One line each for now; each task gets its detail, against the class names in arc
   - Decided by the owner: nothing is asked when a run fails; the next run offers to resume it
   - Deferred after the MVP by the owner (Nov 10), moved to "After the MVP" in requirements.md: keywords in descriptions (task 11c) and terminal prompts for missing or invalid user input (task 12)
 
-- [ ] **26. Real runs, limited first, and docs**
+- [x] **26. Real runs, limited first, and docs**
   - Step 1: Fast Forward with the full settings, a low LLM job limit and a 1-day lookback
   - Step 2: add JobsPipe with very tight limits: per-run max about 25 credits, one narrow search, 1-day lookback. Check that credits spent (before and after) match the estimate, then the report and run data
   - Step 3: widen step by step (limits, searches, lookback), checking spend against the estimate each time, before switching to the full settings
   - `examples/` complete; README usage moved from "planned" to real
   - Built: llm.max_jobs_per_run (60), README First run, examples/cv.example.md
+  - Done Nov 9 to 10, narrowed by the owner to short windows (no widening: the owner runs the full thing after his code changes):
+    - Nov 9: Fast Forward 1 and 14 days; JobsPipe Nov 8 to 9 (18 credits, matched the estimate within the cap; 10 recommended, top 86)
+    - Nov 10: every step on, Nov 8 to 10: the cost check estimated 46 JobsPipe credits, over the 25 cap, and the owner skipped JobsPipe; Fast Forward only, 3 haiku prompts, one alert. Found and fixed: "Myanmar (Burma)" wasn't read as a country, so an on-site job in Yangon passed the `seattle` search as "no place given"
+    - Not seen yet: a real usage-limit answer from `claude` (the pattern stays to confirm)
