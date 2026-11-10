@@ -306,6 +306,52 @@ class StepCount(Model):
     count: int
 
 
+class SourceCount(Model):
+    """How many postings one source gave in a run."""
+
+    source: str  # the source's name in the data: "getro", "jobspipe"
+    postings: int
+
+
+class SourceSummary(Model):
+    """One source in the report's header: its name for people, what it gave and what it cost."""
+
+    source: str  # the source's name in the data: "getro"
+    name: str  # its name for people: "Fast Forward"
+    postings: int
+    credits: int | None = None  # what a paid source charged; None for a free one
+    skipped: bool = False  # a paid source the user chose to skip this run
+
+
+class Alert(Model):
+    """A problem from the run, shown at the top of the report."""
+
+    message: str
+
+
+class Opening(Model):
+    """One new matched job in the report's new openings, with its score when it was recommended."""
+
+    job: Job
+    score: int | None = None  # None when it wasn't among the recommended jobs
+
+
+class OpeningGroup(Model):
+    """A heading in the new openings: a job type or a domain, and the jobs under it.
+
+    Grouped by both, a job type's group holds a group per domain instead of jobs.
+    """
+
+    name: str  # a name from the settings, "Other" or "Not labelled"
+    openings: tuple[Opening, ...] = ()  # newest posted first
+    groups: tuple["OpeningGroup", ...] = ()  # the groups inside it, when grouped by both
+
+    @property
+    def size(self) -> int:
+        """How many jobs it holds, inside its groups included."""
+        return len(self.openings) + sum(group.size for group in self.groups)
+
+
 class ReportContent(Model):
     """Everything a report says, decided before it is formatted.
 
@@ -316,14 +362,22 @@ class ReportContent(Model):
     run: str  # the run's folder name, e.g. "2026-11-09T13-58-11"
     window: Window
     not_covered: Window | None = None  # days a long break left out, before the window
+    sources: tuple[SourceSummary, ...] = ()  # the run's sources, in the order they were fetched
+    alerts: tuple[Alert, ...] = ()
     min_score: int  # the lowest score a recommended job may have
     recommendations: tuple[Recommendation, ...]  # best first
+    openings: tuple[OpeningGroup, ...] = ()  # this run's new matched jobs, by group
     funnel: tuple[StepCount, ...]  # each finished step and its count, in run order
     spends: tuple["Spend", ...] = ()  # what each paid source spent
     carried_over: int = 0  # jobs carried over to the next run by the usage limit
     trends: "Trends | None" = None  # the market trends section
     asks: "Asks | None" = None  # the what employers ask for section
     gaps: "Gaps | None" = None  # the experience to gain section
+
+    @property
+    def new_openings(self) -> int:
+        """How many new matched jobs the report lists."""
+        return sum(group.size for group in self.openings)
 
 
 class DroppedJob(Model):

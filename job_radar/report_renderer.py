@@ -10,10 +10,14 @@ from job_radar.model import (
     Gaps,
     GapSkip,
     GapStatus,
+    Job,
+    Opening,
+    OpeningGroup,
     Recommendation,
     ReportContent,
     RequirementType,
     Seniority,
+    SourceSummary,
     Spend,
     SpendDecision,
     TrendPeriod,
@@ -50,15 +54,24 @@ class MarkdownRenderer:
         self._words = words
 
     def render(self, content: ReportContent) -> str:
-        """The report: front matter, title, recommended jobs, then the funnel."""
+        """The report: front matter, the header, then every section, always in the same order.
+
+        Alerts, recommended jobs, new openings, market trends, what employers
+        ask for, experience to gain, and about this run.
+        """
         recs = content.recommendations
         window = content.window
+        names = {source.source: source.name for source in content.sources}
+        counts = ", ".join(f"{source.source}: {source.postings}" for source in content.sources)
         lines = [
             "---",
             f"run: {content.run}",
             f"covers: [{window.start.isoformat()}, {window.end.isoformat()}]",
             *self._gap_matter(content),
+            f"sources: {{{counts}}}",
+            f"new_openings: {content.new_openings}",
             f"recommended: {len(recs)}",
+            f"alerts: {len(content.alerts)}",
             "---",
             "",
             f"# job-radar report, {self._words.day(window.end, year=True)}",
@@ -66,24 +79,28 @@ class MarkdownRenderer:
             f"Covers postings from {self._words.span(window.start, window.end)}.",
             *self._gap_note(content),
             "",
+            self._sources(content.sources),
+            "",
+            "## Alerts",
+            "",
+            *([f"- {alert.message}" for alert in content.alerts] or ["None."]),
+            "",
             f"## Recommended jobs ({len(recs)})",
             "",
         ]
         if not recs:
             lines.append(f"No job scored {content.min_score} or more this run.")
         for rank, rec in enumerate(recs, start=1):
-            lines.extend(self._job(rank, rec))
-        if content.trends is not None:
-            lines.extend(["", *self._trends(content.trends)])
-        if content.asks is not None:
-            lines.extend(["", *self._asks(content.asks)])
-        if content.gaps is not None:
-            lines.extend(["", *self._gaps(content.gaps)])
+            lines.extend(self._job(rank, rec, names))
+        lines.extend(["", *self._openings(content, names)])
+        lines.extend(["", *self._trends(content.trends)])
+        lines.extend(["", *self._asks(content.asks)])
+        lines.extend(["", *self._gaps(content.gaps)])
         lines.extend(["", "## About this run", "", "Items each step produced:", ""])
         lines.extend(f"- {count.step}: {count.count}" for count in content.funnel)
         if content.spends:
             lines.extend(["", "Paid sources:", ""])
-            lines.extend(f"- {self._spend(spend)}" for spend in content.spends)
+            lines.extend(f"- {self._spend(spend, names)}" for spend in content.spends)
         if content.carried_over:
             jobs = "job" if content.carried_over == 1 else "jobs"
             lines.extend(
@@ -111,8 +128,61 @@ class MarkdownRenderer:
             f"and a run reaches back at most {days} days.",
         ]
 
-    def _trends(self, trends: Trends) -> list[str]:
+    @staticmethod
+    def _sources(sources: tuple[SourceSummary, ...]) -> str:
+        """The sources line: each source's name, its postings, and the credits a paid one used."""
+        said = []
+        for source in sources:
+            if source.skipped:
+                said.append(f"{source.name} skipped by you")
+                continue
+            plural = "" if source.postings == 1 else "s"
+            text = f"{source.name} {source.postings:,} posting{plural}"
+            if source.credits is not None:
+                text += f" ({source.credits:,} credit{'' if source.credits == 1 else 's'})"
+            said.append(text)
+        return f"Sources: {', '.join(said) or 'none'}."
+
+    def _openings(self, content: ReportContent, names: dict[str, str]) -> list[str]:
+        """The new openings section: every new matched job, one line each, under its group."""
+        lines = [f"## New openings ({content.new_openings})"]
+        if not content.openings:
+            return [*lines, "", "No new job matched your searches this run."]
+        for group in content.openings:
+            lines.extend(self._group(group, 3, names))
+        return lines
+
+    def _group(self, group: OpeningGroup, level: int, names: dict[str, str]) -> list[str]:
+        """One group's heading at this level, then its jobs or the groups inside it."""
+        lines = ["", f"{'#' * level} {group.name} ({group.size})"]
+        if group.openings:
+            lines.append("")
+            lines.extend(self._opening(opening, names) for opening in group.openings)
+        for inside in group.groups:
+            lines.extend(self._group(inside, level + 1, names))
+        return lines
+
+    def _opening(self, opening: Opening, names: dict[str, str]) -> str:
+        """One new opening as a list item: title, company, details, its score if any, links."""
+        posting = opening.job.postings[0]
+        details = self._words.details(posting)
+        parts = [
+            f"**{posting.title}**, {posting.company}.",
+            *([details] if details else []),
+            *([f"Recommended, score {opening.score}."] if opening.score is not None else []),
+            self._links(opening.job, names),
+        ]
+        return "- " + " ".join(parts)
+
+    @staticmethod
+    def _links(job: Job, names: dict[str, str]) -> str:
+        """A link to each of a job's postings, labelled with its source's name for people."""
+        return ", ".join(f"[{names.get(p.source, p.source)}]({p.url})" for p in job.postings)
+
+    def _trends(self, trends: Trends | None) -> list[str]:
         """The market trends section: notes, then a table of periods, then the change."""
+        if trends is None:
+            return ["## Market trends", "", "No runs to show trends for yet."]
         lines = [f"## Market trends (by {trends.period})", ""]
         periods = list(trends.periods)
         if not periods:
@@ -212,8 +282,10 @@ class MarkdownRenderer:
         lines.append(f"A figure on fewer than {low} jobs is marked as a low sample.")
         return lines
 
-    def _asks(self, asks: Asks) -> list[str]:
+    def _asks(self, asks: Asks | None) -> list[str]:
         """The what employers ask for section: the window, then a table per requirement type."""
+        if asks is None:
+            return ["## What employers ask for", "", "No matched job with requirements yet."]
         days = (asks.window.end - asks.window.start).days + 1
         span = self._words.span(asks.window.start, asks.window.end)
         lines = ["## What employers ask for", ""]
@@ -251,10 +323,10 @@ class MarkdownRenderer:
         lines.append(f"Fewer than {asks.low_sample} jobs in the window is a low sample.")
         return lines
 
-    def _gaps(self, gaps: Gaps) -> list[str]:
+    def _gaps(self, gaps: Gaps | None) -> list[str]:
         """The experience to gain section: any note, a table of gaps, then the covered ones."""
         lines = ["## Experience to gain"]
-        if not gaps.rows and gaps.skipped is None:
+        if gaps is None or (not gaps.rows and gaps.skipped is None):
             return [*lines, "", "No requirements to compare with your CV yet."]
         if gaps.skipped is not None:
             count = gaps.not_compared
@@ -373,7 +445,7 @@ class MarkdownRenderer:
         return f"{'up' if value > 0 else 'down'} {abs(value):.0f} pts"
 
     @staticmethod
-    def _spend(spend: Spend) -> str:
+    def _spend(spend: Spend, names: dict[str, str]) -> str:
         """One paid source's spend in words: the estimate, how it was agreed, what it cost."""
         approval = spend.approval
         agreed = {
@@ -381,19 +453,19 @@ class MarkdownRenderer:
             SpendDecision.APPROVED: "over a limit, approved by you",
             SpendDecision.SKIPPED: "skipped by you",
         }[approval.decision]
-        said = f"{approval.source}: estimate {approval.estimate} credits, {agreed}"
+        name = names.get(approval.source, approval.source)
+        said = f"{name}: estimate {approval.estimate} credits, {agreed}"
         if approval.decision is SpendDecision.SKIPPED:
             return said + f". {approval.credits_before} credits left."
         return said + f". {spend.charged} used, {spend.credits_after} left."
 
-    def _job(self, rank: int, rec: Recommendation) -> list[str]:
+    def _job(self, rank: int, rec: Recommendation, names: dict[str, str]) -> list[str]:
         """One job as a numbered list item: its primary posting, the reason, a link per posting."""
         posting = rec.job.postings[0]
-        links = ", ".join(f"[{p.source}]({p.url})" for p in rec.job.postings)
         details = self._words.details(posting)
         return [
             f"{rank}. **{posting.title}**, {posting.company} (score {rec.score})",
             *([f"   {details}"] if details else []),
             f"   {rec.reason}",
-            f"   {links}",
+            f"   {self._links(rec.job, names)}",
         ]

@@ -17,6 +17,7 @@ class DemoSource:
     """
 
     name = "demo"
+    label = "Demo board"
     PAGE_SIZE = 7
 
     # id, title, company, location, work mode, yearly salary in USD (or None), days old

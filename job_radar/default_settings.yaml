@@ -43,6 +43,7 @@ recommend:
   min_score: 40           # 0 to 100; a lower score is a poor fit and isn't recommended
 
 report:
+  group_by: job_type      # job_type, domain or both (domains inside job types): headings in "New openings"
   requirements_per_type: 20  # rows per type (skills, tools, certifications, years) in "What employers ask for"
   gap_suggestions: 5      # the most asked gaps shown with how to gain them in "Experience to gain"
 

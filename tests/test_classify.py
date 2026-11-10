@@ -180,3 +180,18 @@ def test_the_match_step_keeps_jobs_that_match_any_search():
         labelled("2", seniority=Seniority.MID, domain="x"),
     ]
     assert [j.id for j in MatchStep(criteria, MATCHER).run(jobs)] == ["demo:1"]
+
+
+@pytest.mark.parametrize(
+    ("title", "job_type"),
+    [
+        ("Senior Data Engineer", "engineering"),
+        ("Frontend Developer", "engineering"),
+        ("Engineering Manager, Data", "engineering-management"),
+        ("Product Designer", "product"),
+        ("Grants Coordinator", None),
+    ],
+)
+def test_the_demo_classifier_reads_job_types_from_titles(title, job_type):
+    [found] = TitleClassifier().classify([job("1", title)]).values()
+    assert found.job_type == job_type

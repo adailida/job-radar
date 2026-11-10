@@ -206,9 +206,10 @@ class LlmClassifier:
 
 
 class TitleClassifier:
-    """Labels seniority from title words, for `--demo` and tests: no LLM.
+    """Labels seniority and job type from title words, for `--demo` and tests: no LLM.
 
-    Job type, domain and sector are left unknown. Stateless.
+    Job types are the default settings' names; domain and sector are left
+    unknown. Stateless.
     """
 
     WORDS: tuple[tuple[str, Seniority], ...] = (
@@ -221,12 +222,22 @@ class TitleClassifier:
         ("lead", Seniority.LEAD),
         ("senior", Seniority.SENIOR),
     )
+    JOB_TYPES: tuple[tuple[str, str], ...] = (
+        ("manager", "engineering-management"),
+        ("engineer", "engineering"),
+        ("developer", "engineering"),
+        ("designer", "product"),
+        ("analyst", "data"),
+    )
 
     def classify(self, jobs: list[Job]) -> dict[str, Classification]:
-        """A seniority for each job from the first level word in its title."""
+        """A seniority and a job type for each job, from the first matching word in its title."""
         found = {}
         for job in jobs:
             words = job.postings[0].title.lower().replace(",", " ").split()
             level = next((s for word, s in self.WORDS if word in words), Seniority.UNKNOWN)
-            found[job.id] = Classification(job_id=job.id, seniority=level, prompt_version="title-1")
+            kind = next((t for word, t in self.JOB_TYPES if word in words), None)
+            found[job.id] = Classification(
+                job_id=job.id, seniority=level, job_type=kind, prompt_version="title-2"
+            )
         return found

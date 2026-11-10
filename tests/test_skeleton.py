@@ -28,6 +28,7 @@ from job_radar.llm import ClaudeCli, Llm
 from job_radar.matching import JobMatcher
 from job_radar.model import CandidateProfile, RunConfig, Search, SearchCriteria, Window
 from job_radar.normalize import Normalizer
+from job_radar.openings import OpeningGrouper
 from job_radar.pipeline import Step
 from job_radar.places import PlaceCodes
 from job_radar.prompter import Prompter, TerminalPrompter
@@ -36,6 +37,7 @@ from job_radar.report_renderer import MarkdownRenderer, ReportRenderer
 from job_radar.report_writer import FileReportWriter, ReportWriter
 from job_radar.result import RunCancelled, RunFailed, RunResult, RunSucceeded
 from job_radar.settings import SettingsFile
+from job_radar.source_counts import FileSourceCountLog, SourceCountLog
 from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber
 from job_radar.sources.demo import DemoParser, DemoSource
 from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
@@ -82,7 +84,7 @@ def steps():
     """One of each step, in run order."""
     return [
         FetchStep([GetroSource("board", CLIENT)], SEARCH, WINDOW, [], FileSpendLog(FOLDER)),
-        ConvertStep({"getro": GetroParser(PlaceCodes())}),
+        ConvertStep({"getro": GetroParser(PlaceCodes())}, FileSourceCountLog(FOLDER)),
         DedupeStep(JobKey(Normalizer(), AtsLinks()), date(2026, 11, 5)),
         FilterStep(SEARCH, WINDOW, JobMatcher(Normalizer()), FileDropLog(FOLDER, Words())),
         DescribeStep({"getro": GetroDescriber("board", CLIENT, HtmlText())}, TerminalPrompter()),
@@ -100,6 +102,10 @@ def steps():
             WINDOW,
             None,
             40,
+            {"getro": "Fast Forward"},
+            FileSourceCountLog(FOLDER),
+            CHECKPOINTS,
+            OpeningGrouper("job_type", ["engineering"], ["climate"]),
         ),
     ]
 
@@ -126,6 +132,7 @@ IMPLEMENTATIONS = [
     (FileReportWriter(FOLDER), ReportWriter),
     (MarkdownRenderer(Words()), ReportRenderer),
     (FileDropLog(FOLDER, Words()), DropLog),
+    (FileSourceCountLog(FOLDER), SourceCountLog),
     (RunSucceeded(location="report.md", summary=""), RunResult),
     (RunFailed(step="fetch", reason=""), RunResult),
     (RunCancelled(), RunResult),

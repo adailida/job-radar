@@ -44,6 +44,7 @@ class JobsPipeSource:
     """
 
     name = "jobspipe"
+    label = "JobsPipe"
     SEARCH = "https://api.jobspipe.dev/v1/jobs/search"
     ACCOUNT = "https://api.jobspipe.dev/v1/account"
     ESTIMATE = "https://api.jobspipe.dev/v1/jobs/export/estimate"

@@ -206,3 +206,38 @@ class NoGaps:
         from job_radar.model import Gaps
 
         return Gaps(rows=())
+
+
+class MemorySourceCountLog:
+    """A source count log that keeps the counts in memory."""
+
+    def __init__(self, *counts):
+        """Start with these counts."""
+        self.kept = list(counts)
+
+    def write(self, counts) -> None:
+        """Keep the counts, replacing any earlier ones."""
+        self.kept = list(counts)
+
+    def counts(self):
+        """The counts kept."""
+        return list(self.kept)
+
+
+class SetKeptJobs:
+    """This run's matched jobs, set in advance."""
+
+    def __init__(self, *jobs):
+        """Keep these jobs."""
+        self._jobs = list(jobs)
+
+    def kept(self, kind):
+        """The set jobs."""
+        return list(self._jobs)
+
+
+def grouper(group_by: str = "job_type"):
+    """An opening grouper with two job types and two domains."""
+    from job_radar.openings import OpeningGrouper
+
+    return OpeningGrouper(group_by, ["engineering", "data"], ["climate", "health"])

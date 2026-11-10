@@ -38,6 +38,7 @@ class Planned:
     """A paid source with a set plan, remembering what it was asked to spend."""
 
     name = "jobspipe"
+    label = "JobsPipe"
 
     def __init__(self, spend_plan: SpendPlan):
         self._plan, self.caps = spend_plan, []

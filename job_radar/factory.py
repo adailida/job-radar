@@ -22,6 +22,7 @@ from job_radar.llm import ClaudeCli
 from job_radar.matching import JobMatcher
 from job_radar.model import Approval, CandidateProfile, RunConfig, SearchCriteria, Window
 from job_radar.normalize import Normalizer
+from job_radar.openings import OpeningGrouper
 from job_radar.pipeline import Pipeline, Step
 from job_radar.places import PlaceCodes
 from job_radar.profile import DEMO_PROFILE, ProfileLoader
@@ -35,6 +36,7 @@ from job_radar.searches import DEMO_SEARCHES, SearchesFile
 from job_radar.secrets import Secrets
 from job_radar.seen import FileSeenJobs
 from job_radar.settings import Settings
+from job_radar.source_counts import FileSourceCountLog
 from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber, PaidSource
 from job_radar.sources.demo import DemoParser, DemoSource
 from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
@@ -153,6 +155,7 @@ class AppFactory:
         normalizer = Normalizer()
         words = Words()
         spend = FileSpendLog(folder)
+        counts = FileSourceCountLog(folder)
         pending = FilePendingLog(folder)
         guard = UsageLimitGuard(self._prompter, pending)
         market = MarketRuns(FileRunHistory(runs), runs, checkpoints, window, config)
@@ -167,7 +170,7 @@ class AppFactory:
         )
         steps: list[Step] = [
             FetchStep(parts.sources, parts.criteria, window, approvals, spend),
-            ConvertStep({parser.source: parser for parser in parts.parsers}),
+            ConvertStep({parser.source: parser for parser in parts.parsers}, counts),
             DedupeStep(JobKey(normalizer, AtsLinks()), window.end),
             NewJobsFilterStep(
                 FileSeenJobs(FileRunHistory(runs), runs), window.end, self._settings.new_only
@@ -198,6 +201,14 @@ class AppFactory:
                 window,
                 not_covered,
                 self._settings.recommend.min_score,
+                {source.name: source.label for source in parts.sources},
+                counts,
+                checkpoints,
+                OpeningGrouper(
+                    self._settings.report.group_by,
+                    list(self._settings.job_types),
+                    list(self._settings.domains),
+                ),
             ),
         ]
         return Pipeline(steps, checkpoints)

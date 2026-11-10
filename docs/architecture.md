@@ -2,7 +2,7 @@
 
 How the code is put together: which classes exist, what each one is responsible for, which others it knows, and where state lives. Every box is a real class, named as in the code. The reasons behind each part are in [design.md](design.md).
 
-**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads `local/settings.yaml` over the defaults and the searches from `local/profile.yaml`; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. PR #17 notes in the report the days a long break left out. PR #18 merges postings on the employer's own id, read from ATS links, and on company, title and country. PR #19 drops jobs an earlier completed run already found, in `NewJobsFilterStep`. PR #20 adds JobsPipe, a paid API, off by default and capped per run, and moves the default settings into `job_radar/default_settings.yaml`, which the app reads first. PR #21 agrees what paid sources may spend before anything is fetched. PR #22 labels each job (seniority, job type, domain, sector) and adds a match step for the `seniority` and `domains` criteria. PR #23 finds what each matched job asks for: skills, tools, certifications and years. PR #24 carries jobs the LLM's usage limit stopped over to the next run. PR #25 adds market trends to the report: periods, coverage, figures, the change and notes on changed searches or sources. PR #26 adds the What employers ask for section. PR #27 adds the Experience to gain section. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
+**Shown now:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads `local/settings.yaml` over the defaults and the searches from `local/profile.yaml`; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. PR #17 notes in the report the days a long break left out. PR #18 merges postings on the employer's own id, read from ATS links, and on company, title and country. PR #19 drops jobs an earlier completed run already found, in `NewJobsFilterStep`. PR #20 adds JobsPipe, a paid API, off by default and capped per run, and moves the default settings into `job_radar/default_settings.yaml`, which the app reads first. PR #21 agrees what paid sources may spend before anything is fetched. PR #22 labels each job (seniority, job type, domain, sector) and adds a match step for the `seniority` and `domains` criteria. PR #23 finds what each matched job asks for: skills, tools, certifications and years. PR #24 carries jobs the LLM's usage limit stopped over to the next run. PR #25 adds market trends to the report: periods, coverage, figures, the change and notes on changed searches or sources. PR #26 adds the What employers ask for section. PR #27 adds the Experience to gain section. PR #28 completes the report: sources line, alerts, new openings grouped by job type, display names, terminal summary. Classes with a green border work now; the others are still signatures only. Each later PR swaps one simple or demo part for the real one and updates these diagrams.
 
 The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, fetches their full descriptions, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, a made-up profile and keyword scoring in place of the LLM.
 
@@ -261,6 +261,7 @@ classDiagram
     class JobBoardSource {
         <<Adapter>>
         +name: str
+        +label: str
         +fetch(criteria, window) list~RawPage~
     }
     class GetroSource {
@@ -292,6 +293,15 @@ classDiagram
     class DemoSource
     class ConvertStep {
         -parsers: dict~str, JobBoardParser~
+        -counts: SourceCountLog
+    }
+    class SourceCountLog {
+        <<interface>>
+        +write(counts)
+        +counts() list~SourceCount~
+    }
+    class FileSourceCountLog {
+        -folder: Path
     }
     class JobBoardParser {
         <<Adapter>>
@@ -469,6 +479,19 @@ classDiagram
         -run_id: str
         -window: Window
         -min_score: int
+        -sources: dict~str, str~
+        -counts: SourceCountLog
+        -this_run: KeptJobs
+        -grouper: OpeningGrouper
+    }
+    class OpeningGrouper {
+        -levels: tuple~str~
+        -names: dict
+        +group(jobs, scores) tuple~OpeningGroup~
+    }
+    class KeptJobs {
+        <<interface>>
+        +kept(kind) list
     }
     class TrendSource {
         <<interface>>
@@ -553,9 +576,13 @@ classDiagram
         +run: str
         +window: Window
         +not_covered: Window
+        +sources: tuple~SourceSummary~
+        +alerts: tuple~Alert~
         +min_score: int
         +recommendations: tuple~Recommendation~
+        +openings: tuple~OpeningGroup~
         +funnel: tuple~StepCount~
+        +new_openings() int
     }
     class RunStats {
         <<interface>>
@@ -610,6 +637,8 @@ classDiagram
     JobBoardSource <|.. DemoSource : implements
     GetroSource o-- BoardClient : holds
     ConvertStep o-- JobBoardParser : holds, one per board
+    ConvertStep o-- SourceCountLog : holds
+    SourceCountLog <|.. FileSourceCountLog : implements
     JobBoardParser <|.. GetroParser : implements
     JobBoardParser <|.. JobsPipeParser : implements
     JobsPipeParser o-- PlaceCodes : holds
@@ -660,6 +689,10 @@ classDiagram
     GapCache <|.. FileGapCache : implements
     CvGaps o-- GapBuilder : holds
     GapBuilder o-- RequirementNames : holds
+    ReportStep o-- SourceCountLog : holds, reads
+    ReportStep o-- KeptJobs : holds, this run's matched jobs
+    MarketRuns o-- KeptJobs : holds
+    ReportStep o-- OpeningGrouper : holds
     ReportStep o-- ReportRenderer : holds
     ReportStep ..> ReportContent : creates
     ReportRenderer <|.. MarkdownRenderer : implements
@@ -668,6 +701,8 @@ classDiagram
 
     style FetchStep stroke:#2e7d32,stroke-width:3px
     style FileSpendLog stroke:#2e7d32,stroke-width:3px
+    style FileSourceCountLog stroke:#2e7d32,stroke-width:3px
+    style OpeningGrouper stroke:#2e7d32,stroke-width:3px
     style CostCheck stroke:#2e7d32,stroke-width:3px
     style ConvertStep stroke:#2e7d32,stroke-width:3px
     style DedupeStep stroke:#2e7d32,stroke-width:3px
@@ -751,7 +786,7 @@ The pipeline saves each step's output and passes it to the next step in memory. 
 | `MatchStep` | `match` | `Job`s | the `Job`s that meet every criterion of a search, labels included |
 | `ExtractStep` | `extract` | `Job`s | the same `Job`s, each with its requirements (none when the LLM couldn't) |
 | `RecommendTopJobsStep` | `recommend` | `Job`s | the top N `Recommendation`s at or above the minimum score, each with its `Job`, a score and a reason |
-| `ReportStep` | `report` | `Recommendation`s | `Report`: where it is and a one-line summary |
+| `ReportStep` | `report` | `Recommendation`s | `Report`: where it is and a one-line summary (new openings, recommended, alerts) |
 
 ## Responsibilities and neighbours
 
@@ -781,12 +816,13 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `FetchStep` | Step | Fetch raw pages from every configured job board; a paid one within its approval, or not at all when skipped, recording what it spent | `JobBoardSource`, `PaidSource`, `SpendLog` |
 | `CostCheck` | | Before anything is fetched: each paid source's free estimate against the per-run max, the budget and the credits left; go ahead on its own within them, else ask go ahead, skip or stop (Enter for skip) | `PaidSource`, `Prompter` |
 | `SpendLog`, `FileSpendLog` | Repository | Keep what each paid source spent in a run, in `spend.jsonl`; the report reads it | its run folder |
-| `JobBoardSource`, `GetroSource` | Adapter | Query one board's API, page by page; `GetroSource` stops at the page that reaches past the window | `BoardClient` |
+| `JobBoardSource`, `GetroSource` | Adapter | Query one board's API, page by page, and give the board's name for people (`label`: "Fast Forward" for Getro network 997, "JobsPipe", "Demo board"); `GetroSource` stops at the page that reaches past the window | `BoardClient` |
 | `JobsPipeSource` | Adapter, `PaidSource` | One JobsPipe search per user search, with the criteria and the JobsPipe-only filters sent; cursor paging within the agreed cap. Its plan is free: the account's credits and an estimate of the matches; the plan (free, seeker) sets the per-run max and monthly budget unless settings override them | `BoardClient`, `Prompter` |
 | `JobsPipeParser` | Adapter | Turn JobsPipe records into `Posting`s: its country and state codes, work arrangement, yearly pay, full description | `PlaceCodes`, `HtmlText` |
 | `Secrets`, `EnvSecrets` | Interface | Read an API key from the environment, else from `.env` | the environment, `.env` |
 | `BoardClient` | | Send one board's requests at its pace (1s for Getro), retrying timeouts, server errors and rate limits | the board's API |
-| `ConvertStep` | Step | Send each raw page to the parser for its board | `JobBoardParser` |
+| `ConvertStep` | Step | Send each raw page to the parser for its board; record how many postings each board gave, zero included | `JobBoardParser`, `SourceCountLog` |
+| `SourceCountLog`, `FileSourceCountLog` | Repository | Keep how many postings each source gave in a run, in `source_counts.jsonl`, kept after the run; the report's header reads it | its run folder |
 | `JobBoardParser`, `GetroParser` | Adapter | Turn one board's records into `Posting`s, places with their codes | the board's format, `PlaceCodes` |
 | `PlaceCodes` | | Read country and region ISO codes from a place's text ("Seattle, WA, USA" is `US`, `US-WA`); none when it can't ("Remote") | `pycountry` |
 | `DemoSource`, `DemoParser` | Adapter | A made-up board: the same postings every run, for `--demo` and tests | `Posting` |
@@ -800,7 +836,7 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `JobMatcher` | | Say whether a job meets one search, and which criterion it fails first: roles, excluded title, work mode, location, salary; `if_missing` settles what the posting doesn't say | `Normalizer` |
 | `DescribeStep` | Step | Fill in the full description of each kept job's primary posting, through the describer for its board; say first how long it takes. Jobs that have one, or whose board has no describer, pass through | `JobDescriber`, `Prompter` |
 | `ClassifyStep` | Step | Add labels to every job; say how many the classifier couldn't label | `Classifier`, `Prompter` |
-| `Classifier`, `LlmClassifier`, `TitleClassifier` | Strategy | Label seniority, job type, domain and sector: `LlmClassifier` 50 jobs a prompt from the start of each description, job types and domains from settings, a retry then a split per bad answer; `TitleClassifier` seniority from title words, for `--demo` | `Llm` |
+| `Classifier`, `LlmClassifier`, `TitleClassifier` | Strategy | Label seniority, job type, domain and sector: `LlmClassifier` 50 jobs a prompt from the start of each description, job types and domains from settings, a retry then a split per bad answer; `TitleClassifier` seniority and job type from title words, for `--demo` | `Llm` |
 | `MatchStep` | Step | Keep the jobs that meet every criterion of some search, now with seniority and domain | `SearchCriteria`, `JobMatcher` |
 | `UsageLimitGuard` | | Run one LLM pass (classify, extract, rank); when the usage limit stops it, ask finish and carry the rest over, or stop (Enter for finish) | `Prompter`, `PendingLog` |
 | `PendingLog`, `FilePendingLog` | Repository | Keep the jobs a run carries over in `pending.jsonl`, kept after the run | its run folder |
@@ -814,7 +850,8 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `KeywordRanker` | Strategy | Score a job by the share of its title words found in the profile, for `--demo` and tests | models |
 | `Llm`, `ClaudeCli` | Interface | Send one prompt to a language model; `ClaudeCli` runs `claude -p` on the subscription, one plain turn from an empty folder, and checks the login before a run | `claude` |
 | `ProfileLoader` | | Read the CV (`cv.pdf`, `cv.md` or `cv.txt`) and `preferences.md` from `local/` into a `CandidateProfile`; say what's missing | `local/` |
-| `ReportStep` | Step | Put together what the report says (`ReportContent`: the run, its window, the recommended jobs, the market trends, what employers ask for, how the CV compares with it, the funnel), then have it formatted and written | `RunStats`, `TrendSource`, `AskSource`, `GapSource`, `ReportRenderer`, `ReportWriter` |
+| `ReportStep` | Step | Put together what the report says (`ReportContent`: the run, its window, its sources with postings and credits, the alerts, the recommended jobs, the new openings by group, the market trends, what employers ask for, how the CV compares with it, the funnel), then have it formatted and written; its summary for the terminal counts new openings, recommended jobs and alerts | `RunStats`, `SourceCountLog`, `SpendLog`, `KeptJobs`, `OpeningGrouper`, `TrendSource`, `AskSource`, `GapSource`, `ReportRenderer`, `ReportWriter` |
+| `OpeningGrouper` | | Put this run's matched jobs under the `report.group_by` headings (job type, domain, or domains inside job types), in the settings' order, then "Other", then "Not labelled"; empty groups left out; newest posted first; a recommended job keeps its score | models |
 | `RunsSource`, `MarketRuns` | Interface | Gather the runs the market sections look at: the completed runs (their `jobs.jsonl`, windows and configs) and this run (its kept output); free | `RunHistory`, `KeptJobs` |
 | `TrendSource`, `MarketTrends` | Interface | Have the trends worked out over those runs | `RunsSource`, `TrendBuilder` |
 | `TrendBuilder` | | Work out the trend periods (week, month or quarter), each one's covered days, figures (postings per covered day, work mode, salary, seniority), the change against the last complete period, and notes on changed searches or sources | models |
@@ -825,7 +862,7 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `GapBuilder` | | Put the section together: gaps (missing, partly) most asked first, then the covered ones; a suggestion only on the top N gaps (5); count what wasn't compared | `RequirementNames`, models |
 | `GapJudge`, `LlmGapJudge`, `KeywordGapJudge` | Strategy | Judge each requirement covered, partly or missing against the CV, with a reason and, for each gap, how to gain it: `LlmGapJudge` one prompt with the CV and preferences, a JSON schema, one retry with what was wrong; `KeywordGapJudge` the CV naming it, for `--demo` | `Llm` |
 | `GapCache`, `FileGapCache` | Repository | Keep the judgments by CV content hash and requirement, in `output/cache/gaps.jsonl`, outside the run folders; a new CV's judgments replace the old ones | its file |
-| `ReportRenderer`, `MarkdownRenderer` | Interface | Format a report's content and decide nothing about it; `MarkdownRenderer` writes YAML front matter, then Markdown | `Words` |
+| `ReportRenderer`, `MarkdownRenderer` | Interface | Format a report's content and decide nothing about it; `MarkdownRenderer` writes YAML front matter, then every section in the same order (alerts, recommended jobs, new openings, market trends, what employers ask for, experience to gain, about this run), links labelled with each source's name | `Words` |
 | `DropLog`, `FileDropLog` | Interface | Keep the list of jobs the filter dropped; `FileDropLog` writes `dropped.md`, grouped by why, titles sorted | its run folder, `Words` |
 | `Words` | | Put work modes, places, pay and dates into the same plain words in every file a run writes | models |
 | `ReportWriter`, `FileReportWriter` | Interface | Store the finished report and say where it is | its run folder |
@@ -929,8 +966,10 @@ sequenceDiagram
     participant rec as RecommendTopJobsStep
     participant rk as KeywordRanker
     participant rep as ReportStep
+    participant og as OpeningGrouper
     box rgba(255, 193, 7, 0.25) STATE: the run folder on disk
         participant cp as FileCheckpoints
+        participant sc as FileSourceCountLog
         participant rw as FileReportWriter
     end
 
@@ -945,6 +984,7 @@ sequenceDiagram
         conv->>dp: parse(page), picked by page.source
         dp-->>conv: Postings
     end
+    conv->>sc: write(postings per board, zero included)
     conv-->>p: Postings
     p->>dd: run(Postings)
     dd->>dd: group by JobKey.of(posting): company, title and places, normalized
@@ -964,11 +1004,17 @@ sequenceDiagram
     p->>rep: run(Recommendations)
     rep->>cp: funnel()
     cp-->>rep: count per finished step
-    rep->>rep: ReportContent(run, window, min score, Recommendations, funnel)
+    rep->>sc: counts()
+    sc-->>rep: postings per board, named for people (Demo board), with credits from the spend log
+    rep->>cp: kept(Job)
+    cp-->>rep: this run's matched jobs
+    rep->>og: group(jobs, scores of the recommended)
+    og-->>rep: OpeningGroups by job type (report.group_by), newest first
+    rep->>rep: ReportContent(run, window, sources, alerts, Recommendations, openings, sections, funnel)
     rep->>rep: MarkdownRenderer.render(content)
     rep->>rw: write(markdown)
     rw-->>rep: location
-    rep-->>p: Report(location, summary)
+    rep-->>p: Report(location, "8 new openings, 3 recommended, 0 alerts")
 ```
 
 ## The run folder
@@ -984,10 +1030,11 @@ output/runs/2026-11-05T10-00-00/
     report.md
     dropped.md        # what the filter dropped, by reason
     jobs.jsonl        # after success: the matched jobs, with labels and requirements, read by later runs as seen
+    source_counts.jsonl  # how many postings each source gave, for the report's header
     spend.jsonl       # what each paid source spent: estimate, decision, credits used and left
     pending.jsonl     # jobs the usage limit stopped, carried over to the next run
 ```
 
-After a successful run only `manifest.json`, `report.md`, `dropped.md` and `jobs.jsonl` remain, and the manifest says the run completed. After a failed run everything stays, ready to resume.
+After a successful run only `manifest.json`, `report.md`, `dropped.md`, `jobs.jsonl` and `source_counts.jsonl` remain (and `spend.jsonl` and `pending.jsonl` when a run has them), and the manifest says the run completed. After a failed run everything stays, ready to resume.
 
 Outside the run folders, `output/cache/gaps.jsonl` keeps how each requirement compares with your CV (demo runs: `demo-gaps.jsonl`), so deleting runs keeps it.
