@@ -9,6 +9,7 @@ from fakes import (
     MemoryPendingLog,
     MemorySourceCountLog,
     MemorySpendLog,
+    MemoryWarningLog,
     MemoryWriter,
     NoAsks,
     NoGaps,
@@ -20,6 +21,7 @@ from fakes import (
 
 from job_radar.model import (
     Alert,
+    AlertCode,
     Approval,
     Classification,
     Job,
@@ -234,6 +236,7 @@ def report_step(
     jobs=(),
     sources=None,
     group_by="job_type",
+    warnings=None,
 ) -> ReportStep:
     """A report step over these parts, with nothing to show for trends, asks and gaps."""
     return ReportStep(
@@ -253,6 +256,7 @@ def report_step(
         MemorySourceCountLog(*counts),
         SetKeptJobs(*jobs),
         grouper(group_by),
+        warnings if warnings is not None else MemoryWarningLog(),
     )
 
 
@@ -370,7 +374,7 @@ def test_alerts_are_listed_at_the_top():
     report = ReportContent(
         run=RUN,
         window=NOV,
-        alerts=(Alert(message="JobsPipe returned no postings"),),
+        alerts=(Alert(code=AlertCode.SOURCE_EMPTY, message="JobsPipe returned no postings"),),
         min_score=40,
         recommendations=(),
         funnel=(),
@@ -471,19 +475,21 @@ def test_every_section_is_there_even_with_nothing_to_show():
 
 
 @pytest.mark.parametrize(
-    ("openings", "recommended", "summary"),
+    ("openings", "recommended", "summary", "alerts"),
     [
-        (0, 0, "0 new openings, 0 recommended, 0 alerts"),
-        (1, 1, "1 new opening, 1 recommended, 0 alerts"),
-        (23, 10, "23 new openings, 10 recommended, 0 alerts"),
+        (0, 0, "0 new openings, 0 recommended, 1 alert", "- No new jobs matched your searches.\n"),
+        (1, 1, "1 new opening, 1 recommended, 0 alerts", ""),
+        (23, 10, "23 new openings, 10 recommended, 0 alerts", ""),
     ],
 )
 def test_the_terminal_summary_counts_openings_recommended_jobs_and_alerts(
-    openings, recommended, summary
+    openings, recommended, summary, alerts
 ):
     jobs = [job(str(n)) for n in range(openings)]
     recs = [Recommendation(job=j, score=50, reason="r") for j in jobs[:recommended]]
     [report] = report_step(KeepingRenderer(), jobs=jobs).run(recs)
     assert report.summary == summary
-    message = RunSucceeded(location=report.location, summary=report.summary).message()
-    assert message == f"Run finished: {summary}.\nReport: memory/report.md"
+    message = RunSucceeded(
+        location=report.location, summary=report.summary, alerts=report.alerts
+    ).message()
+    assert message == f"Run finished: {summary}.\n{alerts}Report: memory/report.md"

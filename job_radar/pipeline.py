@@ -4,6 +4,8 @@ from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
 from job_radar.checkpoints import Checkpoints
+from job_radar.error_log import ErrorLog
+from job_radar.errors import JobRadarError
 from job_radar.model import Report
 from job_radar.result import RunFailed, RunResult, RunSucceeded
 
@@ -31,15 +33,17 @@ class Pipeline:
     Saves every step's output and passes it to the next step in memory. When
     resuming, skips the steps an earlier attempt saved and loads the last saved
     output from disk, since nothing is in memory yet. Turns an error into
-    `RunFailed` and the final report into `RunSucceeded`, and on success marks
-    the run completed, which deletes the checkpoints. Stateless: a run's
-    progress lives in its checkpoints.
+    `RunFailed`, with an unexpected one's traceback in the error log, and the
+    final report into `RunSucceeded`, and on success marks the run
+    completed, which deletes the checkpoints. Stateless: a run's progress
+    lives in its checkpoints.
     """
 
-    def __init__(self, steps: Sequence[Step], checkpoints: Checkpoints) -> None:
-        """Keep the steps in order and where their outputs are saved."""
+    def __init__(self, steps: Sequence[Step], checkpoints: Checkpoints, errors: ErrorLog) -> None:
+        """Keep the steps in order, where their outputs are saved, and where bugs are written."""
         self._steps = steps
         self._checkpoints = checkpoints
+        self._errors = errors
 
     def run(self) -> RunResult:
         """Run every step not done yet and return how the run ended.
@@ -62,11 +66,20 @@ class Pipeline:
                 data = step.run(data)
                 self._checkpoints.save(step.name, data)
             except Exception as error:
-                return RunFailed(step=step.name, reason=str(error) or type(error).__name__)
+                return self._failed(step.name, error)
         match data:
             case [Report() as report]:
                 self._checkpoints.complete()
-                return RunSucceeded(location=report.location, summary=report.summary)
+                return RunSucceeded(
+                    location=report.location, summary=report.summary, alerts=report.alerts
+                )
             case _:
                 last = self._steps[-1].name if self._steps else "none"
                 return RunFailed(step=last, reason="the last step gave no report")
+
+    def _failed(self, step: str, error: Exception) -> RunFailed:
+        """The failed run for an error at a step; an unexpected error's details go to the log."""
+        reason = JobRadarError.describe(error)
+        if isinstance(error, JobRadarError):
+            return RunFailed(step=step, reason=reason)
+        return RunFailed(step=step, reason=reason, details=self._errors.write(error))

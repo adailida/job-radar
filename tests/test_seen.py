@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from fakes import job
+from fakes import MemoryWarningLog, job
 
 from job_radar.checkpoints import FileCheckpoints
 from job_radar.history import FileRunHistory
@@ -33,7 +33,8 @@ def run(runs, name: str, end: date, jobs: list[Job], completed: bool = True) -> 
 
 def seen(runs) -> frozenset[str]:
     """The keys that mark a job as seen today."""
-    return FileSeenJobs(FileRunHistory(runs), runs).keys(TODAY)
+    warnings = MemoryWarningLog()
+    return FileSeenJobs(FileRunHistory(runs, warnings), runs, warnings).keys(TODAY)
 
 
 def test_a_completed_runs_kept_jobs_are_seen(tmp_path):

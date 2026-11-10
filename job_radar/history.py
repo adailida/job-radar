@@ -7,7 +7,8 @@ from typing import Protocol, runtime_checkable
 from pydantic import ValidationError
 
 from job_radar.checkpoints import FileCheckpoints, Manifest
-from job_radar.model import RunSummary, Window
+from job_radar.model import AlertCode, RunSummary, Window
+from job_radar.warning_log import WarningLog
 
 
 @runtime_checkable
@@ -27,13 +28,15 @@ class FileRunHistory:
     """Reads earlier runs from the run folders under one parent folder.
 
     Only completed runs count: a failed run is skipped. A folder whose manifest
-    can't be read, such as one from an older version, is skipped too. Holds
-    only the parent folder; the run folders are the state.
+    can't be read, such as one from an older version, is skipped with a
+    warning. Holds only the parent folder and where warnings go; the run
+    folders are the state.
     """
 
-    def __init__(self, folder: Path) -> None:
-        """Keep the folder that holds one folder per run."""
+    def __init__(self, folder: Path, warnings: WarningLog) -> None:
+        """Keep the folder that holds one folder per run, and where warnings go."""
         self._folder = folder
+        self._warnings = warnings
 
     def last_window(self) -> Window | None:
         """The window of the newest completed run."""
@@ -66,9 +69,22 @@ class FileRunHistory:
             return None
         try:
             return Manifest.model_validate_json(path.read_text(encoding="utf-8"))
-        except ValidationError:
-            # TODO(task 24): warn about run folders that can't be read.
+        except (ValidationError, OSError, UnicodeDecodeError) as error:
+            self._warnings.warn(
+                AlertCode.RUN_UNREADABLE,
+                f"Run {run.name} can't be read, so it is left out: its {FileCheckpoints.MANIFEST} "
+                f"is not as expected ({self.problem(error)}). `job-radar delete` removes it.",
+            )
             return None
+
+    @staticmethod
+    def problem(error: Exception) -> str:
+        """What's wrong with a file of a run, in a few words: the first field at fault."""
+        if isinstance(error, ValidationError):
+            first = error.errors()[0]
+            where = ".".join(str(part) for part in first["loc"])
+            return f"{where}: {first['msg']}" if where else first["msg"]
+        return type(error).__name__
 
 
 class RunFolders:

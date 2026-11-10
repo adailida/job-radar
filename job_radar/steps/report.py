@@ -7,6 +7,7 @@ from job_radar.checkpoints import RunStats
 from job_radar.cost import SpendLog
 from job_radar.gaps import GapSource
 from job_radar.model import (
+    AlertCode,
     Job,
     Recommendation,
     Report,
@@ -22,6 +23,7 @@ from job_radar.report_writer import ReportWriter
 from job_radar.source_counts import SourceCountLog
 from job_radar.trends import KeptJobs, TrendSource
 from job_radar.usage import PendingLog
+from job_radar.warning_log import WarningLog
 
 
 class ReportStep:
@@ -31,10 +33,12 @@ class ReportStep:
     out, the alerts, the recommended jobs, every new matched job by group, the
     market trends, what employers ask for and how the CV compares with it, the
     funnel of counts, what paid sources spent and how many jobs are carried
-    over to the next run; the renderer decides only how it looks. Its summary
-    for the terminal counts the new openings, the recommended jobs and the
-    alerts. Stateless: holds only where it reads each part from, the
-    renderer, where the report goes, and what it needs to know about the run.
+    over to the next run; the renderer decides only how it looks. The alerts
+    are the run's warnings, read last, after a run with no new jobs has
+    warned about that too. Its summary for the terminal counts the new
+    openings, the recommended jobs and the alerts, and gives each alert.
+    Stateless: holds only where it reads each part from, the renderer, where
+    the report goes, and what it needs to know about the run.
     """
 
     name = "report"
@@ -58,12 +62,13 @@ class ReportStep:
         counts: SourceCountLog,
         this_run: KeptJobs,
         grouper: OpeningGrouper,
+        warnings: WarningLog,
     ) -> None:
         """Keep where each part of the report comes from, how it is written, and the run's facts.
 
         `sources` names the run's sources for people, by their name in the
         data, in the order they were fetched. `this_run` gives the run's
-        matched jobs, the new openings.
+        matched jobs, the new openings. `warnings` holds the run's warnings.
         """
         self._stats = stats
         self._renderer = renderer
@@ -81,30 +86,42 @@ class ReportStep:
         self._counts = counts
         self._this_run = this_run
         self._grouper = grouper
+        self._warnings = warnings
 
     def run(self, data: list[Recommendation]) -> list[Report]:
         """Build the report's content, write it, and say where it is and what it found."""
         asks = self._asks.asks()
         spends = self._spend.spends()
         scores = {rec.job.id: rec.score for rec in data}
+        openings = self._grouper.group(self._this_run.kept(Job), scores)
+        if not openings:
+            self._warnings.warn(AlertCode.NO_NEW_JOBS, "No new jobs matched your searches.")
+        trends = self._trends.trends()
+        gaps = self._gaps.gaps(asks) if asks is not None else None
         content = ReportContent(
             run=self._run_id,
             window=self._window,
             not_covered=self._not_covered,
             sources=self._summaries(spends),
-            # TODO(task 24): the run's warnings as alerts; none until then.
+            alerts=tuple(self._warnings.alerts()),
             min_score=self._min_score,
             recommendations=tuple(data),
-            openings=self._grouper.group(self._this_run.kept(Job), scores),
+            openings=openings,
             funnel=tuple(self._stats.funnel()),
             spends=tuple(spends),
             carried_over=len(self._pending.jobs()),
-            trends=self._trends.trends(),
+            trends=trends,
             asks=asks,
-            gaps=self._gaps.gaps(asks) if asks is not None else None,
+            gaps=gaps,
         )
         location = self._writer.write(self._renderer.render(content))
-        return [Report(location=location, summary=self._summary(content))]
+        return [
+            Report(
+                location=location,
+                summary=self._summary(content),
+                alerts=tuple(alert.message for alert in content.alerts),
+            )
+        ]
 
     def _summaries(self, spends: list[Spend]) -> tuple[SourceSummary, ...]:
         """Each of the run's sources: its name, the postings it gave, and what a paid one cost."""

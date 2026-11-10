@@ -8,6 +8,7 @@ from fakes import (
     MemoryPendingLog,
     MemorySourceCountLog,
     MemorySpendLog,
+    MemoryWarningLog,
     MemoryWriter,
     NoTrends,
     SetKeptJobs,
@@ -148,13 +149,14 @@ class MemoryGapCache:
         self.kept[cv] = self.kept.get(cv, {}) | judged
 
 
-def cv_gaps(judge=None, cache=None, profile=PROFILE, suggestions: int = 5) -> CvGaps:
+def cv_gaps(judge=None, cache=None, profile=PROFILE, suggestions: int = 5, warnings=None) -> CvGaps:
     """The CV comparison over this judge and cache."""
     return CvGaps(
         profile,
         judge or KeywordGapJudge(),
         cache if cache is not None else MemoryGapCache(),
         GapBuilder(NAMES, suggestions),
+        warnings if warnings is not None else MemoryWarningLog(),
     )
 
 
@@ -487,6 +489,7 @@ def step(asks_source, gaps_source, renderer) -> ReportStep:
         MemorySourceCountLog(),
         SetKeptJobs(),
         grouper(),
+        MemoryWarningLog(),
     )
 
 

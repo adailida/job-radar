@@ -30,6 +30,12 @@ class ReportSettings(Model):
     gap_suggestions: int = Field(ge=0)  # gaps shown with how to gain them in "Experience to gain"
 
 
+class AlertSettings(Model):
+    """When a run warns about something that didn't stop it."""
+
+    low_credits: int = Field(ge=0)  # warn when a paid source has fewer credits left after a run
+
+
 class RecommendSettings(Model):
     """Which scored jobs are recommended."""
 
@@ -83,6 +89,7 @@ class Settings(Model):
     domains: dict[str, str] = Field(min_length=1)  # name: what the LLM is told it means
     recommend: RecommendSettings
     report: ReportSettings
+    alerts: AlertSettings
     sources: SourcesSettings
 
 
@@ -95,10 +102,13 @@ class SettingsFile:
     """
 
     DEFAULTS = Path(__file__).with_name("default_settings.yaml")
+    DEFAULTS_NAME = "job_radar/default_settings.yaml"  # where to find the defaults, for people
 
     def __init__(self, path: Path, defaults: Path = DEFAULTS) -> None:
         """Keep the path of the user's `settings.yaml`, and of the defaults."""
-        self._file = YamlFile(path)
+        self._file = YamlFile(
+            path, fix=f"Fix it in {path}; {self.DEFAULTS_NAME} lists every setting with its default"
+        )
         self._defaults = YamlFile(defaults)
 
     def load(self) -> Settings:

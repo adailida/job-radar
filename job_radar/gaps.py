@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from job_radar.asks import RequirementNames
 from job_radar.llm import Llm, LlmError, UsageLimit
 from job_radar.model import (
+    AlertCode,
     AskRow,
     Asks,
     CandidateProfile,
@@ -22,6 +23,7 @@ from job_radar.model import (
     Model,
     RequirementType,
 )
+from job_radar.warning_log import WarningLog
 
 type RequirementKey = tuple[RequirementType, str]
 """A requirement as counted: its type and its name in one form."""
@@ -372,20 +374,26 @@ class CvGaps:
 
     Judgments are kept by the CV's content hash and the requirement, so only
     requirements new to the list cost a call, and none new means no call. When
-    the call fails or the usage limit is reached, the run goes on: the
-    section shows what was judged before and says the rest weren't compared.
-    Stateless: holds only the profile, the judge, the cache and the builder;
-    the cache keeps the judgments.
+    the call fails or the usage limit is reached, the run goes on with a
+    warning: the section shows what was judged before and says the rest
+    weren't compared. Stateless: holds only the profile, the judge, the
+    cache, the builder and where warnings go; the cache keeps the judgments.
     """
 
     def __init__(
-        self, profile: CandidateProfile, judge: GapJudge, cache: GapCache, builder: GapBuilder
+        self,
+        profile: CandidateProfile,
+        judge: GapJudge,
+        cache: GapCache,
+        builder: GapBuilder,
+        warnings: WarningLog,
     ) -> None:
-        """Keep the profile, who judges, where judgments are kept, and how the section is built."""
+        """Keep the profile, who judges, where judgments are kept, the builder, the log."""
         self._profile = profile
         self._judge = judge
         self._cache = cache
         self._builder = builder
+        self._warnings = warnings
 
     def gaps(self, asks: Asks) -> Gaps:
         """The section: requirements judged before, plus the new ones judged now in one call."""
@@ -401,10 +409,20 @@ class CvGaps:
                 found = self._judge.judge(new, self._profile)
             except UsageLimit:
                 skipped = GapSkip.USAGE_LIMIT
+                self._warn(len(new), "the LLM's usage limit is reached")
             except (BadGaps, LlmError):
                 skipped = GapSkip.FAILED
+                self._warn(len(new), "the LLM gave no usable answer")
             else:
                 fresh = {self._builder.key(row): one for row, one in zip(new, found, strict=True)}
                 self._cache.add(cv, fresh)
                 judged = judged | fresh
         return self._builder.build(rows, judged, skipped)
+
+    def _warn(self, count: int, why: str) -> None:
+        """Warn that some requirements weren't compared with the CV this run, and why."""
+        some = "1 requirement wasn't" if count == 1 else f"{count} requirements weren't"
+        self._warnings.warn(
+            AlertCode.GAPS_SKIPPED,
+            f"Experience to gain: {some} compared with your CV ({why}). The next run asks again.",
+        )

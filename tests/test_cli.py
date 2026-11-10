@@ -1,14 +1,16 @@
 import json
 from datetime import date
 
-from fakes import WINDOW, FakePrompter, FakeStep, FixedClock, NoCost
+from fakes import WINDOW, FakePrompter, FakeStep, FixedClock, NoCost, NoLock
 
 from job_radar.app import JobRadarApp
 from job_radar.checkpoints import FileCheckpoints
 from job_radar.cli import Cli
+from job_radar.error_log import FileErrorLog
 from job_radar.factory import AppFactory
 from job_radar.model import Window
 from job_radar.pipeline import Pipeline
+from job_radar.profile import ProfileError
 from job_radar.ranking import KeywordRanker
 from job_radar.result import RunCancelled, RunFailed, RunSucceeded
 from job_radar.settings import SettingsFile
@@ -33,9 +35,11 @@ class FailingFactory:
 
     def create(self, demo: bool = False) -> JobRadarApp:
         step = FakeStep("fetch", error=RuntimeError("board down"))
-        pipeline = Pipeline([step], FileCheckpoints(self._folder, WINDOW))
+        pipeline = Pipeline(
+            [step], FileCheckpoints(self._folder, WINDOW), FileErrorLog(self._folder)
+        )
         return JobRadarApp(
-            NoResume(), FixedWindow(), NoCost(), lambda window, gap, run_id, ok: pipeline
+            NoResume(), FixedWindow(), NoCost(), lambda window, gap, run_id, ok: pipeline, NoLock()
         )
 
 
@@ -57,7 +61,7 @@ class BrokenFactory:
     """Fails to build the app, as with a missing CV."""
 
     def create(self, demo: bool = False) -> JobRadarApp:
-        raise FileNotFoundError("local/cv.pdf not found")
+        raise ProfileError("no CV in local/: add one of cv.pdf, cv.md, cv.txt")
 
 
 KEPT = ["dropped.md", "jobs.jsonl", "manifest.json", "report.md", "source_counts.jsonl"]
@@ -119,8 +123,9 @@ def test_each_run_writes_one_report_and_saves_its_run_data(tmp_path):
     demo_cli(tmp_path, FakePrompter(), hour=15).main(["run", "--demo"])
     folders = sorted((tmp_path / "demo").iterdir())
     assert [f.name for f in folders] == [FIRST_RUN, "2026-11-05T15-00-00"]
-    for folder in folders:
-        assert sorted(p.name for p in folder.iterdir()) == KEPT
+    # The second run found no new job: a warning, kept in warnings.jsonl.
+    for folder, warned in zip(folders, ([], ["warnings.jsonl"]), strict=True):
+        assert sorted(p.name for p in folder.iterdir()) == sorted(KEPT + warned)
         manifest = json.loads((folder / "manifest.json").read_text())
         assert manifest["completed"] is True
         assert [step["step"] for step in manifest["steps"]][-1] == "report"
@@ -169,7 +174,8 @@ def test_the_report_lists_every_matching_posting_not_seen_in_an_earlier_run(tmp_
     second = (tmp_path / "demo" / "2026-11-05T15-00-00" / "report.md").read_text()
     assert "## New openings (0)\n\nNo new job matched your searches this run.\n" in second
     assert capsys.readouterr().out.endswith(
-        "Run finished: 0 new openings, 0 recommended, 0 alerts.\n"
+        "Run finished: 0 new openings, 0 recommended, 1 alert.\n"
+        "- No new jobs matched your searches.\n"
         f"Report: {tmp_path / 'demo' / '2026-11-05T15-00-00' / 'report.md'}\n"
     )
 
@@ -187,12 +193,15 @@ def test_demo_runs_dont_move_the_real_window(tmp_path):
 
 def test_failed_run_exits_1_and_says_where(tmp_path, capsys):
     assert Cli(FailingFactory(tmp_path)).main(["run"]) == 1
-    assert "Run failed at step 'fetch': board down" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert out.startswith("Run failed at step 'fetch': RuntimeError: board down\n")
+    assert f"Unexpected error: details in {tmp_path / 'error.log'}\n" in out
+    assert "Traceback" in (tmp_path / "error.log").read_text()
 
 
 def test_setup_error_exits_2(capsys):
     assert Cli(BrokenFactory()).main(["run"]) == 2
-    assert "Could not set up the run: local/cv.pdf not found" in capsys.readouterr().out
+    assert "Could not set up the run: no CV in local/: add one of cv.pdf" in capsys.readouterr().out
 
 
 def test_no_command_shows_help(capsys):

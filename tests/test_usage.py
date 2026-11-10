@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
-from fakes import FakePrompter, MemoryPendingLog, job
+from fakes import FakePrompter, MemoryPendingLog, MemoryWarningLog, job
 
 from job_radar.checkpoints import FileCheckpoints
 from job_radar.classify import LlmClassifier
@@ -100,7 +100,7 @@ def test_each_llm_pass_says_what_it_did_and_what_it_didnt_reach():
 
 def test_finishing_carries_the_rest_over_and_stopping_fails_the_step():
     pending = MemoryPendingLog()
-    finish = UsageLimitGuard(FakePrompter("f"), pending)
+    finish = UsageLimitGuard(FakePrompter("f"), pending, MemoryWarningLog())
     left = jobs(3)
 
     def limited(_):
@@ -108,7 +108,7 @@ def test_finishing_carries_the_rest_over_and_stopping_fails_the_step():
 
     assert finish.run(limited, jobs(4), "ranked") == (["done"], left)
     assert pending.jobs() == left
-    stop = UsageLimitGuard(FakePrompter("s"), MemoryPendingLog())
+    stop = UsageLimitGuard(FakePrompter("s"), MemoryPendingLog(), MemoryWarningLog())
     with pytest.raises(LimitStopped, match="run the same command after it resets"):
         stop.run(limited, jobs(4), "ranked")
 
@@ -119,7 +119,9 @@ def test_the_question_says_how_many_and_enter_means_finish():
     def limited(_):
         raise UsageLimitReached({}, jobs(3))
 
-    UsageLimitGuard(prompter, MemoryPendingLog()).run(limited, jobs(5), "labelled")
+    UsageLimitGuard(prompter, MemoryPendingLog(), MemoryWarningLog()).run(
+        limited, jobs(5), "labelled"
+    )
     assert prompter.asked == [
         "3 jobs not labelled: usage limit reached. "
         "Finish with what's done and carry them over, or stop?"
@@ -128,17 +130,18 @@ def test_the_question_says_how_many_and_enter_means_finish():
 
 def test_a_step_hit_by_the_limit_passes_on_only_the_jobs_it_finished():
     pending = MemoryPendingLog()
-    guard = UsageLimitGuard(FakePrompter("f"), pending)
+    guard = UsageLimitGuard(FakePrompter("f"), pending, MemoryWarningLog())
     classifier = LlmClassifier(LimitAfter(1, labels), 2, 100, {"e": "x"}, {"d": "y"})
-    kept = ClassifyStep(classifier, FakePrompter(), guard).run(jobs(5))
+    kept = ClassifyStep(classifier, FakePrompter(), guard, MemoryWarningLog()).run(jobs(5))
     assert [j.id for j in kept] == ["demo:0", "demo:1"]
     assert [j.id for j in pending.jobs()] == ["demo:2", "demo:3", "demo:4"]
 
 
 def test_recommend_keeps_the_scores_it_got_before_the_limit():
-    guard = UsageLimitGuard(FakePrompter("f"), MemoryPendingLog())
+    guard = UsageLimitGuard(FakePrompter("f"), MemoryPendingLog(), MemoryWarningLog())
     ranker = LlmRanker(LimitAfter(1, scores), batch_size=2)
-    top = RecommendTopJobsStep(ranker, PROFILE, top_n=10, min_score=40, guard=guard).run(jobs(5))
+    step = RecommendTopJobsStep(ranker, PROFILE, 10, 40, guard, MemoryWarningLog())
+    top = step.run(jobs(5))
     assert all(isinstance(rec, Recommendation) for rec in top) and len(top) == 2
 
 
@@ -168,7 +171,7 @@ def test_the_next_run_reads_what_the_last_completed_run_carried_over(tmp_path):
     run(tmp_path, "2026-11-08T09-00-00", date(2026, 11, 8), jobs(1))
     run(tmp_path, "2026-11-09T09-00-00", date(2026, 11, 9), jobs(3)[1:])
     run(tmp_path, "2026-11-09T10-00-00", date(2026, 11, 9), jobs(5), completed=False)
-    pending = LastRunPending(FileRunHistory(tmp_path), tmp_path).jobs()
+    pending = LastRunPending(FileRunHistory(tmp_path, MemoryWarningLog()), tmp_path).jobs()
     assert [j.id for j in pending] == ["demo:1", "demo:2"]
 
 

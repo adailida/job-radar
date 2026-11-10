@@ -2,7 +2,7 @@
 
 How job-radar meets [requirements.md](requirements.md).
 
-Redesigned on Nov 4: sections 1 to 6 and 9 follow the classes in [architecture.md](architecture.md). Sections 7, 8 and 10 to 13 still use some older names (`RunStore`, `Prompter`, `run()`, `Alerts`, stages); each is brought in line by the task that builds it.
+Redesigned on Nov 4: sections 1 to 6 and 9 follow the classes in [architecture.md](architecture.md). Sections 7, 8 and 10 to 12 still use some older names (`RunStore`, `Prompter`, `run()`, stages); each is brought in line by the task that builds it. Section 13 follows the code since task 24.
 
 ## 1. Pipeline
 
@@ -539,7 +539,7 @@ searches:                                 # a job matches if it matches any sear
 
 ### Settings
 
-Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`), `recommend` (`top_n`, `min_score`), `report.group_by`, `report.requirements_per_type`, `report.gap_suggestions` and `sources.getro.network`. The others come with their tasks; [job_radar/default_settings.yaml](../job_radar/default_settings.yaml) holds what exists.
+Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`), `recommend` (`top_n`, `min_score`), `report.group_by`, `report.requirements_per_type`, `report.gap_suggestions`, `alerts.low_credits` and `sources.getro.network`. The others come with their tasks; [job_radar/default_settings.yaml](../job_radar/default_settings.yaml) holds what exists.
 
 ```yaml
 domains:                    # cause areas or fields: used by the domains filter and report headings
@@ -558,7 +558,7 @@ report:
   requirements_per_type: 20 # rows per type in "What employers ask for"
   gap_suggestions: 5        # gaps shown with how to gain them in "Experience to gain"
 alerts:
-  low_credits: 500          # the only alert threshold; other alerts are fixed (section 13)
+  low_credits: 100          # the only alert threshold; other alerts are fixed (section 13)
 lookback_days: 14
 new_only: true
 trend_period: month
@@ -802,10 +802,10 @@ All numbers, sort orders, grouping and wording choices are made before the rende
 Built (task 23): every section, always present, in this order: Alerts, Recommended jobs, New openings, Market trends, What employers ask for, Experience to gain, About this run. A section with nothing to show says so ("None." under Alerts).
 
 - Header: the window, any days a long break left out, then a sources line: "Sources: Fast Forward 200 postings, JobsPipe 18 postings (18 credits)." The convert step records each source's postings (zero included) in `source_counts.jsonl`; credits come from the spend log, and a skipped paid source reads "JobsPipe skipped by you". Front matter adds `sources` (by source key), `new_openings`, `recommended` and `alerts`
-- Alerts: "None." until task 24 fills it with the run's warnings
+- Alerts: the run's warnings, one line each, from `warnings.jsonl` (task 24, section 13); "None." when there are none
 - New openings: every matched job of this run (the extract step's kept output, carried-over jobs included), one line each: title, company, work mode, places, salary, posted date, the score when it was recommended, and a link per posting. `OpeningGrouper` puts them under `report.group_by` (`job_type` by default, `domain`, or `both`: domains as subheadings inside job types), names as the settings write them, in the settings' order, then "Other" (a label the settings don't have), then "Not labelled" (no label, or the LLM couldn't label it); empty groups are left out, newest posted first
 - Links are labelled with each source's name for people (`label` on the source: "Fast Forward" for Getro network 997, "JobsPipe", "Demo board"); the data keeps the source keys. The paid sources lines use the same names
-- Terminal, at the end: "Run finished: 23 new openings, 10 recommended, 0 alerts." then "Report: <path>". The report step writes the summary line into the `Report`; `RunSucceeded` puts its message together
+- Terminal, at the end: "Run finished: 23 new openings, 10 recommended, 0 alerts.", a line per alert (task 24), then "Report: <path>". The report step writes the summary line and the alerts into the `Report`; `RunSucceeded` puts its message together
 
 The full content, section by section as later tasks add them:
 
@@ -958,67 +958,82 @@ Credits left: 3,180.
 
 ### Recorded and alerted
 
-- `SourceResult` records the estimate, credits before and after, and the decision (`auto`, `approved`, `skipped`)
-- Warnings: credits left after the run below `low_credits`; monthly budget reached; source skipped for lack of credits
+- `spend.jsonl` records each paid source's approval (the estimate, credits before, what the monthly budget still allowed, the decision: `auto`, `approved`, `skipped`, or `failed` when the cost check itself failed) and what the fetch charged and left
+- Warnings (built, task 24): credits left after the fetch below `alerts.low_credits` (100 by default); the monthly budget reached (the fetch charged at least what the budget had left); a source skipped by you at the cost check
+- A paid source whose cost check fails (JobsPipe down, say) is told in the terminal and left out of the run as `failed`; the fetch step warns about it like any failed source, so the free sources still run
 - Later, for scheduled runs: with no one to ask, over a limit means skip the source
 
 ## 13. Errors and warnings
 
+Built (task 24), as below.
+
 ### Mechanism
 
-- Errors are exceptions: one base class `JobRadarError`; each subclass carries a message and a hint on what to do. Stages raise them; one wrapper around `run()` catches them, so `run()` stays a plain list of stages
-- Warnings are collected, not raised: `run_once` creates one `Alerts` per run and passes it to the stages that warn, which call `alerts.warn(code, message)`. Each is printed when it happens, saved in `run.json`, and shown at the top of the report
-- Unexpected exceptions (bugs) and Ctrl+C take the same failed-run path. For a bug, the traceback goes to `error.log` in the run folder and the terminal shows one line pointing to it
+- Errors that the app expects are exceptions under one base class, `JobRadarError`, whose message says what's wrong and how to fix it. `SetupError` is the kind that stops a run before it starts: settings or profile invalid (`ConfigError`), CV unreadable (`ProfileError`), `claude` missing or logged out (`LlmUnavailable`), another run in progress (`RunInProgress`). A step's expected errors (`LlmError`, `JobsPipeError`, `BoardError`, `NoSourceData`) fail the run with their message
+- Anything else is unexpected, a bug: the full traceback goes to `error.log` (`FileErrorLog`) and the terminal shows one line pointing to it. In a step, `Pipeline` writes it to the run folder and the run fails as usual, ready to resume. Outside any step (setting up, choosing the window, the cost check), `Cli` writes it to the output folder
+- Warnings are collected, not raised: one `WarningLog` per run, `FileWarningLog`, writes `warnings.jsonl` in the run folder, which stays after the run. The factory hands it to the steps that warn, which call `warn(code, message)`; a warning already there is not added again, so a resumed run doesn't repeat it. The report step reads them last, as the report's Alerts and the terminal's alert lines
+- Outside a run (choosing the window, offering a resume, `job-radar runs`), there is no run folder to record in, so `TerminalWarnings` tells each warning once in the terminal ("Warning: ...")
+- Ctrl+C stops with one line, "Stopped by you", and exit code 1; a run that had started keeps its saved steps, and the same command offers to resume it
+- `Cli` turns every ending into a short message and an exit code; no traceback reaches the terminal
 
 ### Preflight
 
-Before a run folder exists, and before any credits or LLM calls:
+Before a run folder exists, and before any credits or LLM calls, in this order:
 
-1. Settings parse and validate
-2. Profile and CV load (prompting for anything missing); CV text is extracted
-3. The lock is taken; a lock left by a process that no longer exists is removed
-4. A run still marked `running` is treated as failed, and the user is asked whether to delete it
-5. `claude` is available and logged in
-6. API keys are set for every enabled paid source
+1. Settings parse and validate (`Cli.start`)
+2. The searches, then the CV and preferences load (the factory, for a real run)
+3. API keys are set for every enabled paid source
+4. `claude` is available and logged in
+5. The lock is taken (the app, around everything that follows): `output/run.lock` holds the process id; a lock whose process no longer exists is removed; a live one stops the run. It is released when the run ends, however it ends
+6. The newest run, if it failed, is offered for resuming (section 5)
 
-The run folder is created only after preflight passes, so a settings typo never leaves a failed run to clean up.
+The run folder is created only after the window and the spend are agreed, so a settings typo never leaves a failed run to clean up. Prompting for missing profile fields is task 12; until then a missing or invalid field is a setup error.
 
 ### Errors (the run stops)
 
-| Code | Example message |
+| Kind | Example message |
 |---|---|
-| `settings_invalid` | Settings invalid: `sources.jobspipe.plan` must be one of free, seeker (local/settings.yaml) |
-| `input_invalid` | Profile still invalid: `searches.remote-us.locations`: "USA" is not an ISO code, try US |
-| `cv_unreadable` | The CV has no text layer (a scanned PDF?). Export a text PDF, or use .md |
-| `api_key_missing` | JOBSPIPE_API_KEY is not set. Add it to .env, or disable jobspipe in settings |
-| `run_in_progress` | Another run is in progress (pid 4312) |
-| `llm_unavailable` | `claude` not found or not logged in. Run `claude` once to log in |
-| `no_source` | No source returned data: JobsPipe failed (timeout after 3 retries), Fast Forward failed (HTTP 503) |
-| `stopped` | Stopped by you at the cost check |
-| `unexpected` | Unexpected error. Details in output/runs/2026-11-03T14-05/error.log |
+| Settings invalid | Could not set up the run: local/settings.yaml: recommend.min_scor: unknown key. Fix it in local/settings.yaml; job_radar/default_settings.yaml lists every setting with its default |
+| Profile invalid | Could not set up the run: local/profile.yaml: searches.one.rols: unknown key. Fix it in local/profile.yaml; examples/profile.example.yaml shows every key |
+| CV unreadable | Could not set up the run: local/cv.pdf has no text (a scanned PDF? Export a text PDF, or use cv.md) |
+| API key missing | Could not set up the run: JOBSPIPE_API_KEY is not set: add it to .env, or set sources.jobspipe.enabled: false in local/settings.yaml |
+| LLM unavailable | Could not set up the run: `claude` is not logged in: run `claude auth login` |
+| Run in progress | Could not start the run: Another run is in progress (pid 4312). Wait for it to finish; if no run is going, delete output/run.lock |
+| No source | Run failed at step 'fetch': No source returned data: JobsPipe failed (no answer in time after 3 retries), Fast Forward failed (HTTP 503 after 3 retries) |
+| Unexpected, in a step | Run failed at step 'classify': KeyError: 'id', then "Unexpected error: details in output/runs/2026-11-03T14-05-00/error.log" |
+| Unexpected, outside a step | Run stopped: unexpected error (TypeError: ...). Details in output/error.log |
 
-`no_source` applies only when every source failed; one failed source is a warning.
+"No source" applies only when every source the run tried failed; one failed source is a warning. Stopping at the cost check is not an error: it cancels the run (exit 0).
+
+A source fails when it raises after its retries. `BoardClient` says why in a few words: "HTTP 503 after 3 retries", "HTTP 404", "no answer in time after 3 retries", "can't connect after 3 retries"; JobsPipe adds what it said ("HTTP 402: No credits left."). An unexpected error in a source (an API that changed shape) also counts as the source failing, named with its type.
 
 ### Warnings (the run finishes)
 
-| Code | Example message |
-|---|---|
-| `source_failed` | JobsPipe failed: HTTP 503 after 3 retries. Its postings are not in this run |
-| `source_empty` | Fast Forward returned no postings |
-| `source_skipped` | JobsPipe skipped: you chose to skip it / not enough credits |
-| `no_new_postings` | No new postings matched your searches |
-| `budget_reached` | JobsPipe monthly budget reached: 10,000 of 10,000 |
-| `credits_low` | JobsPipe credits running low: 480 left (threshold 500) |
-| `llm_failed` | LLM failed on 3 jobs: listed without classification or requirements |
-| `llm_pending` | Usage limit reached: 120 jobs carried over to the next run (resets 18:00) |
+| Code | Recorded by | Example message |
+|---|---|---|
+| `source_failed` | fetch step | JobsPipe failed: HTTP 503 after 3 retries. Its postings are not in this run. |
+| `source_empty` | fetch step (no pages), convert step (pages with no postings) | Fast Forward returned no postings. |
+| `source_skipped` | fetch step | JobsPipe skipped by you at the cost check: its postings are not in this run. |
+| `budget_reached` | fetch step | JobsPipe monthly budget reached: this run used 120 credits, and the budget had 120 left this month. |
+| `credits_low` | fetch step | JobsPipe credits running low: 80 left (alerts.low_credits is 100). |
+| `llm_failed` | classify, extract and recommend steps | The LLM couldn't label 3 of 40 jobs: their seniority and domain count as not given. Also "couldn't read the requirements of" (left out of What employers ask for) and "couldn't rank" (they can't be recommended) |
+| `llm_pending` | `UsageLimitGuard` | Usage limit reached: 12 jobs not ranked, carried over to the next run. |
+| `gaps_skipped` | `CvGaps` | Experience to gain: 5 requirements weren't compared with your CV (the LLM gave no usable answer). The next run asks again. |
+| `no_new_jobs` | report step | No new jobs matched your searches. |
+| `run_unreadable` | `FileRunHistory` | Run 2026-11-01T09-00-00 can't be read, so it is left out: its manifest.json is not as expected (window: Field required). `job-radar delete` removes it. |
+| `kept_jobs_unreadable` | `FileSeenJobs` | The jobs run 2026-11-01T09-00-00 kept can't be read, so they count as new again and are left out of the market sections: its jobs.jsonl is not as expected (...). |
+
+The classify and extract steps also tell their LLM warning in the terminal when it happens, as before. The ranker now handles a bad answer like the classifier and the extractor: ask again once, then split the batch, and a job that still fails gets no score.
+
+The report lists every warning under Alerts ("None." when there are none) and counts them in the front matter. The terminal ends with "Run finished: 23 new openings, 10 recommended, 2 alerts.", one line per alert ("- JobsPipe failed: ..."), then the report's path.
 
 Lookback capping and criteria changes are not alerts: they are notes in the report header and trends section. Built (task 14): after a long break the report says, under "Covers postings from ...", "Not covered: 1 Oct to 21 Oct 2026. The last run was on 30 Sep, and a run reaches back at most 14 days.", and the front matter has `not_covered`.
 
 ### Failed run
 
-- `run.json` gets status `failed` with the error code and message. No report is written
+- The manifest stays not completed, every saved step stays, and an unexpected error leaves `error.log` next to them. No report is written
 - Nothing is asked when a run fails: the message says the same command resumes it, and the next run offers to (section 5). `job-radar delete` removes it. It never counts toward seen postings, trends or the next window
-- Exit codes: 0 completed (with or without warnings), 1 error, 2 stopped by the user. Useful for scheduled runs later
+- Exit codes: 0 completed (with or without warnings) or called off by you, 1 a run that failed or stopped, 2 a setup error (including another run in progress). Useful for scheduled runs later
 
 ## 14. Decisions and alternatives
 
@@ -1087,10 +1102,23 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | No "go ahead" when the estimate exceeds credits left | Allow it, hoping overlap makes it fit | Running out mid-fetch would make the fetch partial |
 | Fetch capped at estimate plus 10%; over the cap the source fails | No cap; hard cap at the estimate | Keeps fetches all-or-nothing and spend near what was approved; repeats within the month are free |
 | Monthly spend from the source's credit data; ledger outside run folders as fallback | Sum spend recorded in run data | Deleting runs must not reset the budget |
-| Errors as exceptions, caught by `Pipeline` and turned into `RunFailed`; warnings collected in a per-run `Alerts` (task 24) | Result objects from every step; a logging framework | Steps stay plain; one place decides how a run ends |
+| Errors as exceptions, caught by `Pipeline` and turned into `RunFailed`; warnings collected in a per-run `WarningLog` (task 24) | Result objects from every step; a logging framework | Steps stay plain; one place decides how a run ends |
 | Preflight before the run folder exists | Create the folder first | Settings and input errors leave nothing to clean up, and no credits or LLM calls are spent |
 | Failed-run delete prompt defaults to no | Default yes (the earlier choice) | A kept failed run can be resumed after its last finished step; it still never counts |
 | Exit codes 0, 1, 2 | Always 0 | Scheduled runs later can tell outcomes apart |
+| One failing source is a warning; only when every source the run tried fails does the fetch step fail (`NoSourceData`), naming each | Fail the run on the first failing source | A report from the other sources is worth having; the warning says whose postings are missing. A run with nothing fetched can't do anything useful |
+| Any exception from a source counts as that source failing, named with its type when unexpected | Only expected errors (HTTP, JobsPipe) make a source fail; anything else fails the run | From the user's view, a board whose API changed shape has failed like one that is down; the other boards still give a report |
+| `BoardClient` turns a failed request into a `BoardError` in a few words ("HTTP 503 after 3 retries"), also when the last try gets no answer | Pass httpx's own errors on | Its messages are long and name URLs; the warning should read as one line |
+| A paid source whose cost check fails is left out as `failed`, and the fetch step warns about it | Stop the run; let it fail as an unexpected error | JobsPipe being down shouldn't stop Fast Forward; nothing is spent on a source that can't say what it costs |
+| A failed paid fetch writes no spend record | Record it with nothing charged | What it charged before failing isn't known; the next run's cost check reads the account's credits anyway |
+| Expected errors under one base class `JobRadarError`, setup errors under `SetupError`; anything else is a bug with its traceback in `error.log` | A code per error in a table (the earlier plan); catch everything the same way | The type decides what the user sees: a message with the fix, or one line pointing to the details. Existing errors (`ConfigError`, `ProfileError`, `LlmError`, `JobsPipeError`) just changed their base |
+| `error.log` in the run folder for a step's bug, in the output folder for a bug outside any step | Always the output folder | The details stay with the run they belong to, and go when it is deleted |
+| One run at a time through `output/run.lock`, taken by the app around the resume offer, the window, the cost check and the run | A lock per runs folder (real and demo apart); a lock only around the pipeline | Two commands would otherwise both offer to resume the same failed run. One lock is simpler, and a demo run takes seconds. `runs` and `delete` don't take it yet |
+| A stale lock is one whose process id no longer runs, or that can't be read | A time limit | A run can take hours (descriptions at 1s each), so age says nothing; a dead process says it all |
+| Warnings outside a run told in the terminal once, by `TerminalWarnings` | Drop them; keep them for the next run | Before a run folder exists there is nowhere to record them, and an unreadable run folder is worth knowing about when choosing the window. The same warning inside the run is recorded and shown again in the report |
+| A warning equal to one already recorded is kept once | Keep duplicates | A resumed run redoes the failed step, and several readers of the history meet the same unreadable folder |
+| The classify and extract steps keep telling their LLM failures as they happen, besides recording them | Record only | A long run shows progress; the summary at the end repeats it next to the other alerts |
+| Exit codes: 0 completed or called off, 1 a run that failed or stopped, 2 a setup error or another run in progress | 2 for stopped by you (the earlier plan) | Calling a run off was already 0 (task 4); 2 has meant a setup error since task 3 |
 | Models store collections as tuples | Lists, relying on "frozen" | Pydantic's frozen blocks `job.id = ...` but not `job.postings.append(...)`; tuples make "never changed after" hold |
 | Interfaces start with the methods the skeleton calls and grow per task | Full interfaces from the start | No placeholder types (`History`, `CvAnalysis`, `Credits`) before their sections are built; fakes don't carry unused methods |
 | Build a walking skeleton first: every step works end to end in a simple form, then each grows | Build each step complete, in order | The whole flow runs and is tested from the start; each later PR swaps one simple part for the real one. Changed on Nov 5 |
@@ -1108,7 +1136,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Pacing and retries in one `BoardClient`, shared by a board's source and describer | Each class retries on its own | One retry rule per board, written once |
 | HTML turned into text with the standard library's `html.parser` | BeautifulSoup, html2text | No new dependency; job descriptions use a handful of tags |
 | The ranker asks with a JSON schema | Plain text answers parsed by the ranker | The CLI holds the answer to the shape, so fewer retries and no code fences to strip; one optional parameter on `Llm` |
-| A bad ranking answer is asked again once, with what was wrong, then the step fails | Split the batch and warn (section 9) | Warnings come in task 24; until then a failure is loud and the run can be resumed (task 13) |
+| A bad ranking answer is asked again once, with what was wrong, then the batch is split; a job that still fails gets no score and a warning (changed in task 24) | Fail the step (the earlier choice, until warnings existed) | Same rule as classify and extract (section 9): one bad job no longer fails a run, and the warning says how many weren't ranked |
 | Ranking sees each description cut to 4,000 characters, 20 jobs a prompt | The full description; the Extract cap of 8,000 | About 25,000 tokens a prompt; the start of a posting says most of what fit depends on |
 | The CV is `cv.pdf`, `cv.md` or `cv.txt` in `local/`, the preferences `preferences.md`; both required | A path in a profile file; preferences optional | The profile file comes with settings (task 10). Ranking without preferences would judge experience only, so a missing file is more likely a mistake |
 | Title asides in brackets dropped only when about place or work mode | Drop every bracketed aside | Real Fast Forward titles use brackets to tell roles apart ("Specialist (Media and Communication)") |
@@ -1118,7 +1146,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Code comments say what a class or function does, never cite design sections; temporary notes are `TODO(task N)` | Section references in docstrings | Code reads on its own; temporary notes are findable and removed by their task |
 | No state in memory: every class is configured once; a run's state is its folder | A few named in-memory holders (the earlier choice) | Nothing to track or reset; a crash loses nothing that resume needs |
 | `Pipeline` saves and loads every step's output; steps never touch storage | Steps save their own output; a saving decorator around each step | Resume decides where a run starts, which is about step order, so it belongs to the pipeline. A decorator per step would load every earlier output just to pass it along, with the skip logic spread over six wrappers |
-| `Alerts` created per run and passed per call | `App.alerts` | `App` is built once and holds no run data; a stateless stage never holds a stateful object |
+| A run's warnings in `warnings.jsonl` in its run folder, through a `FileWarningLog` the factory builds per run and hands to the steps that warn (task 24) | An in-memory `Alerts` created per run and passed per call (the earlier plan); `App.alerts` | Like the spend log: no state in memory, the file stays with the run for later reading, and a resumed run keeps the warnings of the steps it skips. Steps hold it like any other configured part |
 | `RunResult` with `RunSucceeded` and `RunFailed`, each giving its own `message()` and `exit_code()` | One result class with an `ok` flag | Each outcome carries only its own data; `Cli` shows any result without checking its kind, so a new outcome needs no change there |
 | `JobRadarApp` between `Cli` and `Pipeline` | `Cli` calls the pipeline directly | Thin today; later commands (`runs`, `delete`) become its methods while `Cli` keeps talking to one object |
 | Steps exchange lists of models | Any Python object | One generic save and load works for every step, with files now and a database later |

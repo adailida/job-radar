@@ -14,6 +14,7 @@ from job_radar.classify import Classifier, LlmClassifier, TitleClassifier
 from job_radar.clock import Clock
 from job_radar.cost import CostCheck, FileSpendLog
 from job_radar.drop_log import FileDropLog
+from job_radar.error_log import ErrorLog, FileErrorLog
 from job_radar.extract import Extractor, KeywordExtractor, LlmExtractor
 from job_radar.gaps import CvGaps, FileGapCache, GapBuilder, GapJudge, KeywordGapJudge, LlmGapJudge
 from job_radar.history import FileRunHistory, RunFolders
@@ -31,6 +32,7 @@ from job_radar.ranking import JobRanker, KeywordRanker, LlmRanker
 from job_radar.report_renderer import MarkdownRenderer
 from job_radar.report_writer import FileReportWriter
 from job_radar.resume import ResumeOffer
+from job_radar.run_lock import FileRunLock
 from job_radar.runs_command import RunsCommand
 from job_radar.searches import DEMO_SEARCHES, SearchesFile
 from job_radar.secrets import Secrets
@@ -56,6 +58,7 @@ from job_radar.steps.recommend import RecommendTopJobsStep
 from job_radar.steps.report import ReportStep
 from job_radar.trends import MarketRuns, MarketTrends, TrendBuilder
 from job_radar.usage import FilePendingLog, LastRunPending, UsageLimitGuard
+from job_radar.warning_log import FileWarningLog, TerminalWarnings
 from job_radar.window import WindowPlanner
 from job_radar.window_chooser import WindowChooser
 from job_radar.words import Words
@@ -112,18 +115,24 @@ class AppFactory:
         parts = self._demo() if demo else self._real()
         runs = self._runs(demo)
         planner = WindowPlanner(self._settings.lookback_days)
-        history = FileRunHistory(runs)
+        history = FileRunHistory(runs, TerminalWarnings(self._prompter))
         chooser = WindowChooser(history, planner, self._prompter, self._clock)
         offer = ResumeOffer(history, self._prompter, Words())
         paid = [source for source in parts.sources if isinstance(source, PaidSource)]
         cost = CostCheck(paid, parts.criteria, self._prompter)
         pipeline = partial(self._pipeline, parts, runs, self._gap_cache(demo))
-        return JobRadarApp(offer, chooser, cost, pipeline)
+        lock = FileRunLock(self._settings.output)
+        return JobRadarApp(offer, chooser, cost, pipeline, lock)
 
     def runs_command(self, demo: bool = False) -> RunsCommand:
         """Build the `runs` and `delete` commands, for real runs or demo runs."""
         runs = self._runs(demo)
-        return RunsCommand(FileRunHistory(runs), RunFolders(runs), self._prompter, Words())
+        history = FileRunHistory(runs, TerminalWarnings(self._prompter))
+        return RunsCommand(history, RunFolders(runs), self._prompter, Words())
+
+    def error_log(self) -> ErrorLog:
+        """Where an unexpected error outside any run folder is written: the output folder."""
+        return FileErrorLog(self._settings.output)
 
     def _runs(self, demo: bool) -> Path:
         """The folder that holds one folder per run: demo runs keep their own."""
@@ -154,11 +163,15 @@ class AppFactory:
         )
         normalizer = Normalizer()
         words = Words()
+        warnings = FileWarningLog(folder)
+        history = FileRunHistory(runs, warnings)
+        seen = FileSeenJobs(history, runs, warnings)
         spend = FileSpendLog(folder)
         counts = FileSourceCountLog(folder)
         pending = FilePendingLog(folder)
-        guard = UsageLimitGuard(self._prompter, pending)
-        market = MarketRuns(FileRunHistory(runs), runs, checkpoints, window, config)
+        guard = UsageLimitGuard(self._prompter, pending, warnings)
+        market = MarketRuns(history, seen, checkpoints, window, config)
+        labels = {source.name: source.label for source in parts.sources}
         period = self._settings.trend_period
         per_type = self._settings.report.requirements_per_type
         names = RequirementNames()
@@ -167,26 +180,36 @@ class AppFactory:
             parts.judge,
             FileGapCache(gap_cache),
             GapBuilder(names, self._settings.report.gap_suggestions),
+            warnings,
         )
         steps: list[Step] = [
-            FetchStep(parts.sources, parts.criteria, window, approvals, spend),
-            ConvertStep({parser.source: parser for parser in parts.parsers}, counts),
-            DedupeStep(JobKey(normalizer, AtsLinks()), window.end),
-            NewJobsFilterStep(
-                FileSeenJobs(FileRunHistory(runs), runs), window.end, self._settings.new_only
+            FetchStep(
+                parts.sources,
+                parts.criteria,
+                window,
+                approvals,
+                spend,
+                warnings,
+                self._settings.alerts.low_credits,
             ),
+            ConvertStep(
+                {parser.source: parser for parser in parts.parsers}, counts, warnings, labels
+            ),
+            DedupeStep(JobKey(normalizer, AtsLinks()), window.end),
+            NewJobsFilterStep(seen, window.end, self._settings.new_only),
             FilterStep(parts.criteria, window, JobMatcher(normalizer), FileDropLog(folder, words)),
-            CarriedOverStep(LastRunPending(FileRunHistory(runs), runs)),
+            CarriedOverStep(LastRunPending(history, runs)),
             DescribeStep({d.source: d for d in parts.describers}, self._prompter),
-            ClassifyStep(parts.classifier, self._prompter, guard),
+            ClassifyStep(parts.classifier, self._prompter, guard, warnings),
             MatchStep(parts.criteria, JobMatcher(normalizer)),
-            ExtractStep(parts.extractor, self._prompter, guard),
+            ExtractStep(parts.extractor, self._prompter, guard, warnings),
             RecommendTopJobsStep(
                 parts.ranker,
                 parts.profile,
                 self._settings.recommend.top_n,
                 self._settings.recommend.min_score,
                 guard,
+                warnings,
             ),
             ReportStep(
                 checkpoints,
@@ -201,7 +224,7 @@ class AppFactory:
                 window,
                 not_covered,
                 self._settings.recommend.min_score,
-                {source.name: source.label for source in parts.sources},
+                labels,
                 counts,
                 checkpoints,
                 OpeningGrouper(
@@ -209,9 +232,10 @@ class AppFactory:
                     list(self._settings.job_types),
                     list(self._settings.domains),
                 ),
+                warnings,
             ),
         ]
-        return Pipeline(steps, checkpoints)
+        return Pipeline(steps, checkpoints, FileErrorLog(folder))
 
     def _check_domains(self, criteria: SearchCriteria) -> None:
         """Every domain a search names is one the settings define."""

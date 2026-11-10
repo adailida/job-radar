@@ -19,7 +19,7 @@ from job_radar.model import (
 )
 from job_radar.places import PlaceCodes
 from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
-from job_radar.sources.http import BoardClient
+from job_radar.sources.http import BoardClient, BoardError
 
 FIXTURES = Path(__file__).parent / "fixtures" / "getro"
 FIXTURE = FIXTURES / "search_page.json"
@@ -162,13 +162,29 @@ def test_fetch_retries_server_errors_and_timeouts_with_backoff():
 
 def test_fetch_fails_after_the_last_retry():
     board = Board([page([], count=0)], [503, 503, 503, 503])
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(BoardError, match="^HTTP 503 after 3 retries$"):
         source(board, []).fetch(SEARCH, window(date(2026, 1, 1)))
+
+
+def test_a_board_that_never_answers_fails_in_a_few_words():
+    def down(request):
+        raise httpx.ConnectTimeout("slow")
+
+    client = BoardClient(httpx.Client(transport=httpx.MockTransport(down)), 1.0, lambda s: None)
+    with pytest.raises(BoardError, match="^no answer in time after 3 retries$"):
+        client.get("https://example.org")
+
+    def refused(request):
+        raise httpx.ConnectError("refused")
+
+    client = BoardClient(httpx.Client(transport=httpx.MockTransport(refused)), 1.0, lambda s: None)
+    with pytest.raises(BoardError, match=r"^can't connect after 3 retries \(ConnectError\)$"):
+        client.get("https://example.org")
 
 
 def test_fetch_fails_at_once_on_a_client_error():
     board, sleeps = Board([page([], count=0)], [404]), []
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(BoardError, match="^HTTP 404$"):
         source(board, sleeps).fetch(SEARCH, window(date(2026, 1, 1)))
     assert sleeps == []
 
@@ -181,7 +197,7 @@ def test_fetch_fails_as_a_whole_when_a_later_page_fails():
             return super().__call__(request)
 
     pages = [page([job(1, date(2026, 11, 5))], count=2)]
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(BoardError, match="HTTP 500 after 3 retries"):
         source(SecondPageDown(pages), []).fetch(SEARCH, window(date(2026, 1, 1)))
 
 
@@ -258,13 +274,13 @@ def test_describe_retries_server_errors_with_backoff():
 
 def test_describe_fails_after_the_last_retry():
     pages = JobPages({}, [500, 500, 500, 500])
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(BoardError, match="HTTP 500 after 3 retries"):
         describer(pages, []).describe(search_posting(0))
 
 
 def test_describe_fails_at_once_on_other_client_errors():
     pages, sleeps = JobPages({}, [403]), []
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(BoardError, match="^HTTP 403$"):
         describer(pages, sleeps).describe(search_posting(0))
     assert sleeps == [1.0]  # the pause only
 

@@ -168,7 +168,7 @@ def test_fetch_stops_when_the_results_run_out():
 
 
 def test_an_error_from_jobspipe_fails_with_its_message():
-    with pytest.raises(JobsPipeError, match="JobsPipe answered 402: No credits left."):
+    with pytest.raises(JobsPipeError, match="^HTTP 402: No credits left.$"):
         source(FakeApi(total=5, status=402)).fetch(SearchCriteria(searches=(SEARCH,)), WINDOW)
 
 

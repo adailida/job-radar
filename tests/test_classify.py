@@ -2,11 +2,13 @@ import json
 import re
 
 import pytest
-from fakes import FakePrompter, guard, job
+from fakes import FakePrompter, MemoryWarningLog, guard, job
 
 from job_radar.classify import LlmClassifier, TitleClassifier
 from job_radar.matching import JobMatcher
 from job_radar.model import (
+    Alert,
+    AlertCode,
     Classification,
     Domains,
     IfMissing,
@@ -142,9 +144,13 @@ def label(job_id: str, seniority=Seniority.SENIOR, domain: str | None = "climate
 def test_the_step_adds_labels_and_says_how_many_failed():
     prompter = FakePrompter()
     jobs = [job("1"), job("2")]
-    found = ClassifyStep(SetLabels({"demo:1": label("demo:1")}), prompter, guard()).run(jobs)
+    warnings = MemoryWarningLog()
+    step = ClassifyStep(SetLabels({"demo:1": label("demo:1")}), prompter, guard(), warnings)
+    found = step.run(jobs)
     assert [j.classification for j in found] == [label("demo:1"), None]
-    assert prompter.told == ["The LLM couldn't label 1 of 2 jobs."]
+    said = "The LLM couldn't label 1 of 2 jobs: their seniority and domain count as not given."
+    assert prompter.told == [said]
+    assert warnings.alerts() == [Alert(code=AlertCode.LLM_FAILED, message=said)]
 
 
 MATCHER = JobMatcher(Normalizer())

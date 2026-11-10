@@ -7,9 +7,15 @@ import tempfile
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
+from job_radar.errors import JobRadarError, SetupError
 
-class LlmError(Exception):
+
+class LlmError(JobRadarError):
     """The model gave no answer: not installed, not logged in, timed out, or failed."""
+
+
+class LlmUnavailable(LlmError, SetupError):
+    """The model can't be asked at all before a run: not installed, or not logged in."""
 
 
 class UsageLimit(LlmError):
@@ -60,13 +66,18 @@ class ClaudeCli:
 
         Asks `claude auth status`, which uses none of the subscription.
         """
-        done = self._call([self.COMMAND, "auth", "status"], prompt="")
+        try:
+            done = self._call([self.COMMAND, "auth", "status"], prompt="")
+        except LlmError as error:
+            raise LlmUnavailable(str(error)) from None
         try:
             logged_in = json.loads(done.stdout).get("loggedIn") is True
         except (json.JSONDecodeError, AttributeError):
             logged_in = False
         if not logged_in:
-            raise LlmError(f"`{self.COMMAND}` is not logged in: run `{self.COMMAND} auth login`")
+            raise LlmUnavailable(
+                f"`{self.COMMAND}` is not logged in: run `{self.COMMAND} auth login`"
+            )
 
     def complete(self, system: str, prompt: str, schema: dict | None = None) -> str:
         """Run `claude -p` with the prompt on stdin and return its answer."""

@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from job_radar.errors import JobRadarError
 from job_radar.model import Approval, SearchCriteria, Spend, SpendDecision, SpendPlan, Window
 from job_radar.prompter import Prompter
 from job_radar.sources.base import PaidSource
@@ -19,8 +20,9 @@ class CostCheck:
     go ahead, skip the source this run, or stop. Over the credits left, only
     skip or stop: running out mid-fetch would leave it partial. Enter means
     skip, the safe choice. The fetch may then spend the estimate plus 10%, as
-    new postings can appear between the count and the fetch. Stateless: holds
-    only the paid sources, the searches and who it asks.
+    new postings can appear between the count and the fetch. A source whose
+    check fails is left out of the run, and the fetch step warns about it.
+    Stateless: holds only the paid sources, the searches and who it asks.
     """
 
     MARGIN = 0.10
@@ -37,11 +39,31 @@ class CostCheck:
         """One approval per paid source, or None if the user chose to stop the run."""
         approvals = []
         for source in self._sources:
-            approval = self._decide(source.plan(self._criteria, window))
+            try:
+                plan = source.plan(self._criteria, window)
+            except Exception as error:
+                approvals.append(self._failed(source, error))
+                continue
+            approval = self._decide(plan)
             if approval is None:
                 return None
             approvals.append(approval)
         return approvals
+
+    def _failed(self, source: PaidSource, error: Exception) -> Approval:
+        """The approval of a source whose check failed: left out of the run, and why."""
+        reason = JobRadarError.describe(error)
+        self._prompter.tell(
+            f"{source.label}: the cost check failed ({reason}), so it is left out of this run."
+        )
+        return Approval(
+            source=source.name,
+            estimate=0,
+            decision=SpendDecision.FAILED,
+            cap=0,
+            credits_before=0,
+            failure=reason,
+        )
 
     def _decide(self, plan: SpendPlan) -> Approval | None:
         """The approval for one source's plan, asking the user when a limit is in the way."""
@@ -83,6 +105,7 @@ class CostCheck:
             decision=decision,
             cap=cap,
             credits_before=plan.credits_left,
+            budget_left=plan.budget_left,
         )
 
 

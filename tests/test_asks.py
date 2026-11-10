@@ -1,6 +1,7 @@
 from datetime import date
 
 import pytest
+from fakes import MemoryWarningLog
 
 from job_radar.asks import AskBuilder, AskSource, MarketAsks, RequirementNames
 from job_radar.checkpoints import FileCheckpoints
@@ -263,10 +264,12 @@ def test_each_requirement_can_be_traced_back_to_the_postings_it_came_from(tmp_pa
     this_run = FileCheckpoints(now, window, keep=KEEP)
     this_run.save("extract", [job("2", asks_for("Python"))])
     config = RunConfig(searches=(), sources=())
-    runs = MarketRuns(FileRunHistory(tmp_path), tmp_path, this_run, window, config)
+    history = FileRunHistory(tmp_path, MemoryWarningLog())
+    seen = FileSeenJobs(history, tmp_path, MemoryWarningLog())
+    runs = MarketRuns(history, seen, this_run, window, config)
     asks = MarketAsks(runs, AskBuilder("month", 20, NAMES), TODAY).asks()
     assert [r.job_ids for r in asks.rows] == [("1", "2")]
-    saved = FileSeenJobs.read(earlier / FileSeenJobs.FILE) + this_run.kept(Job)
+    saved = seen.jobs(earlier.name) + this_run.kept(Job)
     traced = [j.postings[0].url for j in saved if j.id in asks.rows[0].job_ids]
     assert traced == ["https://example.org/1", "https://example.org/2"]
 

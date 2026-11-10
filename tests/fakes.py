@@ -158,6 +158,24 @@ class NoCost:
         return []
 
 
+class NoLock:
+    """A run lock that is always free, and counts how often it was taken and released."""
+
+    def __init__(self):
+        """Start untaken."""
+        self.taken = 0
+        self.released = 0
+
+    def __enter__(self):
+        """Count one taking."""
+        self.taken += 1
+        return self
+
+    def __exit__(self, kind, error, trace) -> None:
+        """Count one release."""
+        self.released += 1
+
+
 class MemoryPendingLog:
     """A pending log that keeps carried-over jobs in memory."""
 
@@ -175,11 +193,37 @@ class MemoryPendingLog:
         return list(self.kept)
 
 
-def guard(*answers: str):
+class MemoryWarningLog:
+    """A warning log that keeps the run's warnings in memory, each once."""
+
+    def __init__(self):
+        """Start with no warnings."""
+        self.kept = []
+
+    def warn(self, code, message) -> None:
+        """Keep the warning, unless it is kept already."""
+        from job_radar.model import Alert
+
+        alert = Alert(code=code, message=message)
+        if alert not in self.kept:
+            self.kept.append(alert)
+
+    def alerts(self):
+        """The warnings kept."""
+        return list(self.kept)
+
+    def messages(self) -> list[str]:
+        """Just what each warning says."""
+        return [alert.message for alert in self.kept]
+
+
+def guard(*answers: str, warnings=None):
     """A usage-limit guard with a user giving these answers and an in-memory pending log."""
     from job_radar.usage import UsageLimitGuard
 
-    return UsageLimitGuard(FakePrompter(*answers), MemoryPendingLog())
+    return UsageLimitGuard(
+        FakePrompter(*answers), MemoryPendingLog(), warnings or MemoryWarningLog()
+    )
 
 
 class NoTrends:
