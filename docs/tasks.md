@@ -152,3 +152,4 @@ One line each for now; each task gets its detail, against the class names in arc
   - Step 2: add JobsPipe with very tight limits: per-run max about 25 credits, one narrow search, 1-day lookback. Check that credits spent (before and after) match the estimate, then the report and run data
   - Step 3: widen step by step (limits, searches, lookback), checking spend against the estimate each time, before switching to the full settings
   - `examples/` complete; README usage moved from "planned" to real
+  - Built: llm.max_jobs_per_run (60), README First run, examples/cv.example.md

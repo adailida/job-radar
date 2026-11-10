@@ -103,9 +103,8 @@ class MarkdownRenderer:
             lines.extend(f"- {self._spend(spend, names)}" for spend in content.spends)
         if content.carried_over:
             jobs = "job" if content.carried_over == 1 else "jobs"
-            lines.extend(
-                ["", f"{content.carried_over} {jobs} carried over to the next run (usage limit)."]
-            )
+            carried = f"{content.carried_over} {jobs} carried over to the next run"
+            lines.extend(["", f"{carried} (usage limit or LLM cap)."])
         lines.extend(["", "Jobs the filter dropped, by reason: dropped.md"])
         return "\n".join(lines) + "\n"
 

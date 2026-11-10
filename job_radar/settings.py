@@ -20,6 +20,7 @@ class LlmSettings(Model):
     classify_description_chars: int = Field(ge=0)  # labelling reads only the start
     extract_batch_size: int = Field(ge=1)  # jobs per prompt when finding requirements
     extract_description_chars: int = Field(ge=0)  # how much of each description that reads
+    max_jobs_per_run: int = Field(ge=1)  # over this many jobs for the LLM, the run asks first
 
 
 class ReportSettings(Model):

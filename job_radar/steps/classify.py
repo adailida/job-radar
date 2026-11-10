@@ -1,4 +1,4 @@
-"""Step 8: label each job with its seniority, job type, domain and sector."""
+"""Step 9: label each job with its seniority, job type, domain and sector."""
 
 from job_radar.classify import Classifier
 from job_radar.model import AlertCode, Job

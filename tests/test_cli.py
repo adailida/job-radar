@@ -145,6 +145,7 @@ def test_new_source_plugs_in_without_changes_downstream(tmp_path):
         "filter": 8,
         "carried_over": 8,
         "describe": 8,
+        "llm_cap": 8,
         "classify": 8,
         "match": 8,
         "extract": 8,
@@ -310,7 +311,8 @@ def test_jobs_the_usage_limit_stopped_are_ranked_by_the_next_run(tmp_path, monke
     folder = tmp_path / "demo" / FIRST_RUN
     assert len(FilePendingLog(folder).jobs()) == 6
     assert (
-        "6 jobs carried over to the next run (usage limit)." in (folder / "report.md").read_text()
+        "6 jobs carried over to the next run (usage limit or LLM cap)."
+        in (folder / "report.md").read_text()
     )
     monkeypatch.setattr(KeywordRanker, "score", real_score)
     assert demo_cli(tmp_path, FakePrompter(), hour=15).main(["run", "--demo"]) == 0

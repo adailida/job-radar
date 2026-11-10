@@ -52,6 +52,7 @@ from job_radar.steps.describe import DescribeStep
 from job_radar.steps.extract import ExtractStep
 from job_radar.steps.fetch import FetchStep
 from job_radar.steps.filter import FilterStep
+from job_radar.steps.llm_cap import LlmCapStep
 from job_radar.steps.match import MatchStep
 from job_radar.steps.new_jobs_filter import NewJobsFilterStep
 from job_radar.steps.recommend import RecommendTopJobsStep
@@ -200,6 +201,7 @@ class AppFactory:
             FilterStep(parts.criteria, window, JobMatcher(normalizer), FileDropLog(folder, words)),
             CarriedOverStep(LastRunPending(history, runs)),
             DescribeStep({d.source: d for d in parts.describers}, self._prompter),
+            LlmCapStep(self._settings.llm.max_jobs_per_run, self._prompter, pending, warnings),
             ClassifyStep(parts.classifier, self._prompter, guard, warnings),
             MatchStep(parts.criteria, JobMatcher(normalizer)),
             ExtractStep(parts.extractor, self._prompter, guard, warnings),
