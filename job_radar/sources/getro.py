@@ -66,8 +66,7 @@ class GetroSource:
         query = {"hits_per_page": self.PAGE_SIZE, "page": index, "filters": "", "query": ""}
         url = self.SEARCH.format(network=self._network)
         response = self._client.post(url, json=query, headers={"Accept": "application/json"})
-        response.raise_for_status()
-        return response.text
+        return self._client.check(response).text
 
     def _oldest(self, jobs: list[dict]) -> date:
         """The day the oldest job on a page was listed."""
@@ -164,8 +163,7 @@ class GetroDescriber:
         )
         if response.status_code == 404:
             return ""
-        response.raise_for_status()
-        job = response.json()
+        job = self._client.check(response).json()
         if job["status"] != "active":
             return ""
         return self._html.text(job["description"] or "")

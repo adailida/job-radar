@@ -1,6 +1,6 @@
 from datetime import date
 
-from fakes import FakePrompter, NoCost
+from fakes import FakePrompter, NoCost, NoLock
 
 from job_radar.app import JobRadarApp
 from job_radar.model import RunSummary, StepCount, Window
@@ -98,6 +98,7 @@ def test_the_app_resumes_the_offered_run_in_its_folder_with_its_window():
         chooser,
         NoCost(),
         lambda w, gap, run_id, ok: calls.append((w, gap, run_id)) or built,
+        NoLock(),
     )
     app.run()
     assert calls == [(WINDOW, None, FAILED.id)]
@@ -112,6 +113,7 @@ def test_the_app_starts_a_new_run_when_nothing_is_resumed():
         chooser,
         NoCost(),
         lambda w, gap, run_id, ok: calls.append((w, gap, run_id)) or built,
+        NoLock(),
     )
     app.run()
     assert calls == [(WINDOW, None, None)] and chooser.asked
@@ -127,5 +129,7 @@ class Stop:
 def test_stopping_at_the_cost_check_builds_no_run():
     plan = WindowPlan(window=WINDOW, reason=WindowReason.FIRST_RUN)
     calls = []
-    app = JobRadarApp(Offer(None), Chooser(plan), Stop(), lambda *args: calls.append(args))
+    app = JobRadarApp(
+        Offer(None), Chooser(plan), Stop(), lambda *args: calls.append(args), NoLock()
+    )
     assert isinstance(app.run(), RunCancelled) and calls == []

@@ -1,7 +1,7 @@
 from datetime import date
 
 import pytest
-from fakes import job
+from fakes import MemoryWarningLog, job
 
 from job_radar.checkpoints import FileCheckpoints
 from job_radar.history import FileRunHistory, RunFolders
@@ -23,20 +23,20 @@ def run(runs, name: str, end_day: int, completed: bool) -> None:
 
 
 def test_no_runs_folder_means_no_history(tmp_path):
-    assert FileRunHistory(tmp_path / "runs").last_window() is None
+    assert FileRunHistory(tmp_path / "runs", MemoryWarningLog()).last_window() is None
 
 
 def test_last_window_is_from_the_newest_completed_run(tmp_path):
     run(tmp_path, "2026-11-01T09-00-00", 1, completed=True)
     run(tmp_path, "2026-11-03T09-00-00", 3, completed=True)
     run(tmp_path, "2026-11-02T09-00-00", 2, completed=True)
-    assert FileRunHistory(tmp_path).last_window() == window(3)
+    assert FileRunHistory(tmp_path, MemoryWarningLog()).last_window() == window(3)
 
 
 def test_failed_run_doesnt_count_toward_the_next_window(tmp_path):
     run(tmp_path, "2026-11-01T09-00-00", 1, completed=True)
     run(tmp_path, "2026-11-03T09-00-00", 3, completed=False)
-    assert FileRunHistory(tmp_path).last_window() == window(1)
+    assert FileRunHistory(tmp_path, MemoryWarningLog()).last_window() == window(1)
 
 
 def test_unreadable_and_empty_run_folders_are_skipped(tmp_path):
@@ -45,14 +45,14 @@ def test_unreadable_and_empty_run_folders_are_skipped(tmp_path):
     old.mkdir()
     (old / "manifest.json").write_text('{"schema": 1, "steps": []}')
     (tmp_path / "2026-11-03T09-00-00").mkdir()
-    assert FileRunHistory(tmp_path).last_window() == window(1)
+    assert FileRunHistory(tmp_path, MemoryWarningLog()).last_window() == window(1)
 
 
 def test_runs_lists_completed_and_failed_newest_first(tmp_path):
     run(tmp_path, "2026-11-01T09-00-00", 1, completed=True)
     run(tmp_path, "2026-11-03T09-00-00", 3, completed=False)
     (tmp_path / "2026-11-04T09-00-00").mkdir()
-    runs = FileRunHistory(tmp_path).runs()
+    runs = FileRunHistory(tmp_path, MemoryWarningLog()).runs()
     assert [(r.id, r.completed, r.window.end.day) for r in runs] == [
         ("2026-11-03T09-00-00", False, 3),
         ("2026-11-01T09-00-00", True, 1),
@@ -61,7 +61,7 @@ def test_runs_lists_completed_and_failed_newest_first(tmp_path):
 
 
 def test_no_runs_folder_means_no_runs(tmp_path):
-    assert FileRunHistory(tmp_path / "runs").runs() == []
+    assert FileRunHistory(tmp_path / "runs", MemoryWarningLog()).runs() == []
 
 
 def test_run_folders_delete_one_run_and_nothing_else(tmp_path):
@@ -84,4 +84,4 @@ def test_runs_carry_the_days_a_long_break_left_out(tmp_path):
     folder = tmp_path / "2026-11-05T09-00-00"
     folder.mkdir()
     FileCheckpoints(folder, window(5), gap).save("dedupe", [job("1")])
-    assert FileRunHistory(tmp_path).runs()[0].not_covered == gap
+    assert FileRunHistory(tmp_path, MemoryWarningLog()).runs()[0].not_covered == gap

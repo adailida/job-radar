@@ -7,6 +7,7 @@ from decimal import Decimal
 
 import pycountry
 
+from job_radar.errors import JobRadarError
 from job_radar.html_text import HtmlText
 from job_radar.model import (
     IfMissing,
@@ -27,7 +28,7 @@ from job_radar.prompter import Prompter
 from job_radar.sources.http import BoardClient
 
 
-class JobsPipeError(Exception):
+class JobsPipeError(JobRadarError):
     """JobsPipe refused a request, so its jobs can't be part of this run."""
 
 
@@ -173,15 +174,15 @@ class JobsPipeSource:
         """One page of a search."""
         return self._json(self._client.post(self.SEARCH, json=body))
 
-    @staticmethod
-    def _json(response) -> dict:
-        """The response's JSON, or an error that says what JobsPipe said."""
+    def _json(self, response) -> dict:
+        """The response's JSON, or an error that says the status and what JobsPipe said."""
         if response.status_code != 200:
             try:
                 said = response.json().get("message") or response.json().get("error")
             except ValueError:
                 said = response.text[:200]
-            raise JobsPipeError(f"JobsPipe answered {response.status_code}: {said}")
+            status = self._client.status(response.status_code)
+            raise JobsPipeError(f"{status}: {said}" if said else status)
         return response.json()
 
 

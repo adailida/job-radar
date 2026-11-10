@@ -47,6 +47,9 @@ report:
   requirements_per_type: 20  # rows per type (skills, tools, certifications, years) in "What employers ask for"
   gap_suggestions: 5      # the most asked gaps shown with how to gain them in "Experience to gain"
 
+alerts:
+  low_credits: 100        # warn when a paid source has fewer credits than this left after a run
+
 sources:
   getro:
     network: "997"        # the Getro job board to fetch: 997 is Fast Forward

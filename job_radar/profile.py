@@ -5,6 +5,7 @@ from pathlib import Path
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
+from job_radar.errors import SetupError
 from job_radar.model import CandidateProfile
 
 DEMO_PROFILE = CandidateProfile(
@@ -19,7 +20,7 @@ DEMO_PROFILE = CandidateProfile(
 """A made-up profile for `job-radar run --demo` and the end-to-end tests."""
 
 
-class ProfileError(Exception):
+class ProfileError(SetupError):
     """The CV or preferences can't be read: missing, empty, or a PDF with no text."""
 
 

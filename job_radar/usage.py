@@ -6,8 +6,9 @@ from typing import Protocol, runtime_checkable
 
 from job_radar.history import RunHistory
 from job_radar.llm import LlmError
-from job_radar.model import Job
+from job_radar.model import AlertCode, Job
 from job_radar.prompter import Prompter
+from job_radar.warning_log import WarningLog
 
 
 class UsageLimitReached(Exception):
@@ -99,16 +100,17 @@ class UsageLimitGuard:
     """Runs one LLM pass over jobs, and settles what happens if the usage limit stops it.
 
     The user chooses: finish with what's done and carry the rest over to the
-    next run, or stop the run, which fails at this step and can be resumed
-    after the limit resets. Enter means finish. The same rule serves every
-    step that calls the LLM. Stateless: holds only who it asks and where
-    carried-over jobs go.
+    next run, which is a warning, or stop the run, which fails at this step
+    and can be resumed after the limit resets. Enter means finish. The same
+    rule serves every step that calls the LLM. Stateless: holds only who it
+    asks, where carried-over jobs go and where warnings go.
     """
 
-    def __init__(self, prompter: Prompter, pending: PendingLog) -> None:
-        """Keep who to ask and where jobs carried over are kept."""
+    def __init__(self, prompter: Prompter, pending: PendingLog, warnings: WarningLog) -> None:
+        """Keep who to ask, where jobs carried over are kept, and where warnings go."""
         self._prompter = prompter
         self._pending = pending
+        self._warnings = warnings
 
     def run[T](
         self, work: Callable[[list[Job]], T], jobs: list[Job], verb: str
@@ -132,4 +134,8 @@ class UsageLimitGuard:
                     "stopped at the usage limit: run the same command after it resets to resume"
                 ) from None
             self._pending.add(left)
+            self._warnings.warn(
+                AlertCode.LLM_PENDING,
+                f"Usage limit reached: {len(left)} jobs not {verb}, carried over to the next run.",
+            )
             return limit.done, left

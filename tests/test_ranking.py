@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-from fakes import MemoryDropLog, guard, job, posting
+from fakes import MemoryDropLog, MemoryWarningLog, guard, job, posting
 
 from job_radar.matching import JobMatcher
 from job_radar.model import CandidateProfile, Job, Period, Salary, Search, SearchCriteria, Window
@@ -118,10 +118,17 @@ def test_a_bad_answer_is_asked_again_with_what_was_wrong(bad, problem):
     assert llm.prompts[1].startswith(llm.prompts[0])
 
 
-def test_a_second_bad_answer_fails():
-    llm = FakeLlm(answer("j1"), answer("j1"))
+def test_a_second_bad_answer_splits_the_batch_and_a_job_that_still_fails_is_left_out():
+    llm = FakeLlm(answer("j1"), answer("j1"), answer("j1"), "nope", "nope")
+    recs = LlmRanker(llm, batch_size=5).score(jobs(2), PROFILE)
+    assert [rec.job.id for rec in recs] == ["demo:1"]
+    assert len(llm.prompts) == 5
+    assert ids_in(llm.prompts[2]) == ["j1"] and "Engineer 2" in llm.prompts[3]
+
+
+def test_a_bad_answer_names_what_was_wrong():
     with pytest.raises(BadAnswer, match="missing: j2"):
-        LlmRanker(llm, batch_size=5).score(jobs(2), PROFILE)
+        LlmRanker(FakeLlm(), batch_size=5)._read(answer("j1"), {"j1": job("1"), "j2": job("2")})
 
 
 def test_no_jobs_asks_nothing():
@@ -150,7 +157,12 @@ def test_only_filtered_postings_go_to_the_llm_in_batches():
     kept = FilterStep(search, window, JobMatcher(Normalizer()), MemoryDropLog()).run(found)
     llm = FakeLlm()
     RecommendTopJobsStep(
-        LlmRanker(llm, batch_size=2), PROFILE, top_n=10, min_score=0, guard=guard()
+        LlmRanker(llm, batch_size=2),
+        PROFILE,
+        top_n=10,
+        min_score=0,
+        guard=guard(),
+        warnings=MemoryWarningLog(),
     ).run(kept)
     titles = [re.findall(r"Title: (.+)", prompt) for prompt in llm.prompts]
     assert titles == [["Data Engineer", "Senior Data Engineer"], ["Data Engineer II"]]

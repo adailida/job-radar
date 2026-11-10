@@ -1,7 +1,7 @@
 from datetime import date
 
 import pytest
-from fakes import FakePrompter, MemorySpendLog
+from fakes import FakePrompter, MemorySpendLog, MemoryWarningLog
 
 from job_radar.cost import CostCheck, FileSpendLog
 from job_radar.model import (
@@ -124,7 +124,7 @@ def approval(decision=SpendDecision.AUTO, cap=20) -> Approval:
 
 def test_the_fetch_spends_within_the_approval_and_records_it():
     paid, log = Planned(plan()), MemorySpendLog()
-    pages = FetchStep([paid], CRITERIA, WINDOW, [approval()], log).run([])
+    pages = FetchStep([paid], CRITERIA, WINDOW, [approval()], log, MemoryWarningLog(), 100).run([])
     assert paid.caps == [20] and len(pages) == 1
     assert log.written == [Spend(approval=approval(), charged=18, credits_after=100)]
 
@@ -132,7 +132,9 @@ def test_the_fetch_spends_within_the_approval_and_records_it():
 def test_a_skipped_source_fetches_nothing_and_is_recorded():
     paid, log = Planned(plan()), MemorySpendLog()
     skipped = approval(SpendDecision.SKIPPED, cap=0)
-    assert FetchStep([paid], CRITERIA, WINDOW, [skipped], log).run([]) == []
+    assert (
+        FetchStep([paid], CRITERIA, WINDOW, [skipped], log, MemoryWarningLog(), 100).run([]) == []
+    )
     assert paid.caps == [] and log.written == [Spend(approval=skipped)]
 
 

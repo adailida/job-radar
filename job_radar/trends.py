@@ -5,7 +5,6 @@ from calendar import monthrange
 from collections.abc import Iterable, Sequence
 from datetime import date, timedelta
 from decimal import Decimal
-from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from job_radar.history import RunHistory
@@ -21,7 +20,7 @@ from job_radar.model import (
     Window,
     WorkMode,
 )
-from job_radar.seen import FileSeenJobs
+from job_radar.seen import SeenJobs
 
 
 class RunJobs:
@@ -246,23 +245,23 @@ class RunsSource(Protocol):
 class MarketRuns:
     """Reads every completed run's matched jobs, and adds this run's, for the market sections.
 
-    Completed runs' matched jobs come from their `jobs.jsonl`; this run's from
+    Completed runs' matched jobs come from what each kept; this run's from
     its kept output, since it hasn't completed yet. Free: nothing is fetched
-    and no model is asked. Stateless: holds only where runs are read, and this
-    run's jobs, window and searches.
+    and no model is asked. Stateless: holds only where runs and their kept
+    jobs are read, and this run's jobs, window and searches.
     """
 
     def __init__(
         self,
         history: RunHistory,
-        folder: Path,
+        seen: SeenJobs,
         this_run: KeptJobs,
         window: Window,
         config: RunConfig,
     ) -> None:
-        """Keep the run history and its folder, and this run's jobs and facts."""
+        """Keep the run history and the jobs each run kept, and this run's jobs and facts."""
         self._history = history
-        self._folder = folder
+        self._seen = seen
         self._this_run = this_run
         self._window = window
         self._config = config
@@ -270,9 +269,7 @@ class MarketRuns:
     def runs(self) -> list[RunJobs]:
         """Every completed run, oldest last as history lists them, then this run."""
         runs = [
-            RunJobs(
-                run.window, run.config, FileSeenJobs.read(self._folder / run.id / FileSeenJobs.FILE)
-            )
+            RunJobs(run.window, run.config, self._seen.jobs(run.id))
             for run in self._history.runs()
             if run.completed
         ]

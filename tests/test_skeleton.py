@@ -11,6 +11,7 @@ from job_radar.cli import Cli
 from job_radar.clock import Clock
 from job_radar.cost import FileSpendLog
 from job_radar.drop_log import DropLog, FileDropLog
+from job_radar.error_log import ErrorLog, FileErrorLog
 from job_radar.factory import AppFactory
 from job_radar.gaps import (
     CvGaps,
@@ -36,6 +37,8 @@ from job_radar.ranking import JobRanker, KeywordRanker, LlmRanker
 from job_radar.report_renderer import MarkdownRenderer, ReportRenderer
 from job_radar.report_writer import FileReportWriter, ReportWriter
 from job_radar.result import RunCancelled, RunFailed, RunResult, RunSucceeded
+from job_radar.run_lock import FileRunLock, RunLock
+from job_radar.seen import FileSeenJobs, SeenJobs
 from job_radar.settings import SettingsFile
 from job_radar.source_counts import FileSourceCountLog, SourceCountLog
 from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber
@@ -58,10 +61,12 @@ from job_radar.trends import (
     TrendSource,
 )
 from job_radar.usage import FilePendingLog, UsageLimitGuard
+from job_radar.warning_log import FileWarningLog, TerminalWarnings, WarningLog
 from job_radar.words import Words
 
 FOLDER = Path("unused")
-GUARD = UsageLimitGuard(TerminalPrompter(), FilePendingLog(FOLDER))
+WARNINGS = FileWarningLog(FOLDER)
+GUARD = UsageLimitGuard(TerminalPrompter(), FilePendingLog(FOLDER), WARNINGS)
 SEARCH = SearchCriteria(searches=(Search(name="default", roles=("Software Engineer",)),))
 WINDOW = Window(start=date(2026, 10, 29), end=date(2026, 11, 5))
 CHECKPOINTS = FileCheckpoints(FOLDER, WINDOW)
@@ -71,24 +76,26 @@ PROFILE = CandidateProfile(cv="", preferences="")
 CLIENT = BoardClient(httpx.Client())
 
 
-RUNS = MarketRuns(
-    FileRunHistory(FOLDER), FOLDER, CHECKPOINTS, WINDOW, RunConfig(searches=(), sources=())
-)
+HISTORY = FileRunHistory(FOLDER, WARNINGS)
+SEEN = FileSeenJobs(HISTORY, FOLDER, WARNINGS)
+RUNS = MarketRuns(HISTORY, SEEN, CHECKPOINTS, WINDOW, RunConfig(searches=(), sources=()))
 TRENDS = MarketTrends(RUNS, TrendBuilder("month"))
 ASKS = MarketAsks(RUNS, AskBuilder("month", 20, RequirementNames()), WINDOW.end)
 GAP_CACHE = FileGapCache(FOLDER / "gaps.jsonl")
-GAPS = CvGaps(PROFILE, KeywordGapJudge(), GAP_CACHE, GapBuilder(RequirementNames(), 5))
+GAPS = CvGaps(PROFILE, KeywordGapJudge(), GAP_CACHE, GapBuilder(RequirementNames(), 5), WARNINGS)
 
 
 def steps():
     """One of each step, in run order."""
     return [
-        FetchStep([GetroSource("board", CLIENT)], SEARCH, WINDOW, [], FileSpendLog(FOLDER)),
-        ConvertStep({"getro": GetroParser(PlaceCodes())}, FileSourceCountLog(FOLDER)),
+        FetchStep(
+            [GetroSource("board", CLIENT)], SEARCH, WINDOW, [], FileSpendLog(FOLDER), WARNINGS, 100
+        ),
+        ConvertStep({"getro": GetroParser(PlaceCodes())}, FileSourceCountLog(FOLDER), WARNINGS, {}),
         DedupeStep(JobKey(Normalizer(), AtsLinks()), date(2026, 11, 5)),
         FilterStep(SEARCH, WINDOW, JobMatcher(Normalizer()), FileDropLog(FOLDER, Words())),
         DescribeStep({"getro": GetroDescriber("board", CLIENT, HtmlText())}, TerminalPrompter()),
-        RecommendTopJobsStep(RANKER, PROFILE, top_n=10, min_score=40, guard=GUARD),
+        RecommendTopJobsStep(RANKER, PROFILE, 10, 40, GUARD, WARNINGS),
         ReportStep(
             CHECKPOINTS,
             MarkdownRenderer(Words()),
@@ -106,6 +113,7 @@ def steps():
             FileSourceCountLog(FOLDER),
             CHECKPOINTS,
             OpeningGrouper("job_type", ["engineering"], ["climate"]),
+            WARNINGS,
         ),
     ]
 
@@ -136,7 +144,12 @@ IMPLEMENTATIONS = [
     (RunSucceeded(location="report.md", summary=""), RunResult),
     (RunFailed(step="fetch", reason=""), RunResult),
     (RunCancelled(), RunResult),
-    (FileRunHistory(FOLDER), RunHistory),
+    (HISTORY, RunHistory),
+    (SEEN, SeenJobs),
+    (WARNINGS, WarningLog),
+    (TerminalWarnings(TerminalPrompter()), WarningLog),
+    (FileErrorLog(FOLDER), ErrorLog),
+    (FileRunLock(FOLDER), RunLock),
     (TerminalPrompter(), Prompter),
 ]
 

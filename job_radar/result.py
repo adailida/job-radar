@@ -22,14 +22,16 @@ class RunResult(ABC):
 
 @dataclass(frozen=True)
 class RunSucceeded(RunResult):
-    """A run that finished every step: where its report is and what it found."""
+    """A run that finished every step: where its report is, what it found, and its alerts."""
 
     location: str
     summary: str
+    alerts: tuple[str, ...] = ()  # the run's warnings, one line each
 
     def message(self) -> str:
-        """Say what the run found and where the report is."""
-        return f"Run finished: {self.summary}.\nReport: {self.location}"
+        """Say what the run found, each alert, and where the report is."""
+        alerts = "".join(f"- {alert}\n" for alert in self.alerts)
+        return f"Run finished: {self.summary}.\n{alerts}Report: {self.location}"
 
     def exit_code(self) -> int:
         """Exit code for a successful run."""
@@ -38,15 +40,17 @@ class RunSucceeded(RunResult):
 
 @dataclass(frozen=True)
 class RunFailed(RunResult):
-    """A run that stopped at a step: which step, and why."""
+    """A run that stopped at a step: which step, why, and where the details of a bug are."""
 
     step: str
     reason: str
+    details: str | None = None  # the error log of an unexpected error, if any
 
     def message(self) -> str:
         """Say which step failed and why, and that the same command resumes it."""
+        details = f"Unexpected error: details in {self.details}\n" if self.details else ""
         return (
-            f"Run failed at step '{self.step}': {self.reason}\n"
+            f"Run failed at step '{self.step}': {self.reason}\n{details}"
             "The steps that finished are kept. Run the same command again to resume "
             "after the last one."
         )

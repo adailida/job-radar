@@ -2,7 +2,7 @@ import json
 import re
 from datetime import date
 
-from fakes import FakePrompter, guard, job
+from fakes import FakePrompter, MemoryWarningLog, guard, job
 
 from job_radar.checkpoints import FileCheckpoints
 from job_radar.extract import KeywordExtractor, LlmExtractor
@@ -121,17 +121,21 @@ class SetExtractions:
 
 def test_the_step_adds_requirements_and_says_how_many_failed():
     extraction = Extraction(job_id="demo:1", requirements=(), prompt_version="test")
-    prompter = FakePrompter()
-    found = ExtractStep(SetExtractions({"demo:1": extraction}), prompter, guard()).run(
-        [job("1"), job("2")]
-    )
+    prompter, warnings = FakePrompter(), MemoryWarningLog()
+    step = ExtractStep(SetExtractions({"demo:1": extraction}), prompter, guard(), warnings)
+    found = step.run([job("1"), job("2")])
     assert [j.extraction for j in found] == [extraction, None]
-    assert prompter.told == ["The LLM couldn't read the requirements of 1 of 2 jobs."]
+    said = (
+        "The LLM couldn't read the requirements of 1 of 2 jobs: "
+        "they are left out of What employers ask for."
+    )
+    assert prompter.told == [said]
+    assert warnings.messages() == [said]
 
 
 def test_no_jobs_asks_nothing():
     llm = ReadingLlm()
-    assert ExtractStep(extractor(llm), FakePrompter(), guard()).run([]) == []
+    assert ExtractStep(extractor(llm), FakePrompter(), guard(), MemoryWarningLog()).run([]) == []
     assert llm.prompts == []
 
 

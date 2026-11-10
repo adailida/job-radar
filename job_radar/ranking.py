@@ -43,9 +43,11 @@ class LlmRanker:
     Each prompt holds the CV, the preferences and a batch of jobs, each under
     a short id (`j1`, `j2`). The answer must score exactly those ids, 0 to
     100, with a one-line reason. A bad answer is asked again once, with what
-    was wrong; a second bad answer fails. Postings are untrusted text, so the
-    prompt tells the model to treat them as data. Stateless: holds only its
-    model, the batch size and how much of each description it sends.
+    was wrong; if that fails too, the batch is split in half and each half
+    asked on its own, and a job that still fails gets no score. Postings are
+    untrusted text, so the prompt tells the model to treat them as data.
+    Stateless: holds only its model, the batch size and how much of each
+    description it sends.
     """
 
     SYSTEM = (
@@ -92,7 +94,7 @@ class LlmRanker:
         self._description_chars = description_chars
 
     def score(self, jobs: list[Job], profile: CandidateProfile) -> list[Recommendation]:
-        """Score the jobs a batch at a time, in the order given.
+        """Score the jobs a batch at a time, in the order given; jobs that still fail are left out.
 
         When the usage limit stops it, raises `UsageLimitReached` with the
         scores so far and the jobs from the unfinished batch on.
@@ -107,7 +109,7 @@ class LlmRanker:
         return scored
 
     def _batch(self, jobs: list[Job], profile: CandidateProfile) -> list[Recommendation]:
-        """Score one batch, asking once more when the first answer can't be used."""
+        """Score one batch: ask, ask again once, then split in half and try each half."""
         ids = {f"j{number}": job for number, job in enumerate(jobs, start=1)}
         prompt = self._prompt(ids, profile)
         try:
@@ -117,7 +119,13 @@ class LlmRanker:
                 f"{prompt}\n\nYour last answer could not be used: {error}. "
                 "Answer again, scoring every job id exactly once."
             )
-            return self._read(self._llm.complete(self.SYSTEM, again, self.SCHEMA), ids)
+            try:
+                return self._read(self._llm.complete(self.SYSTEM, again, self.SCHEMA), ids)
+            except BadAnswer:
+                if len(jobs) == 1:
+                    return []
+                half = len(jobs) // 2
+                return self._batch(jobs[:half], profile) + self._batch(jobs[half:], profile)
 
     def _prompt(self, ids: dict[str, Job], profile: CandidateProfile) -> str:
         """The prompt for one batch: the person, then each job under its id."""

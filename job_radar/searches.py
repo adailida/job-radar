@@ -55,7 +55,9 @@ class SearchesFile:
     def __init__(self, path: Path) -> None:
         """Keep the path of the user's `profile.yaml`."""
         self._path = path
-        self._file = YamlFile(path)
+        self._file = YamlFile(
+            path, fix=f"Fix it in {path}; examples/profile.example.yaml shows every key"
+        )
 
     def load(self) -> SearchCriteria:
         """Every search in the file, with `common` filled in, in the file's order."""

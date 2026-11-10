@@ -297,6 +297,7 @@ class Report(Model):
 
     location: str  # e.g. a file path
     summary: str  # e.g. "12 recommendations from 340 postings"
+    alerts: tuple[str, ...] = ()  # the run's warnings, one line each, for the terminal
 
 
 class StepCount(Model):
@@ -323,10 +324,27 @@ class SourceSummary(Model):
     skipped: bool = False  # a paid source the user chose to skip this run
 
 
-class Alert(Model):
-    """A problem from the run, shown at the top of the report."""
+class AlertCode(StrEnum):
+    """What kind of problem a warning is about: the run went on despite it."""
 
-    message: str
+    SOURCE_FAILED = "source_failed"  # a source raised after its retries
+    SOURCE_EMPTY = "source_empty"  # a source returned no postings
+    SOURCE_SKIPPED = "source_skipped"  # the user left a paid source out at the cost check
+    NO_NEW_JOBS = "no_new_jobs"  # no new job matched the searches
+    BUDGET_REACHED = "budget_reached"  # a paid source used what its monthly budget had left
+    CREDITS_LOW = "credits_low"  # a paid source has fewer credits left than the setting
+    LLM_FAILED = "llm_failed"  # the LLM couldn't label, read or rank some jobs
+    LLM_PENDING = "llm_pending"  # the usage limit carried jobs over to the next run
+    GAPS_SKIPPED = "gaps_skipped"  # some requirements weren't compared with the CV
+    RUN_UNREADABLE = "run_unreadable"  # an earlier run folder can't be read
+    KEPT_JOBS_UNREADABLE = "kept_jobs_unreadable"  # an earlier run's kept jobs can't be read
+
+
+class Alert(Model):
+    """A problem from the run that didn't stop it: shown at the top of the report and at the end."""
+
+    code: AlertCode
+    message: str  # one sentence, as the user reads it
 
 
 class Opening(Model):
@@ -425,6 +443,7 @@ class SpendDecision(StrEnum):
     AUTO = "auto"  # within every limit
     APPROVED = "approved"  # over a limit, and the user said go ahead
     SKIPPED = "skipped"  # the user chose to leave the source out of this run
+    FAILED = "failed"  # the source failed at the cost check, so it is left out of this run
 
 
 class Approval(Model):
@@ -434,7 +453,9 @@ class Approval(Model):
     estimate: int
     decision: SpendDecision
     cap: int  # the most the fetch may spend: the estimate plus 10%, within the credits left
-    credits_before: int
+    credits_before: int  # 0 when the cost check failed
+    budget_left: int | None = None  # what the monthly budget still allowed; None in older runs
+    failure: str | None = None  # why the cost check failed, when it did
 
 
 class PaidFetch(Model):

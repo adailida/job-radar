@@ -6,17 +6,20 @@ from pathlib import Path
 
 from job_radar import __version__
 from job_radar.clock import Clock
+from job_radar.errors import JobRadarError, SetupError
 from job_radar.factory import AppFactory
 from job_radar.prompter import TerminalPrompter
 from job_radar.secrets import EnvSecrets
 from job_radar.settings import SettingsFile
-from job_radar.yaml_file import ConfigError
 
 
 class Cli:
     """Turns the command line into a call to the app and shows how it ended.
 
-    Stateless: holds only the factory that builds the app.
+    Every way a run can end comes out as a short message and an exit code,
+    never a traceback: a setup error names what's at fault and how to fix it;
+    an unexpected error says where its details were written. Stateless: holds
+    only the factory that builds the app.
     """
 
     LOCAL = Path("local")  # the user's folder: CV, preferences, profile and settings
@@ -26,7 +29,7 @@ class Cli:
         """Entry point of the `job-radar` command: reads the settings, then runs. The exit code."""
         try:
             settings = SettingsFile(Cli.LOCAL / "settings.yaml").load()
-        except ConfigError as error:
+        except SetupError as error:
             print(f"Could not set up the run: {error}")
             return 2
         secrets = EnvSecrets(Path(".env"))
@@ -41,8 +44,8 @@ class Cli:
         """Parse the command line, run the chosen command, and return the exit code.
 
         Exit codes: 0 when the command succeeded or the user called it off, 1
-        when a step failed or a run to delete doesn't exist, 2 when the run
-        could not be set up.
+        when a run failed or stopped, or a run to delete doesn't exist, 2 when
+        the run could not be set up or another run is in progress.
         """
         parser = argparse.ArgumentParser(
             prog="job-radar", description="Job search and job-market trends."
@@ -71,13 +74,39 @@ class Cli:
             return 0
         try:
             app = self._factory.create(demo=args.demo)
-        except Exception as error:
-            # TODO(task 24): name the setting or file at fault, with how to fix it.
-            print(f"Could not set up the run: {str(error) or type(error).__name__}")
+        except SetupError as error:
+            print(f"Could not set up the run: {error}")
             return 2
-        result = app.run()
+        except Exception as error:
+            return self._unexpected("Could not set up the run", error, 2)
+        try:
+            result = app.run()
+        except SetupError as error:
+            print(f"Could not start the run: {error}")
+            return 2
+        except JobRadarError as error:
+            print(f"Run stopped: {error}")
+            return 1
+        except Exception as error:
+            return self._unexpected("Run stopped", error, 1)
+        except KeyboardInterrupt:
+            print(
+                "\nStopped by you. A run that had started is kept: "
+                "run the same command to resume it."
+            )
+            return 1
         print(result.message())
         return result.exit_code()
+
+    def _unexpected(self, what: str, error: Exception, code: int) -> int:
+        """Say in one line that an unexpected error stopped things, and where its details are."""
+        said = JobRadarError.describe(error)
+        try:
+            where = f" Details in {self._factory.error_log().write(error)}"
+        except OSError:
+            where = ""
+        print(f"{what}: unexpected error ({said}).{where}")
+        return code
 
 
 if __name__ == "__main__":

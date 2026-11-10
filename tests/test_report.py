@@ -9,6 +9,7 @@ from fakes import (
     MemoryPendingLog,
     MemorySourceCountLog,
     MemorySpendLog,
+    MemoryWarningLog,
     MemoryWriter,
     NoAsks,
     NoGaps,
@@ -20,6 +21,7 @@ from fakes import (
 
 from job_radar.model import (
     Alert,
+    AlertCode,
     Approval,
     Classification,
     Job,
@@ -234,6 +236,7 @@ def report_step(
     jobs=(),
     sources=None,
     group_by="job_type",
+    warnings=None,
 ) -> ReportStep:
     """A report step over these parts, with nothing to show for trends, asks and gaps."""
     return ReportStep(
@@ -253,6 +256,7 @@ def report_step(
         MemorySourceCountLog(*counts),
         SetKeptJobs(*jobs),
         grouper(group_by),
+        warnings if warnings is not None else MemoryWarningLog(),
     )
 
 
@@ -370,7 +374,7 @@ def test_alerts_are_listed_at_the_top():
     report = ReportContent(
         run=RUN,
         window=NOV,
-        alerts=(Alert(message="JobsPipe returned no postings"),),
+        alerts=(Alert(code=AlertCode.SOURCE_EMPTY, message="JobsPipe returned no postings"),),
         min_score=40,
         recommendations=(),
         funnel=(),

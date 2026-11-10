@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from fakes import MemoryWarningLog
 
 from job_radar.checkpoints import FileCheckpoints
 from job_radar.history import FileRunHistory
@@ -23,6 +24,7 @@ from job_radar.model import (
     WorkMode,
 )
 from job_radar.report_renderer import MarkdownRenderer
+from job_radar.seen import FileSeenJobs
 from job_radar.trends import MarketRuns, MarketTrends, RunJobs, TrendBuilder
 from job_radar.words import Words
 
@@ -236,7 +238,7 @@ def test_the_manifest_keeps_the_runs_config_and_history_reads_it(tmp_path):
     FileCheckpoints(
         folder, Window(start=date(2026, 11, 8), end=date(2026, 11, 9)), config=saved
     ).save("fetch", [])
-    assert FileRunHistory(tmp_path).runs()[0].config == saved
+    assert FileRunHistory(tmp_path, MemoryWarningLog()).runs()[0].config == saved
 
 
 def test_kept_output_reads_the_step_file_before_the_run_completes_and_the_kept_file_after(tmp_path):
@@ -267,7 +269,9 @@ def test_market_trends_add_this_run_to_the_completed_ones(tmp_path):
     window = Window(start=date(2026, 11, 4), end=date(2026, 11, 9))
     this_run = FileCheckpoints(now, window, keep={"extract": "jobs.jsonl"})
     this_run.save("extract", [job("2")])
-    runs = MarketRuns(FileRunHistory(tmp_path), tmp_path, this_run, window, config())
+    history = FileRunHistory(tmp_path, MemoryWarningLog())
+    seen = FileSeenJobs(history, tmp_path, MemoryWarningLog())
+    runs = MarketRuns(history, seen, this_run, window, config())
     trends = MarketTrends(runs, MONTHS).trends()
     assert (trends.periods[-1].postings, trends.periods[-1].covered_days) == (2, 9)
 
