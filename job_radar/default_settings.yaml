@@ -5,7 +5,8 @@
 output: output            # run folders go under output/runs/, demo runs under output/demo/
 lookback_days: 14         # how far back a run may reach: a first run, or after a long break
 new_only: true            # drop jobs an earlier run already found; false ranks them again
-trend_period: month       # week, month or quarter: the periods market trends compare
+trend_period: month       # week, month or quarter: the periods market trends compare,
+                          # and how long the "What employers ask for" window is
 
 llm:
   model: haiku            # the Claude model that scores jobs
@@ -40,6 +41,9 @@ domains:
 recommend:
   top_n: 10               # at most this many jobs in the report
   min_score: 40           # 0 to 100; a lower score is a poor fit and isn't recommended
+
+report:
+  requirements_per_type: 20  # rows per type (skills, tools, certifications, years) in "What employers ask for"
 
 sources:
   getro:

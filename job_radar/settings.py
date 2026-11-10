@@ -22,6 +22,12 @@ class LlmSettings(Model):
     extract_description_chars: int = Field(ge=0)  # how much of each description that reads
 
 
+class ReportSettings(Model):
+    """How the report is laid out."""
+
+    requirements_per_type: int = Field(ge=1)  # rows per type in "What employers ask for"
+
+
 class RecommendSettings(Model):
     """Which scored jobs are recommended."""
 
@@ -74,6 +80,7 @@ class Settings(Model):
     job_types: dict[str, str] = Field(min_length=1)  # name: what the LLM is told it means
     domains: dict[str, str] = Field(min_length=1)  # name: what the LLM is told it means
     recommend: RecommendSettings
+    report: ReportSettings
     sources: SourcesSettings
 
 

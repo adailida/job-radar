@@ -4,6 +4,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from job_radar.asks import AskBuilder, AskSource, MarketAsks, RequirementNames
 from job_radar.ats import AtsLinks
 from job_radar.checkpoints import Checkpoints, FileCheckpoints, RunStats
 from job_radar.cli import Cli
@@ -36,7 +37,14 @@ from job_radar.steps.fetch import FetchStep
 from job_radar.steps.filter import FilterStep
 from job_radar.steps.recommend import RecommendTopJobsStep
 from job_radar.steps.report import ReportStep
-from job_radar.trends import KeptJobs, MarketTrends, TrendBuilder, TrendSource
+from job_radar.trends import (
+    KeptJobs,
+    MarketRuns,
+    MarketTrends,
+    RunsSource,
+    TrendBuilder,
+    TrendSource,
+)
 from job_radar.usage import FilePendingLog, UsageLimitGuard
 from job_radar.words import Words
 
@@ -51,14 +59,11 @@ PROFILE = CandidateProfile(cv="", preferences="")
 CLIENT = BoardClient(httpx.Client())
 
 
-TRENDS = MarketTrends(
-    FileRunHistory(FOLDER),
-    FOLDER,
-    CHECKPOINTS,
-    WINDOW,
-    RunConfig(searches=(), sources=()),
-    TrendBuilder("month"),
+RUNS = MarketRuns(
+    FileRunHistory(FOLDER), FOLDER, CHECKPOINTS, WINDOW, RunConfig(searches=(), sources=())
 )
+TRENDS = MarketTrends(RUNS, TrendBuilder("month"))
+ASKS = MarketAsks(RUNS, AskBuilder("month", 20, RequirementNames()), WINDOW.end)
 
 
 def steps():
@@ -77,6 +82,7 @@ def steps():
             FileSpendLog(FOLDER),
             FilePendingLog(FOLDER),
             TRENDS,
+            ASKS,
             "run",
             WINDOW,
             None,
@@ -95,6 +101,8 @@ IMPLEMENTATIONS = [
     (CHECKPOINTS, RunStats),
     (CHECKPOINTS, KeptJobs),
     (TRENDS, TrendSource),
+    (ASKS, AskSource),
+    (RUNS, RunsSource),
     (RANKER, JobRanker),
     (KeywordRanker(), JobRanker),
     (LLM, Llm),

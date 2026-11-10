@@ -537,7 +537,7 @@ searches:                                 # a job matches if it matches any sear
 
 ### Settings
 
-Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`), `recommend` (`top_n`, `min_score`) and `sources.getro.network`. The others come with their tasks; [job_radar/default_settings.yaml](../job_radar/default_settings.yaml) holds what exists.
+Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`), `recommend` (`top_n`, `min_score`), `report.requirements_per_type` and `sources.getro.network`. The others come with their tasks; [job_radar/default_settings.yaml](../job_radar/default_settings.yaml) holds what exists.
 
 ```yaml
 domains:                    # cause areas or fields: used by the domains filter and report headings
@@ -720,6 +720,8 @@ Before Extract, the run shows how many jobs and calls it is about to make. Above
 2. Deterministic cleanup after: trim, normalize case, strip version numbers
 3. Later, if drift shows: an occasional consolidation pass builds an alias map applied when trends are read. Stored extractions never change
 
+Built (task 21): `RequirementNames` applies the cleanup when "What employers ask for" is counted, not when names are stored: lowercase, hyphens and spacing, outer brackets, quotes and trailing punctuation, a trailing version number of one or two digits ("Python 3.11", "Java 17", while "ISO 27001" stays), a trailing "programming" or "language", and a short alias list (postgres and postgresql, js and javascript, k8s and kubernetes, gcp and google cloud, amazon web services and aws, and a few more). The report shows the most common original spelling.
+
 ### CV
 
 The Extract prompt also runs on the CV text, returning the requirements it covers, with estimated years per skill. Cached by the CV's content hash, so it re-runs only when the CV changes. When a requirement counts as covered: section 10.
@@ -732,7 +734,7 @@ Prompt files live in `llm/prompts/`, each with a version recorded on every class
 
 Input: `history()` (matched jobs from completed runs, with classifications and extractions) plus this run's matched jobs in memory.
 
-Built so far (task 20): the market trends section. `MarketTrends` reads each completed run's `jobs.jsonl`, window and config (searches and sources, now kept in its manifest), adds this run's kept output (the extract step's, read before the run completes), and `TrendBuilder` works out the last six periods with a covered day (`trend_period`: week, month or quarter), a job counting once even if several runs found it. Figures: postings and postings per covered day; remote, hybrid and onsite shares of jobs that say, with the rest counted; salary median and 25th to 75th percentile from yearly USD midpoints (hourly times 2,080, monthly times 12; other currencies left out), and the share listing any salary; the seniority mix of labelled jobs, unknown counted apart. The change compares the latest period with the last complete period before it (percent for postings per day and salary, points for shares); with none, the report says there's nothing to compare yet. Notes list added or removed sources and added, removed or changed searches between runs, from the first period shown. Breakdowns by sector, domain and job type come later.
+Built so far (task 20): the market trends section. `MarketTrends` reads (through `MarketRuns`, since task 21) each completed run's `jobs.jsonl`, window and config (searches and sources, now kept in its manifest), adds this run's kept output (the extract step's, read before the run completes), and `TrendBuilder` works out the last six periods with a covered day (`trend_period`: week, month or quarter), a job counting once even if several runs found it. Figures: postings and postings per covered day; remote, hybrid and onsite shares of jobs that say, with the rest counted; salary median and 25th to 75th percentile from yearly USD midpoints (hourly times 2,080, monthly times 12; other currencies left out), and the share listing any salary; the seniority mix of labelled jobs, unknown counted apart. The change compares the latest period with the last complete period before it (percent for postings per day and salary, points for shares); with none, the report says there's nothing to compare yet. Notes list added or removed sources and added, removed or changed searches between runs, from the first period shown. Breakdowns by sector, domain and job type come later.
 
 ### Periods
 
@@ -769,6 +771,8 @@ Share by sector (free label from Classify), domain and job type: top 10 values, 
 - Share: jobs mentioning the requirement over jobs with an extraction in the window (failed extractions left out)
 - The top `requirements_per_type` per type, with share and change. Years requirements show the median years asked ("Python: 5 years")
 - Traceable through run data: `Extraction.job_id` leads to the job and its postings. A `job-radar trace "Python"` command may come later
+
+Built (task 21): the section, right after "Market trends". `MarketRuns` gives both market sections the same runs (every completed run's `jobs.jsonl`, plus this run's kept output); `MarketAsks` hands their matched jobs to `AskBuilder` with the run's last day. The window is 7, 30 or 91 days for `trend_period` week, month or quarter, ending on the run's last day, and the window before is as long. A job counts on its trend date (as in the trends), once even if several runs found it; jobs whose extraction failed are left out of both the count and the base. Per type (skills, tools, certifications, years), the top `report.requirements_per_type` (20) by jobs asking, ties by name, each with its share and the change in points; a requirement the window before didn't have changes from 0. Years rows show the median of each job's highest years asked ("Python: 5 years"). Each row keeps the ids of the jobs it came from (in the content, not printed). Fewer than 20 jobs with requirements in the window is marked as a low sample; with none in the window before, the report says there's no change yet and leaves the change column out. Free: counting only, no LLM.
 
 ### Experience to gain
 
@@ -1136,4 +1140,9 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Only the usage limit carries jobs over; other LLM errors fail the step | Carry over on any LLM error | A failed step resumes from its saved input; carrying over is for a limit that resets on its own |
 | Each run's searches and sources are kept in its manifest, and trends compare them run to run | Compare against the current profile only | A jump after adding JobsPipe or a search is otherwise read as the market; older manifests without it are skipped |
 | Only periods with a covered day are shown; a job dated in a period no run covered counts nowhere | Show every period back to the oldest posting | A period no run covered has no denominator for postings per day |
+| "What employers ask for" uses a rolling window of 7, 30 or 91 days ending on the run's last day | Calendar periods, as the trends use | Independent of how often the user runs, and not tiny early in a month; the trends already show calendar periods |
+| Requirement names are put in one form when counted, by rules and a short alias list | Cleanup when extracted and stored; merging by LLM | Stored extractions never change, so the rules can improve and old runs count the new way; free and repeatable |
+| Version numbers are dropped only when one or two digits ("Java 17") | Any trailing number | Standards such as ISO 27001 or IEC 62443 keep their number |
+| A job asking a requirement's years twice counts its highest in the median | Every mention | One job, one figure, as with the shares |
+| Both market sections read their runs through one `MarketRuns` | Each section reads the run folders itself | One place knows how runs are read; each section only counts |
 | Everything is a class, no free functions | Module-level functions for small helpers | One way to find any behaviour, and each class names its single responsibility |

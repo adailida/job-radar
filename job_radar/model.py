@@ -322,6 +322,7 @@ class ReportContent(Model):
     spends: tuple["Spend", ...] = ()  # what each paid source spent
     carried_over: int = 0  # jobs carried over to the next run by the usage limit
     trends: "Trends | None" = None  # the market trends section
+    asks: "Asks | None" = None  # the what employers ask for section
 
 
 class DroppedJob(Model):
@@ -464,6 +465,29 @@ class Trends(Model):
     change: TrendChange | None  # None when there's nothing complete to compare with
     notes: tuple[TrendNote, ...]
     low_sample: int  # a figure resting on fewer jobs than this is marked
+
+
+class AskRow(Model):
+    """One requirement in the what employers ask for section, with where it came from."""
+
+    type: RequirementType
+    name: str  # the most common way postings spell it
+    jobs: int  # jobs in the window that ask for it
+    share: float  # of the jobs with requirements in the window, 0 to 1
+    change: float | None  # in points against the window before; None with nothing to compare
+    job_ids: tuple[str, ...]  # the jobs it came from, so it can be traced
+    median_years: float | None = None  # for years rows: the median number asked
+
+
+class Asks(Model):
+    """The what employers ask for section: the top requirements of each type in a window."""
+
+    window: Window  # the rolling window, ending on the run's last day
+    previous: Window  # the window of the same length before it
+    jobs: int  # jobs with requirements in the window
+    previous_jobs: int  # jobs with requirements in the window before; 0 means no change yet
+    rows: tuple[AskRow, ...]  # by type, then most asked first
+    low_sample: int  # fewer jobs than this in the window is a low sample
 
 
 ReportContent.model_rebuild()

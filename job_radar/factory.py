@@ -7,6 +7,7 @@ from pathlib import Path
 import httpx
 
 from job_radar.app import JobRadarApp
+from job_radar.asks import AskBuilder, MarketAsks, RequirementNames
 from job_radar.ats import AtsLinks
 from job_radar.checkpoints import FileCheckpoints
 from job_radar.classify import Classifier, LlmClassifier, TitleClassifier
@@ -50,7 +51,7 @@ from job_radar.steps.match import MatchStep
 from job_radar.steps.new_jobs_filter import NewJobsFilterStep
 from job_radar.steps.recommend import RecommendTopJobsStep
 from job_radar.steps.report import ReportStep
-from job_radar.trends import MarketTrends, TrendBuilder
+from job_radar.trends import MarketRuns, MarketTrends, TrendBuilder
 from job_radar.usage import FilePendingLog, LastRunPending, UsageLimitGuard
 from job_radar.window import WindowPlanner
 from job_radar.window_chooser import WindowChooser
@@ -146,6 +147,9 @@ class AppFactory:
         spend = FileSpendLog(folder)
         pending = FilePendingLog(folder)
         guard = UsageLimitGuard(self._prompter, pending)
+        market = MarketRuns(FileRunHistory(runs), runs, checkpoints, window, config)
+        period = self._settings.trend_period
+        per_type = self._settings.report.requirements_per_type
         steps: list[Step] = [
             FetchStep(parts.sources, parts.criteria, window, approvals, spend),
             ConvertStep({parser.source: parser for parser in parts.parsers}),
@@ -172,14 +176,8 @@ class AppFactory:
                 FileReportWriter(folder),
                 spend,
                 pending,
-                MarketTrends(
-                    FileRunHistory(runs),
-                    runs,
-                    checkpoints,
-                    window,
-                    config,
-                    TrendBuilder(self._settings.trend_period),
-                ),
+                MarketTrends(market, TrendBuilder(period)),
+                MarketAsks(market, AskBuilder(period, per_type, RequirementNames()), window.end),
                 folder.name,
                 window,
                 not_covered,

@@ -23,7 +23,7 @@ from job_radar.model import (
     WorkMode,
 )
 from job_radar.report_renderer import MarkdownRenderer
-from job_radar.trends import MarketTrends, RunJobs, TrendBuilder
+from job_radar.trends import MarketRuns, MarketTrends, RunJobs, TrendBuilder
 from job_radar.words import Words
 
 MONTHS = TrendBuilder("month")
@@ -267,9 +267,8 @@ def test_market_trends_add_this_run_to_the_completed_ones(tmp_path):
     window = Window(start=date(2026, 11, 4), end=date(2026, 11, 9))
     this_run = FileCheckpoints(now, window, keep={"extract": "jobs.jsonl"})
     this_run.save("extract", [job("2")])
-    trends = MarketTrends(
-        FileRunHistory(tmp_path), tmp_path, this_run, window, config(), MONTHS
-    ).trends()
+    runs = MarketRuns(FileRunHistory(tmp_path), tmp_path, this_run, window, config())
+    trends = MarketTrends(runs, MONTHS).trends()
     assert (trends.periods[-1].postings, trends.periods[-1].covered_days) == (2, 9)
 
 

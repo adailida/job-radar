@@ -234,13 +234,22 @@ class TrendSource(Protocol):
         ...
 
 
-class MarketTrends:
-    """Gathers the completed runs and this one, and has the trends worked out for the report.
+@runtime_checkable
+class RunsSource(Protocol):
+    """Gives the runs the market sections look at: every completed run, then this one."""
+
+    def runs(self) -> list[RunJobs]:
+        """The runs, each with its window, searches and matched jobs."""
+        ...
+
+
+class MarketRuns:
+    """Reads every completed run's matched jobs, and adds this run's, for the market sections.
 
     Completed runs' matched jobs come from their `jobs.jsonl`; this run's from
     its kept output, since it hasn't completed yet. Free: nothing is fetched
-    and no model is asked. Stateless: holds only where runs are read, this
-    run's jobs, window and searches, and the builder.
+    and no model is asked. Stateless: holds only where runs are read, and this
+    run's jobs, window and searches.
     """
 
     def __init__(
@@ -250,18 +259,16 @@ class MarketTrends:
         this_run: KeptJobs,
         window: Window,
         config: RunConfig,
-        builder: TrendBuilder,
     ) -> None:
-        """Keep the run history and its folder, this run's jobs and facts, and the builder."""
+        """Keep the run history and its folder, and this run's jobs and facts."""
         self._history = history
         self._folder = folder
         self._this_run = this_run
         self._window = window
         self._config = config
-        self._builder = builder
 
-    def trends(self) -> Trends:
-        """The trends over every completed run, plus this run."""
+    def runs(self) -> list[RunJobs]:
+        """Every completed run, oldest last as history lists them, then this run."""
         runs = [
             RunJobs(
                 run.window, run.config, FileSeenJobs.read(self._folder / run.id / FileSeenJobs.FILE)
@@ -270,4 +277,20 @@ class MarketTrends:
             if run.completed
         ]
         runs.append(RunJobs(self._window, self._config, self._this_run.kept(Job)))
-        return self._builder.build(runs)
+        return runs
+
+
+class MarketTrends:
+    """Has the trends worked out over the runs the market sections look at.
+
+    Stateless: holds only where the runs come from and the builder.
+    """
+
+    def __init__(self, runs: RunsSource, builder: TrendBuilder) -> None:
+        """Keep where the runs come from and the builder."""
+        self._runs = runs
+        self._builder = builder
+
+    def trends(self) -> Trends:
+        """The trends over every completed run, plus this run."""
+        return self._builder.build(self._runs.runs())

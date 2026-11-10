@@ -254,3 +254,23 @@ def test_a_demo_run_reports_market_trends(tmp_path):
     assert "Nothing to compare yet" in report
     manifest = json.loads((tmp_path / "demo" / FIRST_RUN / "manifest.json").read_text())
     assert manifest["config"]["sources"] == ["demo"]
+
+
+def test_a_demo_run_reports_what_employers_ask_for(tmp_path):
+    demo_cli(tmp_path, FakePrompter(True)).main(["run", "--demo"])
+    report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
+    section = report.index("## What employers ask for")
+    assert report.index("## Market trends") < section < report.index("## About this run")
+    assert "In the 30 days from 7 Oct to 5 Nov 2026: 8 matched jobs (low sample)." in report
+    assert "### Tools" in report
+    assert "| Python | 25% (2) |" in report
+    assert "No change yet: no matched job with requirements in the 30 days before." in report
+
+
+def test_how_many_requirements_the_report_lists_is_a_setting(tmp_path):
+    settings = SettingsFile.defaults(output=str(tmp_path), report={"requirements_per_type": 1})
+    factory = AppFactory(settings, tmp_path / "local", FixedClock(10), FakePrompter(True), {})
+    Cli(factory).main(["run", "--demo"])
+    report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
+    tools = report[report.index("### Tools") :].split("\n\n")[1]
+    assert tools.splitlines() == ["| Requirement | Share |", "|---|---|", "| Python | 25% (2) |"]
