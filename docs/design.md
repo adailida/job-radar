@@ -514,7 +514,7 @@ examples/
 
 ### Profile
 
-Built so far: `common` and `searches` with `roles`, `exclude_titles`, `work_mode`, `locations` and `min_salary` (task 11a), and `seniority` and `domains` (task 18a), all but the first two with `if_missing`. `keywords` comes after the describe step (descriptions aren't there when the filter runs). Domain names must be ones the settings define. The CV keeps its fixed names in `local/` (no `cv:` key).
+Built so far: `common` and `searches` with `roles`, `exclude_titles`, `work_mode`, `locations` and `min_salary` (task 11a), and `seniority` and `domains` (task 18a), all but the first two with `if_missing`. `keywords` is deferred after the MVP (owner, Nov 10); built, it would come after the describe step (descriptions aren't there when the filter runs). Domain names must be ones the settings define. The CV keeps its fixed names in `local/` (no `cv:` key).
 
 ```yaml
 cv: cv.pdf
@@ -600,7 +600,7 @@ sources:
 class Prompter(Protocol):
     def tell(self, message: str) -> None: ...     # built in task 4
     def confirm(self, question: str) -> bool: ... # built in task 4: yes or no, yes by default
-    def ask(self, question: str) -> str: ...      # task 12: free text; "" when the user gives none
+    def ask(self, question: str) -> str: ...      # task 12, deferred after the MVP: free text; "" when the user gives none
     def choose(self, question: str, options: Sequence[str], default: str | None = None) -> str: ...  # task 17
 ```
 
@@ -949,6 +949,7 @@ Credits left: 3,180.
 
 - The fetch may spend at most the approved estimate plus 10% (new postings can appear between count and fetch)
 - If it hits that cap, it stops and the source counts as failed, so fetches stay all-or-nothing. Rare, and the credits aren't lost: repeats within the month are free, so the next run gets those jobs again at no cost
+- Built in task 25 (found by the acceptance pass): until then the fetch stopped at the cap and kept what it had. Now reaching the cap with jobs still to fetch, or with a search not yet asked, raises `JobsPipeError` after saying what was spent, and the fetch step warns that JobsPipe failed, as for any failing source
 
 ### Monthly spend
 
@@ -987,7 +988,7 @@ Before a run folder exists, and before any credits or LLM calls, in this order:
 5. The lock is taken (the app, around everything that follows): `output/run.lock` holds the process id; a lock whose process no longer exists is removed; a live one stops the run. It is released when the run ends, however it ends
 6. The newest run, if it failed, is offered for resuming (section 5)
 
-The run folder is created only after the window and the spend are agreed, so a settings typo never leaves a failed run to clean up. Prompting for missing profile fields is task 12; until then a missing or invalid field is a setup error.
+The run folder is created only after the window and the spend are agreed, so a settings typo never leaves a failed run to clean up. Prompting for missing profile fields (task 12) is deferred after the MVP (owner, Nov 10); a missing or invalid field is a setup error that names the file, the key and the fix.
 
 ### Errors (the run stops)
 
@@ -1163,7 +1164,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Salaries show whole thousands ("$129k"); a place that only repeats the work mode is left out | The amounts as posted; every place | Boards post salaries to the cent, and Fast Forward gives "Remote" as a place for remote jobs |
 | Places in the report are separated by "; " | ", " | Places contain commas ("Amsterdam, Netherlands"), so commas between them were ambiguous |
 | Settings are nested from the start (`llm`, `recommend`, `sources`), with only the keys that do something today | Flat keys now, nested later; every key in the sample above now | The file format doesn't change as tasks add keys; a key that does nothing would mislead |
-| `profile.yaml` is required for a real run until terminal prompts (task 12); the demo has its own search in code | Default roles in code when the file is missing | A run without the user's searches sends the wrong jobs to the LLM; a clear error costs one copy of the example |
+| `profile.yaml` is required for a real run (terminal prompts, task 12, deferred after the MVP on Nov 10); the demo has its own search in code | Default roles in code when the file is missing | A run without the user's searches sends the wrong jobs to the LLM; a clear error costs one copy of the example |
 | The settings are read in `Cli.start`, before the factory | The factory reads them | `AppFactory` keeps taking `Settings`, so tests pass settings directly. A bad file still exits with 2 |
 | Fetch and filter take all the searches (`SearchCriteria`); a job is kept if any search matches | One search until task 11 | `profile.yaml` lists several searches; boards with server-side queries (JobsPipe) will need them all |
 | `--settings` and `--profile` flags wait until something needs another path | Add them now | The fixed files in `local/` are enough for one person |

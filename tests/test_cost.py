@@ -87,6 +87,20 @@ def test_over_the_per_run_max_the_user_chooses(answer, decision, cap):
     ]
 
 
+def test_over_a_limit_the_run_shows_the_estimate_both_limits_and_the_credits_left_and_asks():
+    # Acceptance (Cost): over the per-run maximum or the monthly budget, the run shows the
+    # estimate, both limits and the credits left, and asks: go ahead, skip that source, or stop.
+    [approval], prompter = check(plan(estimate=40, budget=30), "g")
+    assert prompter.told == [
+        "jobspipe: about 40 credits for this run "
+        "(per-run max 25, budget left 30, credits left 844)."
+    ]
+    assert prompter.asked == [
+        "That's over the per-run max. Go ahead, skip jobspipe this run, or stop?"
+    ]
+    assert approval.decision is SpendDecision.APPROVED
+
+
 def test_over_the_budget_left_the_user_chooses():
     _, prompter = check(plan(estimate=20, budget=10), "s")
     assert prompter.asked == [

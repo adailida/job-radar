@@ -16,7 +16,7 @@ Anyone looking for a new job, or considering one. Each user runs their own copy.
 
 Two kinds, kept separate:
 
-- **User input**: what's specific to the person. It comes from a file, or the user enters it in the terminal
+- **User input**: what's specific to the person. It comes from files in the user's own folder
   - **CV**: their background, compared against what employers ask for
   - **Search criteria**: roles, locations, filters
 - **Settings**: how runs work, the same for most users. For example: source plans and spend limits, lookback cap, trend period, report grouping, output formats, alert thresholds. Every setting has a default, so a new user only has to provide their user input
@@ -51,7 +51,7 @@ After the MVP
 - **Cost**: paid sources charge per job returned (JobsPipe: 1 credit per job). The settings name the plan for each paid source, which sets the default limits: a monthly budget and a per-run maximum, both adjustable. A run estimates the cost before spending and checks it against the limits and the credits left
 - **LLM**: in the MVP, calls use the user's Claude subscription through Claude Code (`claude -p`), not per-token API billing. So only filtered postings go to the LLM, batched, with a small model. Per-token API billing may replace this later, so the way the LLM is called must be easy to swap
 - **Cadence**: in the MVP the user starts each run, at whatever interval they like. Freshness is not critical
-- **Where it runs**: locally in the terminal in the MVP, and runs are interactive: the user can enter their user input, and confirms spending over a limit and deleting runs. Scheduled, fully automated cloud runs may come later
+- **Where it runs**: locally in the terminal in the MVP, and runs are interactive: the user confirms spending over a limit and deleting runs. Scheduled, fully automated cloud runs may come later
 - **Stack**: Python 3.12+, uv, pytest, ruff
 
 ## Acceptance criteria
@@ -88,15 +88,19 @@ Cost
 
 Runs
 - Each run writes one report and saves its run data. The next run reads that data
-- When a run fails, it asks whether to delete its data. Kept or deleted, a failed run doesn't count toward seen postings, trends or the next run's time window
+- When a run fails, nothing is asked: the next run offers to resume it, and `job-radar delete` removes it. Kept or deleted, a failed run doesn't count toward seen postings, trends or the next run's time window
 - The user can delete any earlier run, after a confirmation prompt. Its postings count as unseen again, and its data drops out of the trends
 - Only filtered postings go to the LLM, in batches
 - A new source can be added with its own settings and, if needed, its own module, without changes to filtering, extraction or the report. Tests use a fake source added the same way
 - Tests run offline, with no network and no credits spent
 
 Problem alerts (in the terminal and at the top of the report)
-- Errors stop the run with a clear message: invalid settings, user input still missing or invalid after the terminal prompt, no source reachable, LLM not available
+- Errors stop the run with a clear message: invalid settings, user input missing or invalid, no source reachable, LLM not available
 - Warnings let the run finish: a source failed or returned nothing, no new postings after filtering, credit budget reached, credits running low (threshold is a setting), LLM failed on some postings
+
+After the MVP (deferred by the owner on Nov 10)
+- Keywords: a search can require the description to mention any of its keywords. Deferred: the owner's searches don't use them, and JobsPipe's description phrases (in its settings filters) cover the need
+- Terminal prompts: the user can enter their user input in the terminal, and a run asks for user input that is missing or invalid before stopping with an error. Deferred: the files exist, and setup errors now say exactly what to fix
 
 ## Non-goals
 

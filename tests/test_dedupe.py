@@ -62,6 +62,16 @@ def test_two_postings_of_one_job_become_one_job():
     assert merged.first_seen == TODAY
 
 
+def test_a_job_found_in_both_sources_appears_once():
+    # Acceptance (Job search): a job found in both sources appears once.
+    fast_forward = posting("1", "Senior Data Engineer", source="getro")
+    jobspipe = posting("9", "Sr. Data Engineer", source="jobspipe").model_copy(
+        update={"company": "Example Org, Inc."}
+    )
+    [job] = DedupeStep(KEY, TODAY).run([fast_forward, jobspipe])
+    assert sorted(p.key for p in job.postings) == ["getro:1", "jobspipe:9"]
+
+
 def test_primary_posting_has_the_longest_description():
     short = posting("1").model_copy(update={"description": "Short.", "salary": SALARY})
     long = posting("2", source="other").model_copy(update={"description": "Much longer text."})

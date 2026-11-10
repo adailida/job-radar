@@ -107,8 +107,8 @@ One line each for now; each task gets its detail, against the class names in arc
   - Fetch and filter take all the searches; a job is kept if any matches. The demo has its own search in code
 - [x] **11a. Search criteria:** excluded titles, work mode, locations (ISO codes, read from the place text by `PlaceCodes`), minimum salary, each with `if_missing`; `JobMatcher` names the criterion a job fails
 - [x] **11b. Dropped by the filter:** a `dropped.md` next to the report, titles by the reason they were dropped, so silent misses show; the report links it
-- [ ] **11c. Keywords:** "the description mentions any", checked after the describe step
-- [ ] **12. Terminal prompts:** ask for missing or invalid profile fields (`Prompter` exists since task 4)
+- [ ] **11c. Keywords:** "the description mentions any", checked after the describe step (deferred after the MVP, Nov 10)
+- [ ] **12. Terminal prompts:** ask for missing or invalid profile fields (`Prompter` exists since task 4) (deferred after the MVP, Nov 10)
 - [x] **13a. Run history:** `job-radar runs` lists runs; `job-radar delete <id>...` and `--all` delete after asking, Enter meaning no; `--demo` for demo runs
 - [x] **13b. Resume:** when the newest run failed, `job-radar run` offers to resume it; `Pipeline` skips the finished steps and loads the last saved output (moved from task 4 on Nov 5: nothing can choose a failed run before this task)
 - [x] **14. Time window in the report:** when the lookback cap cut a gap, the report says so and which dates it covers (the window itself is task 4)
@@ -140,8 +140,12 @@ One line each for now; each task gets its detail, against the class names in arc
 
 ## Phase 3: MVP ready
 
-- [ ] **25. Acceptance pass**
+- [x] **25. Acceptance pass**
   - A checklist mapping every acceptance criterion in requirements.md to its passing test; fill any gaps
+  - [acceptance.md](acceptance.md): 28 MVP criteria, 26 passing, 1 gap, 1 decided by the owner; tests added named after the criteria they prove. Found and fixed: a JobsPipe fetch that reached its cap kept the jobs it had; now it fails as a whole, so a fetch is never partial
+  - Gap left: trends broken down by sector, domain and job type (design.md section 10, "Breakdowns")
+  - Decided by the owner: nothing is asked when a run fails; the next run offers to resume it
+  - Deferred after the MVP by the owner (Nov 10), moved to "After the MVP" in requirements.md: keywords in descriptions (task 11c) and terminal prompts for missing or invalid user input (task 12)
 
 - [ ] **26. Real runs, limited first, and docs**
   - Step 1: Fast Forward with the full settings, a low LLM job limit and a 1-day lookback

@@ -100,15 +100,24 @@ class JobsPipeSource:
         )
 
     def fetch(self, criteria: SearchCriteria, window: Window) -> list[RawPage]:
-        """Pages of every search, at most the per-run max, when no cost check ran."""
+        """Pages of every search, when no cost check ran; more than the per-run max fails."""
         return list(self.fetch_paid(criteria, window, self._per_run_max).pages)
 
     def fetch_paid(self, criteria: SearchCriteria, window: Window, cap: int) -> PaidFetch:
-        """Pages of every search until each runs out or `cap` jobs (and so credits) are reached."""
+        """Pages of every search until each runs out, never more than `cap` jobs (and credits).
+
+        A fetch is never partial: when the cap is reached with jobs still to
+        fetch, it raises `JobsPipeError` instead of giving part of the results.
+        """
         pages: list[RawPage] = []
         budget, charged, left = cap, 0, 0
+        unfinished = False
         for search in criteria.searches:
+            if budget <= 0:
+                unfinished = bool(pages)
+                break
             cursor: str | None = None
+            jobs: list = []
             while budget > 0:
                 if pages:
                     self._client.pause()
@@ -122,10 +131,18 @@ class JobsPipeSource:
                 cursor = metadata.get("next_cursor")
                 if not jobs or not cursor:
                     break
+            if jobs and cursor:
+                unfinished = True
+                break
         found = sum(len(json.loads(page.body)["data"]) for page in pages)
         if not pages:
             left = self._account()["credits_remaining"]
         self._prompter.tell(f"JobsPipe: {found} jobs, {charged} credits used, {left} left.")
+        if unfinished:
+            raise JobsPipeError(
+                f"found more jobs than the {cap} approved, so none are used, as a fetch is "
+                f"all or nothing ({charged} credits used; jobs paid for are free again this month)"
+            )
         return PaidFetch(pages=tuple(pages), charged=charged, credits_left=left)
 
     def query(self, search: Search, window: Window) -> dict:
