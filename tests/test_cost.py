@@ -1,25 +1,29 @@
 from datetime import date
 
 import pytest
-from fakes import FakePrompter, MemorySpendLog, MemoryWarningLog
+from fakes import FakePrompter, MemoryCoverage, MemorySpendLog, MemoryWarningLog
 
 from job_radar.app.cost_check import CostCheck
 from job_radar.models import (
     Approval,
     PaidFetch,
     RawPage,
+    RunWindows,
     Search,
     SearchCriteria,
+    SourceWindow,
     Spend,
     SpendDecision,
     SpendPlan,
     Window,
+    WindowReason,
 )
-from job_radar.pipeline.steps.fetch import FetchStep
+from job_radar.pipeline.steps.fetch import FetchStep, NoSourceData
 from job_radar.storage.spend_log import FileSpendLog
 from job_radar.utils.prompter import TerminalPrompter
 
 WINDOW = Window(start=date(2026, 11, 8), end=date(2026, 11, 9))
+WINDOWS = RunWindows(window=WINDOW)
 CRITERIA = SearchCriteria(searches=(Search(name="s"),))
 
 
@@ -59,7 +63,7 @@ class Planned:
 def check(spend_plan: SpendPlan, *answers: str):
     """The cost check over one source with this plan, and a user giving these answers."""
     prompter = FakePrompter(*answers)
-    return CostCheck([Planned(spend_plan)], CRITERIA, prompter).check(WINDOW), prompter
+    return CostCheck([Planned(spend_plan)], CRITERIA, prompter).check(WINDOWS), prompter
 
 
 def test_within_every_limit_it_goes_ahead_with_ten_percent_to_spare():
@@ -135,9 +139,23 @@ def approval(decision=SpendDecision.AUTO, cap=20) -> Approval:
     return Approval(source="jobspipe", estimate=18, decision=decision, cap=cap, credits_before=844)
 
 
+def fetch(sources, approvals, log, coverage=None, windows=WINDOWS) -> FetchStep:
+    """A fetch step over these sources and approvals, warnings kept in memory."""
+    return FetchStep(
+        sources,
+        CRITERIA,
+        windows,
+        approvals,
+        log,
+        MemoryWarningLog(),
+        100,
+        coverage if coverage is not None else MemoryCoverage(),
+    )
+
+
 def test_the_fetch_spends_within_the_approval_and_records_it():
     paid, log = Planned(plan()), MemorySpendLog()
-    pages = FetchStep([paid], CRITERIA, WINDOW, [approval()], log, MemoryWarningLog(), 100).run([])
+    pages = fetch([paid], [approval()], log).run([])
     assert paid.caps == [20] and len(pages) == 1
     assert log.written == [Spend(approval=approval(), charged=18, credits_after=100)]
 
@@ -152,9 +170,7 @@ class KeptGoing(Planned):
 
 def test_credits_agreed_during_the_fetch_are_recorded_with_what_it_charged():
     log = MemorySpendLog()
-    FetchStep(
-        [KeptGoing(plan())], CRITERIA, WINDOW, [approval()], log, MemoryWarningLog(), 100
-    ).run([])
+    fetch([KeptGoing(plan())], [approval()], log).run([])
     assert log.written == [
         Spend(approval=approval(), charged=38, credits_after=806, extra_approved=20)
     ]
@@ -163,9 +179,7 @@ def test_credits_agreed_during_the_fetch_are_recorded_with_what_it_charged():
 def test_a_skipped_source_fetches_nothing_and_is_recorded():
     paid, log = Planned(plan()), MemorySpendLog()
     skipped = approval(SpendDecision.SKIPPED, cap=0)
-    assert (
-        FetchStep([paid], CRITERIA, WINDOW, [skipped], log, MemoryWarningLog(), 100).run([]) == []
-    )
+    assert fetch([paid], [skipped], log).run([]) == []
     assert paid.caps == [] and log.written == [Spend(approval=skipped)]
 
 
@@ -195,3 +209,147 @@ def test_choose_takes_a_letter_enter_or_no_input_for_the_default():
         TerminalPrompter(read=closed, write=print).choose("Go?", {"g": "go", "s": "skip"}, "s")
         == "s"
     )
+
+
+class Free:
+    """A free board that remembers the window it was asked for; gives pages, nothing, or fails."""
+
+    def __init__(self, name="getro", pages=1, error=None):
+        self.name, self.label, self._pages, self._error = name, "Fast Forward", pages, error
+        self.windows = []
+
+    def fetch(self, criteria, window):
+        self.windows.append(window)
+        if self._error:
+            raise self._error
+        return [RawPage(source=self.name, page=n, body="") for n in range(1, self._pages + 1)]
+
+
+class Empty(Planned):
+    """A paid source that comes back with nothing, as a phrase search that timed out."""
+
+    def fetch_paid(self, criteria, window, cap):
+        return PaidFetch(pages=(), charged=0, credits_left=844)
+
+
+class Remembering(Planned):
+    """A paid source that remembers the window each call was for."""
+
+    def __init__(self, spend_plan: SpendPlan):
+        super().__init__(spend_plan)
+        self.windows = []
+
+    def plan(self, criteria, window):
+        self.windows.append(window)
+        return super().plan(criteria, window)
+
+    def fetch_paid(self, criteria, window, cap):
+        self.windows.append(window)
+        return super().fetch_paid(criteria, window, cap)
+
+
+def covered(sources, approvals) -> dict[str, bool] | None:
+    """What a fetch over these sources and approvals recorded as covered."""
+    coverage = MemoryCoverage()
+    fetch(sources, approvals, MemorySpendLog(), coverage).run([])
+    return coverage.covered
+
+
+def test_a_source_fetched_in_full_is_covered():
+    assert covered([Free(), Planned(plan())], [approval()]) == {"getro": True, "jobspipe": True}
+
+
+def test_a_source_that_failed_is_not_covered():
+    down = Free("jobspipe", error=RuntimeError("HTTP 503"))
+    assert covered([Free(), down], []) == {"getro": True, "jobspipe": False}
+
+
+def test_a_source_skipped_or_failed_at_the_cost_check_is_not_covered():
+    skipped = approval(SpendDecision.SKIPPED, cap=0)
+    assert covered([Free(), Planned(plan())], [skipped]) == {"getro": True, "jobspipe": False}
+    failed = approval(SpendDecision.FAILED, cap=0).model_copy(update={"failure": "HTTP 503"})
+    assert covered([Free(), Planned(plan())], [failed]) == {"getro": True, "jobspipe": False}
+
+
+def test_a_source_empty_although_its_count_found_jobs_is_not_covered_and_says_so():
+    coverage, warnings = MemoryCoverage(), MemoryWarningLog()
+    step = FetchStep(
+        [Free(), Empty(plan())],
+        CRITERIA,
+        WINDOWS,
+        [approval()],
+        MemorySpendLog(),
+        warnings,
+        100,
+        coverage,
+    )
+    step.run([])
+    assert coverage.covered == {"getro": True, "jobspipe": False}
+    assert warnings.messages() == [
+        "JobsPipe returned no postings, though its count found 18: "
+        "the next run fetches these dates again."
+    ]
+
+
+def test_a_paid_source_empty_that_couldnt_count_is_not_covered_and_says_so():
+    uncounted = approval().model_copy(update={"estimated": False, "estimate": 25})
+    coverage, warnings = MemoryCoverage(), MemoryWarningLog()
+    step = FetchStep(
+        [Free(), Empty(plan())],
+        CRITERIA,
+        WINDOWS,
+        [uncounted],
+        MemorySpendLog(),
+        warnings,
+        100,
+        coverage,
+    )
+    step.run([])
+    assert coverage.covered == {"getro": True, "jobspipe": False}
+    assert warnings.messages() == [
+        "JobsPipe returned no postings and couldn't count them first, so its search may "
+        "have timed out: the next run fetches these dates again."
+    ]
+
+
+def test_a_source_genuinely_empty_is_covered():
+    nothing = approval().model_copy(update={"estimate": 0})
+    assert covered([Free(), Empty(plan())], [nothing]) == {"getro": True, "jobspipe": True}
+    assert covered([Free(pages=0), Planned(plan())], [approval()]) == {
+        "getro": True,
+        "jobspipe": True,
+    }
+
+
+def test_a_fetch_where_every_source_failed_records_nothing():
+    coverage = MemoryCoverage()
+    with pytest.raises(NoSourceData):
+        fetch([Free(error=RuntimeError("down"))], [], MemorySpendLog(), coverage).run([])
+    assert coverage.covered is None
+
+
+EARLY = Window(start=date(2026, 10, 28), end=date(2026, 11, 9))
+APART = RunWindows.spanning(
+    [
+        SourceWindow(source="getro", window=WINDOW, reason=WindowReason.SINCE_LAST_RUN),
+        SourceWindow(source="jobspipe", window=EARLY, reason=WindowReason.CATCHING_UP),
+    ]
+)
+
+
+def test_the_fetch_asks_each_source_for_its_own_window():
+    getro, jobspipe = Free(), Remembering(plan())
+    fetch([getro, jobspipe], [approval()], MemorySpendLog(), windows=APART).run([])
+    assert (getro.windows, jobspipe.windows) == ([WINDOW], [EARLY])
+
+
+def test_the_cost_check_plans_each_source_for_its_own_window():
+    jobspipe = Remembering(plan())
+    CostCheck([jobspipe], CRITERIA, FakePrompter()).check(APART)
+    assert jobspipe.windows == [EARLY]
+
+
+def test_the_approval_keeps_whether_the_estimate_was_counted():
+    [counted], _ = check(plan(estimated=True))
+    [guessed], _ = check(plan(estimate=25, estimated=False))
+    assert (counted.estimated, guessed.estimated) == (True, False)

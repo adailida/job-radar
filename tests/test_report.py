@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from fakes import (
     WINDOW,
+    WINDOWS,
     FakeStats,
     MemoryPendingLog,
     MemorySourceCountLog,
@@ -34,14 +35,17 @@ from job_radar.models import (
     Recommendation,
     Report,
     ReportContent,
+    RunWindows,
     Salary,
     Seniority,
     SourceCount,
     SourceSummary,
+    SourceWindow,
     Spend,
     SpendDecision,
     StepCount,
     Window,
+    WindowReason,
     WorkMode,
 )
 from job_radar.pipeline.steps.report import ReportStep
@@ -237,6 +241,7 @@ def report_step(
     sources=None,
     group_by="job_type",
     warnings=None,
+    windows=None,
 ) -> ReportStep:
     """A report step over these parts, with nothing to show for trends, asks and gaps."""
     return ReportStep(
@@ -249,8 +254,7 @@ def report_step(
         NoAsks(),
         NoGaps(),
         RUN,
-        WINDOW,
-        None,
+        WINDOWS if windows is None else windows,
         40,
         {"demo": "Demo board"} if sources is None else sources,
         MemorySourceCountLog(*counts),
@@ -553,3 +557,98 @@ def test_the_terminal_summary_counts_openings_recommended_jobs_and_alerts(
         location=report.location, summary=report.summary, alerts=report.alerts
     ).message()
     assert message == f"Run finished: {summary}.\n{alerts}Report: memory/report.md"
+
+
+CATCHING_UP = RunWindows.spanning(
+    [
+        SourceWindow(
+            source="getro",
+            window=Window(start=date(2026, 11, 10), end=date(2026, 11, 11)),
+            reason=WindowReason.SINCE_LAST_RUN,
+        ),
+        SourceWindow(
+            source="jobspipe",
+            window=Window(start=date(2026, 10, 28), end=date(2026, 11, 11)),
+            reason=WindowReason.CATCHING_UP,
+        ),
+    ]
+)
+
+
+def test_the_header_gives_each_sources_dates_when_they_differ():
+    sources = (
+        SourceSummary(source="getro", name="Fast Forward", postings=400),
+        SourceSummary(source="jobspipe", name="JobsPipe", postings=18, credits=18),
+    )
+    report = ReportContent(
+        run=RUN,
+        window=CATCHING_UP.window,
+        source_windows=CATCHING_UP.sources,
+        sources=sources,
+        min_score=40,
+        recommendations=(),
+        funnel=(),
+    )
+    text = MarkdownRenderer(Words()).render(report)
+    assert (
+        "covers: [2026-10-28, 2026-11-11]\n"
+        "covers_by_source: {getro: [2026-11-10, 2026-11-11], jobspipe: [2026-10-28, 2026-11-11]}\n"
+        "sources: {getro: 400, jobspipe: 18}\n"
+    ) in text
+    assert (
+        "Covers postings from 28 Oct to 11 Nov 2026, each source from where it was last covered:\n"
+        "\n"
+        "- Fast Forward: 10 Nov to 11 Nov 2026, since the last run.\n"
+        "- JobsPipe: 28 Oct to 11 Nov 2026, catching up (missed in the last run).\n"
+        "\n"
+        "Sources: Fast Forward 400 postings, JobsPipe 18 postings (18 credits).\n"
+    ) in text
+
+
+def test_a_source_new_or_cut_by_the_lookback_says_so_in_the_header():
+    first = SourceWindow(
+        source="jobspipe",
+        window=Window(start=date(2026, 10, 28), end=date(2026, 11, 11)),
+        reason=WindowReason.FIRST_RUN,
+    )
+    capped = first.model_copy(
+        update={
+            "reason": WindowReason.CAPPED,
+            "not_covered": Window(start=date(2026, 10, 1), end=date(2026, 10, 27)),
+        }
+    )
+    renderer = MarkdownRenderer(Words())
+    for source, line in [
+        (
+            first,
+            "- jobspipe: 28 Oct to 11 Nov 2026, the last 14 days (not covered by an earlier run).",
+        ),
+        (
+            capped,
+            "- jobspipe: 28 Oct to 11 Nov 2026, the last 14 days only. Not covered: "
+            "1 Oct to 27 Oct 2026 (last covered on 30 Sep, "
+            "and a run reaches back at most 14 days).",
+        ),
+    ]:
+        report = ReportContent(
+            run=RUN,
+            window=source.window,
+            source_windows=(CATCHING_UP.sources[0], source),
+            min_score=40,
+            recommendations=(),
+            funnel=(),
+        )
+        assert line + "\n" in renderer.render(report)
+
+
+def test_the_report_step_gives_each_sources_dates_only_when_they_differ():
+    renderer = KeepingRenderer()
+    report_step(renderer, windows=CATCHING_UP).run([])
+    assert renderer.content.window == CATCHING_UP.window
+    assert renderer.content.source_windows == CATCHING_UP.sources
+    same = RunWindows.spanning(
+        [s.model_copy(update={"window": WINDOW, "reason": None}) for s in CATCHING_UP.sources]
+    )
+    report_step(renderer, windows=same).run([])
+    assert renderer.content.source_windows == ()
+    assert "covers_by_source" not in MarkdownRenderer(Words()).render(renderer.content)

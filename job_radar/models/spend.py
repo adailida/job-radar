@@ -31,6 +31,7 @@ class Approval(Model):
 
     source: str
     estimate: int
+    estimated: bool = True  # False when the source couldn't count, and the estimate is ask_above
     decision: SpendDecision
     cap: int  # the most the fetch may spend: the estimate plus 10%, within the credits left
     credits_before: int  # 0 when the cost check failed

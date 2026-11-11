@@ -43,12 +43,15 @@ Tests are written `file::test name`, all under `tests/`. Check them with `uv run
    - `test_seen.py::test_the_step_drops_jobs_with_any_seen_key`
    - `test_seen.py::test_with_new_only_off_every_job_passes`
    - `test_report.py::test_the_report_lists_every_new_matching_job_by_group`
-4. **A run never looks further back than the lookback cap (2 weeks by default); when the last run is older, the report says so and which dates it covers.** Passing
+4. **A run never looks further back than the lookback cap (2 weeks by default), for any source; when a source was last covered before the cap, the report says so and which dates it covers.** Passing. Reworded Nov 11 for per-source windows (owner to confirm)
    - `test_window.py::test_run_never_reaches_further_back_than_the_lookback`
    - `test_window.py::test_capped_run_asks_and_says_why`
    - `test_window.py::test_a_capped_run_names_the_days_it_leaves_out`
+   - `test_window.py::test_catching_up_never_reaches_further_back_than_the_lookback`
+   - `test_window.py::test_a_source_last_covered_before_the_lookback_says_which_days_it_leaves_out`
    - `test_cli.py::test_a_run_after_a_long_break_says_in_the_report_which_days_it_missed`
    - `test_report.py::test_a_long_break_is_noted_with_the_days_left_out`
+   - `test_report.py::test_a_source_new_or_cut_by_the_lookback_says_so_in_the_header`
 5. **Each job in the report shows title, company, location or remote, salary if posted, source, and a link to the posting.** Passing
    - `test_report.py::test_each_job_shows_title_company_location_or_remote_salary_if_posted_source_and_link`
    - `test_report.py::test_markdown_report_matches_the_golden_file`
@@ -137,8 +140,17 @@ Tests are written `file::test name`, all under `tests/`. Check them with `uv run
    - `test_cli.py::test_each_run_writes_one_report_and_saves_its_run_data`
    - `test_cli.py::test_next_run_fetches_since_the_last_one_without_asking`
    - `test_checkpoints.py::test_complete_keeps_manifest_and_report`
-2. **When a run fails, nothing is asked: the next run offers to resume it, and `job-radar delete` removes it; kept or deleted, a failed run doesn't count toward seen postings, trends or the next run's time window.** Decided by the owner: the criterion used to say a failed run asks whether to delete its data; requirements.md was reworded on Nov 10 to match the decision (design.md decisions: "The next run offers to resume a failed run; nothing is asked when it fails"). The rest is passing
+2. **When a run fails, nothing is asked: the next run offers to resume it, and `job-radar delete` removes it; kept or deleted, a failed run doesn't count toward seen postings, trends or the next run's time windows; nor does a source that failed, was skipped or came back empty although its count found jobs (or, for a paid source, couldn't count), so the next run fetches its dates again.** Decided by the owner: the criterion used to say a failed run asks whether to delete its data; requirements.md was reworded on Nov 10 to match the decision (design.md decisions: "The next run offers to resume a failed run; nothing is asked when it fails"). Reworded again Nov 11 for per-source coverage (owner to confirm). The rest is passing
    - `test_history.py::test_failed_run_doesnt_count_toward_the_next_window`
+   - `test_history.py::test_a_failed_run_covers_no_source`
+   - `test_history.py::test_a_source_counts_as_covered_only_by_the_runs_that_covered_it`
+   - `test_history.py::test_deleting_a_run_drops_its_coverage`
+   - `test_cost.py::test_a_source_that_failed_is_not_covered`
+   - `test_cost.py::test_a_source_skipped_or_failed_at_the_cost_check_is_not_covered`
+   - `test_cost.py::test_a_source_empty_although_its_count_found_jobs_is_not_covered_and_says_so`
+   - `test_cost.py::test_a_paid_source_empty_that_couldnt_count_is_not_covered_and_says_so`
+   - `test_cost.py::test_a_source_genuinely_empty_is_covered`
+   - `test_window.py::test_each_source_gets_its_own_window_from_where_it_was_last_covered`
    - `test_seen.py::test_a_failed_runs_jobs_are_not_seen`
    - `test_trends.py::test_a_failed_run_doesnt_count_toward_the_trends`
    - `test_cli.py::test_a_failed_demo_run_is_resumed_by_the_same_command`

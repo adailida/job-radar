@@ -55,14 +55,16 @@ A run that stops with an error writes no report. The terminal shows why, and the
 
 ### Time window
 
-A run fetches postings from the start of its window to today. Windows are whole days: postings usually carry only a date, so a time of day would add precision the data doesn't have.
+A run fetches postings from the start of its window to today. Windows are whole days: postings usually carry only a date, so a time of day would add precision the data doesn't have. Each source has its own window (built after the MVP), from the dates it last covered in full; the run's window spans them, from the earliest source's start to today.
 
-- First run: the window is the lookback (a setting, 2 weeks by default)
-- Later runs: the window starts one day before the last completed run's last day. That day is fetched again because the last run may have been early in it, and the day before because boards can list a posting a day after its date. Repeats cost nothing on Fast Forward or on JobsPipe (repeats within a month are free), and recognising jobs already seen removes them (task 15). A failed or deleted run doesn't count
-- If the last completed run is older than the lookback, the window is the lookback, and the report says so and which dates it covers (task 14)
+- First run, or a source no completed run covered in full: its window is the lookback (a setting, 2 weeks by default)
+- Later runs: a source's window starts one day before the last day of the last completed run that covered it in full. That day is fetched again because that run may have been early in it, and the day before because boards can list a posting a day after its date. Repeats cost nothing on Fast Forward or on JobsPipe (repeats within a month are free), and recognising jobs already seen removes them (task 15). A failed or deleted run doesn't count
+- Covered in full: the fetch step got everything the source had for its window. Not covered: it failed, it was skipped or failed at the cost check, or it came back with nothing although its count (a paid source's counted estimate) found jobs. A source that came back with nothing and no count saying otherwise is covered, with the usual warning. The fetch step records each source's coverage in the manifest
+- A source the newest completed run didn't cover catches up: its window starts from where it was last covered, so its missed dates are fetched again without redoing the other sources or deleting the run. Jobs already seen are still dropped, so a catch-up never shows a job twice
+- If a source was last covered before the lookback, its window is the lookback, and the report says so and which dates it leaves out (task 14)
 - With "new data only" turned off, the window is always the lookback
-- Before anything is fetched, the terminal says which dates the run covers and why. On a first run, or after a long break, it asks to continue, since the run reaches back further than usual; after a recent run it goes ahead. "n" runs nothing and creates no run folder
-- A board that returns everything it has (Fast Forward) is cut to the window by the filter: jobs dated before it are dropped, jobs with no date are kept
+- Before anything is fetched, the terminal says which dates the run covers and why: once when every source shares them, else a line per source ("JobsPipe: Oct 27 to Nov 5, catching up (not covered in the last run; last covered on Oct 28)."). When a source was never covered, or was last covered before the lookback, it asks to continue, since the run reaches back further than usual; otherwise it goes ahead. "n" runs nothing and creates no run folder
+- A board that returns everything it has (Fast Forward) is cut to its window by the filter: jobs whose postings are all dated before their source's window are dropped, jobs with no date are kept
 
 ### Stages
 
@@ -74,7 +76,7 @@ flowchart LR
 The first real run has six steps: fetch, convert (Fetch above, split in two), dedupe, filter, recommend (new: the top N against the CV and preferences) and report. The other stages become steps the same way, one task each.
 
 1. **Load**: read the settings (defaults merged with the user's file) and the user input (CV, search criteria). Prompt in the terminal for anything missing; stop with an error if it is still invalid
-2. **Plan**: for each source, turn each search into that source's query and set the time window (see above). Paid sources also get the credits left and a match count, estimate the cost, check it against the limits, and ask the user when it is over
+2. **Plan**: for each source, turn each search into that source's query and set its own time window (see above). Paid sources also get the credits left and a match count, estimate the cost, check it against the limits, and ask the user when it is over
 3. **Fetch**: each source fetches in full or not at all. Its adapter turns raw records into `Posting`s. Raw responses are saved with the run data
 4. **Dedupe**: merge the same job found in more than one source, then drop postings seen in earlier runs (unless the setting turns this off). Jobs left pending by the last completed run are added here (section 9)
 5. **Filter**: apply the criteria on source fields (title, keywords, location, work mode, salary) to every job, whatever the source applied server-side. A job passes if it can still match some search
@@ -254,6 +256,18 @@ class Window:               # dates a run covers, both ends included; start afte
     start: date
     end: date
 
+class SourceWindow:         # one source's dates in a run, kept in the manifest
+    source: str
+    window: Window
+    reason: WindowReason | None  # first_run | since_last_run | catching_up | capped
+    not_covered: Window | None   # days the lookback left out, before its window
+    covered: bool               # set by the fetch step: fetched in full
+
+class RunWindows:           # what the app agrees and the pipeline is built for
+    window: Window          # spans every source's window
+    not_covered: Window | None   # when every source shares it
+    sources: tuple[SourceWindow, ...]
+
 class RawPage:              # one page as a job board returned it, before parsing
     source: str
     page: int
@@ -381,7 +395,7 @@ output/                        (setting; default ./output, gitignored)
       11-extract.jsonl         the same jobs, with their requirements
       12-recommend.jsonl       the top N recommendations at or above the minimum score
       13-report.jsonl          the Report: where it is, one-line summary
-      manifest.json            schema version; the window and any days a long break left out; each finished step and its count, in order
+      manifest.json            schema version; the window and any days a long break left out; each source's window and whether it was covered in full; each finished step and its count, in order
       report.md                this run's report
       dropped.md               what the filter dropped, grouped by why
       jobs.jsonl               after success: the extract step's output (matched jobs, labels, requirements), kept so later runs know these jobs
@@ -420,8 +434,8 @@ The CV cache and the spend ledger are not part of any run: deleting runs leaves 
 ### Progress and resume
 
 - After each step, the pipeline saves its output and adds the step and its count to `manifest.json`. A step listed there is finished
-- The manifest also records the run's window, and once every step has finished, that the run completed. Run history reads both: the next run's window starts from the last completed one
-- A failed run keeps every file. When the newest run failed, the next `job-radar run` (or `run --demo`) asks "Resume it?" (Enter for yes): yes reruns it in its folder with its window, skipping the finished steps and starting at the step that failed; no starts a new run and leaves the failed one, which never counts toward the next window. Only the newest run is offered
+- The manifest also records the run's window, each source's own window and, once the fetch step has run, whether it covered that source in full, and once every step has finished, that the run completed. Run history reads them: each source's next window starts from the last completed run that covered it. Version 3 added the sources; a version 2 manifest counts as covering its window for every source its config lists (every source when it lists none), as before
+- A failed run keeps every file. When the newest run failed, the next `job-radar run` (or `run --demo`) asks "Resume it?" (Enter for yes): yes reruns it in its folder with its windows, skipping the finished steps and starting at the step that failed; no starts a new run and leaves the failed one, which never counts toward the next window. Only the newest run is offered
 - Outputs pass between steps in memory. A resumed run starts with nothing in memory, so it loads the last saved output from disk once, then carries on in memory
 - Writes go to a temp file, then rename, so a crash never leaves half a file
 
@@ -443,7 +457,8 @@ class ReportWriter(Protocol):       # where the finished report goes
 
 - `FileCheckpoints` implements both `Checkpoints` and `RunStats`; `FileReportWriter` writes `report.md`. `AppFactory` creates them with the run's folder, so they never start or track a run: they are born for one
 - Only `Pipeline` uses `Checkpoints`. `ReportStep` gets the same object as `RunStats`, so it can read the counts but not save or delete
-- `RunHistory` is read-only and starts with one method, `last_window()`, which `FileRunHistory` reads from the manifests. Listing runs (`runs()`) came with task 13a; deleting is `RunFolders`, a separate class, since it changes the folders
+- `RunHistory` is read-only and starts with one method, `last_window()`, which `FileRunHistory` reads from the manifests. Listing runs (`runs()`) came with task 13a, and `last_covered(source)`, a source's window in the last completed run that covered it, with per-source coverage; deleting is `RunFolders`, a separate class, since it changes the folders, and a deleted run's coverage goes with it
+- `FileCheckpoints` also implements `CoverageLog` (`record(covered)`), which the fetch step uses to mark each source covered or not in the manifest; a fetch done again on resume replaces it
 
 ### Keeping other backends possible (SQLite later)
 
@@ -814,7 +829,7 @@ All numbers, sort orders, grouping and wording choices are made before the rende
 
 Built (task 23): every section, always present, in this order: Alerts, Recommended jobs, New openings, Market trends, What employers ask for, Experience to gain, About this run. A section with nothing to show says so ("None." under Alerts).
 
-- Header: the window, any days a long break left out, then a sources line: "Sources: Fast Forward 200 postings, JobsPipe 18 postings (18 credits)." The convert step records each source's postings (zero included) in `source_counts.jsonl`; credits come from the spend log, and a skipped paid source reads "JobsPipe skipped by you". Front matter adds `sources` (by source key), `new_openings`, `recommended` and `alerts`
+- Header: the window, a line per source with its own dates and why when the sources' dates differ ("JobsPipe: 28 Oct to 11 Nov 2026, catching up (missed in the last run)."; front matter `covers_by_source`), any days a long break left out, then a sources line: "Sources: Fast Forward 200 postings, JobsPipe 18 postings (18 credits)." The convert step records each source's postings (zero included) in `source_counts.jsonl`; credits come from the spend log, and a skipped paid source reads "JobsPipe skipped by you". Front matter adds `sources` (by source key), `new_openings`, `recommended` and `alerts`
 - Alerts: the run's warnings, one line each, from `warnings.jsonl` (task 24, section 13); "None." when there are none
 - New openings: every matched job of this run (the extract step's kept output, carried-over jobs included), one line each: title, company, work mode, places, salary, posted date, the score when it was recommended, and a link per posting. `OpeningGrouper` puts them under `report.group_by` (`job_type` by default, `domain`, or `both`: domains as subheadings inside job types), names as the settings write them, in the settings' order, then "Other" (a label the settings don't have), then "Not labelled" (no label, or the LLM couldn't label it); empty groups are left out, newest posted first
 - Links are labelled with each source's name for people (`label` on the source: "Fast Forward" for Getro network 997, "JobsPipe", "Demo board"); the data keeps the source keys. The paid sources lines use the same names
@@ -825,8 +840,9 @@ The full content, section by section as later tasks add them:
 ```python
 class ReportContent(Model):
     run: str                      # the header: the run, the window covered, any lookback note
-    window: Window
+    window: Window                # spans every source's window
     not_covered: Window | None
+    source_windows: tuple[SourceWindow] # each source's own dates, only when they differ
     sources: tuple[SourceSummary] # name for people, postings, credits or skipped
     alerts: tuple[Alert]
     min_score: int
@@ -923,7 +939,7 @@ Fetched 1,890. Merged 37. Already seen 1,402. Filtered out 389. Classified 62. M
 
 Applies to `PaidSource`s only; free sources skip it.
 
-Built (task 17), with two changes from the plan below, both from the JobsPipe API check: the estimate is free (`POST /v1/jobs/export/estimate` per search, added up), not count queries at 1 credit each; and monthly spend comes from `GET /v1/account` (free), so there is no ledger. The check runs in `JobRadarApp` after the window is agreed and before the run folder exists, so stopping leaves nothing behind; a resumed run checks again (free). When JobsPipe can't count a search (slow phrase searches time out), the estimate is the ask-above limit. Seen Nov 9: `/v1/account` lagged the credits left that searches report (867 against 844); the fetch records the search's own figure.
+Built (task 17), with two changes from the plan below, both from the JobsPipe API check: the estimate is free (`POST /v1/jobs/export/estimate` per search, added up), not count queries at 1 credit each; and monthly spend comes from `GET /v1/account` (free), so there is no ledger. The check runs in `JobRadarApp` after the windows are agreed and before the run folder exists, each paid source for its own window, so stopping leaves nothing behind; a resumed run checks again (free). When JobsPipe can't count a search (slow phrase searches time out), the estimate is the ask-above limit. Seen Nov 9: `/v1/account` lagged the credits left that searches report (867 against 844); the fetch records the search's own figure.
 
 ### Limits from the plan
 
@@ -973,7 +989,7 @@ Credits left: 3,180.
 
 ### Recorded and alerted
 
-- `spend.jsonl` records each paid source's approval (the estimate, credits before, what the monthly budget still allowed, the decision: `auto`, `approved`, `skipped`, or `failed` when the cost check itself failed) and what the fetch charged and left, with the credits agreed during the fetch past the cap (`extra_approved`, 0 when none); the report says them as "20 more approved by you during the fetch"
+- `spend.jsonl` records each paid source's approval (the estimate and whether the source could count it, credits before, what the monthly budget still allowed, the decision: `auto`, `approved`, `skipped`, or `failed` when the cost check itself failed) and what the fetch charged and left, with the credits agreed during the fetch past the cap (`extra_approved`, 0 when none); the report says them as "20 more approved by you during the fetch"
 - Warnings (built, task 24): credits left after the fetch below `alerts.low_credits` (100 by default); the monthly budget reached (the fetch charged at least what the budget had left); a source skipped by you at the cost check
 - A paid source whose cost check fails (JobsPipe down, say) is told in the terminal and left out of the run as `failed`; the fetch step warns about it like any failed source, so the free sources still run
 - Later, for scheduled runs: with no one to ask, over a limit means skip the source
@@ -1027,7 +1043,7 @@ A source fails when it raises after its retries. `BoardClient` says why in a few
 | Code | Recorded by | Example message |
 |---|---|---|
 | `source_failed` | fetch step | JobsPipe failed: HTTP 503 after 3 retries. Its postings are not in this run. |
-| `source_empty` | fetch step (no pages), convert step (pages with no postings) | Fast Forward returned no postings. |
+| `source_empty` | fetch step (no pages), convert step (pages with no postings) | Fast Forward returned no postings. With a counted estimate above 0: JobsPipe returned no postings, though its count found 46: the next run fetches these dates again. |
 | `source_skipped` | fetch step | JobsPipe skipped by you at the cost check: its postings are not in this run. |
 | `budget_reached` | fetch step | JobsPipe monthly budget reached: this run used 120 credits, and the budget had 120 left this month. |
 | `credits_low` | fetch step | JobsPipe credits running low: 80 left (alerts.low_credits is 100). |
@@ -1230,3 +1246,4 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Defaults in a committed `config/`, the user's overrides and personal files in a gitignored `config_local/`, and a committed `config_local_example/` that mirrors `config_local/` file for file | Examples beside the defaults in `config/` (PR #32); defaults inside the package (`job_radar/default_settings.yaml`), examples in `examples/`, personal files in `local/` and keys in `.env` at the repo root (the earlier layout) | Changed Nov 11 (PR #33): `config/` holds only what the app reads, so it is plain which files are defaults. Set up by copying one folder (`cp -r config_local_example config_local`) and editing, with every file already under its right name. Keys live in `config_local/` too, so one ignored folder holds everything personal |
 | The demo runs on `config_local_example/`: its searches, CV and preferences, read by `SearchesFile` and `ProfileLoader` | A demo search and profile as constants in code (`--demo` before PR #33) | The demo shows what a fresh copy of the example would do, through the same readers as a real run, so the example files are tested on every demo run and can't go stale. The demo keeps its made-up board, keyword scoring and `output/demo/` |
 | Per-run limits are named for what they do: `llm.ask_above_jobs` and `sources.jobspipe.ask_above_credits` (were `max_jobs_per_run`); reaching the JobsPipe cap with jobs left asks to keep going for another cap's worth, within the credits left, and the spend record keeps the credits agreed during the fetch | Keep the names; fail the source at the cap, as since task 25 | Changed Nov 11 at the owner's ask: "max" read as a cut, but both limits only ask first. A slow phrase search can't be counted, so its cap is a guess, and failing at it wasted the credits spent for that run. Asking keeps the fetch all or nothing and every credit agreed to |
+| Each source tracks the dates it covered in full, in the manifest (version 3), and gets its own window from them; the run's window spans the sources' windows. A source that failed, was skipped or came back empty although its count found jobs (or, for a paid source, couldn't count) catches up in the next run | One window for every source, the whole window counting as covered once the run completes; deleting the run to recover a source's missed dates | Changed Nov 11 at the owner's ask: JobsPipe answered a 14-day phrase search with no jobs (its search silently timed out) and the run completed on Fast Forward's postings, so JobsPipe's dates were lost. Deleting the run redid the good sources and the LLM work. A paid source that comes back empty without a count is not covered either, as that is how the timeout looked (re-fetching an empty window costs nothing); a free source with nothing is still covered. Older manifests count as covering every source they list, as before |

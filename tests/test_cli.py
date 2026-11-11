@@ -1,12 +1,11 @@
 import json
 from datetime import date
 
-from fakes import EXAMPLE, WINDOW, FakePrompter, FakeStep, FixedClock, NoCost, NoLock
+from fakes import EXAMPLE, WINDOW, WINDOWS, FakePrompter, FakeStep, FixedClock, NoCost, NoLock
 
 from job_radar.app.app_factory import AppFactory
 from job_radar.app.job_radar_app import JobRadarApp
 from job_radar.app.run_result import RunCancelled, RunFailed, RunSucceeded
-from job_radar.app.window import WindowPlan, WindowReason
 from job_radar.cli import Cli
 from job_radar.config.profile_loader import ProfileError
 from job_radar.config.settings import SettingsFile
@@ -42,7 +41,7 @@ class FailingFactory:
             [step], FileCheckpoints(self._folder, WINDOW), FileErrorLog(self._folder)
         )
         return JobRadarApp(
-            NoResume(), FixedWindow(), NoCost(), lambda window, gap, run_id, ok: pipeline, NoLock()
+            NoResume(), FixedWindow(), NoCost(), lambda windows, run_id, ok: pipeline, NoLock()
         )
 
 
@@ -57,7 +56,7 @@ class FixedWindow:
     """Agrees the same window every time, without asking."""
 
     def choose(self):
-        return WindowPlan(window=WINDOW, reason=WindowReason.FIRST_RUN)
+        return WINDOWS
 
 
 class BrokenFactory:
@@ -173,6 +172,21 @@ def test_next_run_fetches_since_the_last_one_without_asking(tmp_path):
     counts = {step["step"]: step["count"] for step in manifest["steps"]}
     # The first run found 5 of the 12 jobs: only the 7 it didn't keep are new.
     assert (counts["convert"], counts["new_jobs_filter"], counts["filter"]) == (12, 7, 0)
+
+
+def test_a_run_records_each_sources_dates_and_that_it_covered_them(tmp_path):
+    demo_cli(tmp_path, FakePrompter(True)).main(["run", "--demo"])
+    manifest = json.loads((tmp_path / "demo" / FIRST_RUN / "manifest.json").read_text())
+    assert manifest["version"] == 3
+    assert manifest["sources"] == [
+        {
+            "source": "demo",
+            "window": {"start": "2026-10-22", "end": "2026-11-05"},
+            "reason": "first_run",
+            "not_covered": None,
+            "covered": True,
+        }
+    ]
 
 
 def test_the_report_lists_every_matching_posting_not_seen_in_an_earlier_run(tmp_path, capsys):

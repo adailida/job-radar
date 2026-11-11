@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Literal, Protocol, runtime_checkable
 
-from job_radar.models import Model, RunConfig, StepCount, Window
+from job_radar.models import Model, RunConfig, SourceWindow, StepCount, Window
 
 
 @runtime_checkable
@@ -43,12 +43,27 @@ class RunStats(Protocol):
         ...
 
 
-class Manifest(Model):
-    """What a run folder says about its run: its window, its steps, whether it completed."""
+@runtime_checkable
+class CoverageLog(Protocol):
+    """Records which sources a run covered in full, so the next run knows where each starts."""
 
-    version: Literal[2] = 2  # changed when the saved models change shape
-    window: Window
+    def record(self, covered: Mapping[str, bool]) -> None:
+        """Record, for each source fetched, whether it was covered in full."""
+        ...
+
+
+class Manifest(Model):
+    """What a run folder says about its run: its windows, its steps, whether it completed.
+
+    Version 3 added each source's own dates and whether the run covered
+    them; a version 2 manifest has none, and counts as covering its window
+    for every source it lists.
+    """
+
+    version: Literal[2, 3] = 3  # changed when the saved models change shape
+    window: Window  # spans every source's window
     not_covered: Window | None = None  # days a long break left out, before the window
+    sources: tuple[SourceWindow, ...] = ()  # each source's dates and coverage; () in version 2
     config: RunConfig | None = None  # what the run searched for and where; None in older runs
     completed: bool = False
     steps: tuple[StepCount, ...] = ()  # each finished step and its count, in order
@@ -59,9 +74,10 @@ class FileCheckpoints:
 
     One JSON Lines file per step, numbered in the order the steps ran
     (`01-fetch.jsonl`, `02-convert.jsonl`), plus `manifest.json` with the run's
-    window, each finished step and its count, and whether the run completed.
-    Holds only its folder, the run's window, the days it didn't cover, what to
-    keep and what the run searches for; the files are the state.
+    windows, which sources it covered, each finished step and its count, and
+    whether the run completed. Holds only its folder, the run's windows, the
+    days it didn't cover, what to keep and what the run searches for; the
+    files are the state.
     """
 
     MANIFEST = "manifest.json"
@@ -73,18 +89,21 @@ class FileCheckpoints:
         not_covered: Window | None = None,
         keep: Mapping[str, str] | None = None,
         config: RunConfig | None = None,
+        sources: Sequence[SourceWindow] = (),
     ) -> None:
         """Keep the run folder, its window, the days a long break left out, and what to keep.
 
         `keep` names steps whose output stays after the run completes, and the
         file it stays as: `{"filter": "jobs.jsonl"}`. `config` is what the run
-        searches for and where, recorded in the manifest.
+        searches for and where, and `sources` each source's own dates, both
+        recorded in the manifest.
         """
         self._folder = folder
         self._window = window
         self._not_covered = not_covered
         self._keep = dict(keep or {})
         self._config = config
+        self._sources = tuple(sources)
 
     def has(self, step: str) -> bool:
         """Whether the manifest lists this step as finished."""
@@ -150,11 +169,36 @@ class FileCheckpoints:
         """Every finished step and its count, from the manifest."""
         return list(self._manifest().steps)
 
+    def record(self, covered: Mapping[str, bool]) -> None:
+        """Mark each source covered or not in the manifest; a fetch done again replaces it.
+
+        A source without dates of its own, as in a resumed older run, is added
+        with the run's window.
+        """
+        manifest = self._manifest()
+        sources = list(manifest.sources)
+        names = [source.source for source in sources]
+        for name, done in covered.items():
+            if name in names:
+                position = names.index(name)
+                sources[position] = sources[position].model_copy(update={"covered": done})
+            else:
+                window, gap = manifest.window, manifest.not_covered
+                sources.append(
+                    SourceWindow(source=name, window=window, not_covered=gap, covered=done)
+                )
+        self._save_manifest(manifest.model_copy(update={"version": 3, "sources": tuple(sources)}))
+
     def _manifest(self) -> Manifest:
         """The manifest as saved, or a new one if no step has finished yet."""
         path = self._folder / self.MANIFEST
         if not path.exists():
-            return Manifest(window=self._window, not_covered=self._not_covered, config=self._config)
+            return Manifest(
+                window=self._window,
+                not_covered=self._not_covered,
+                sources=self._sources,
+                config=self._config,
+            )
         return Manifest.model_validate_json(path.read_text(encoding="utf-8"))
 
     def _save_manifest(self, manifest: Manifest) -> None:

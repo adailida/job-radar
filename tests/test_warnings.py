@@ -6,6 +6,7 @@ from fakes import (
     EXAMPLE,
     FakePrompter,
     FixedClock,
+    MemoryCoverage,
     MemoryPendingLog,
     MemorySourceCountLog,
     MemorySpendLog,
@@ -34,6 +35,7 @@ from job_radar.models import (
     RawPage,
     Recommendation,
     RequirementType,
+    RunWindows,
     SpendDecision,
 )
 from job_radar.pipeline.steps.convert import ConvertStep
@@ -66,7 +68,16 @@ class Board:
 def fetch(*sources, approvals=(), low_credits=100):
     """Run the fetch step over these boards; its pages and the warnings it recorded."""
     warnings = MemoryWarningLog()
-    step = FetchStep(sources, CRITERIA, WINDOW, approvals, MemorySpendLog(), warnings, low_credits)
+    step = FetchStep(
+        sources,
+        CRITERIA,
+        RunWindows(window=WINDOW),
+        approvals,
+        MemorySpendLog(),
+        warnings,
+        low_credits,
+        MemoryCoverage(),
+    )
     return step.run([]), warnings
 
 
@@ -205,7 +216,7 @@ class FailingPlan(Planned):
 
 def test_a_paid_source_whose_cost_check_fails_is_left_out_and_warned_about():
     prompter = FakePrompter()
-    [failed] = CostCheck([FailingPlan(plan())], CRITERIA, prompter).check(WINDOW)
+    [failed] = CostCheck([FailingPlan(plan())], CRITERIA, prompter).check(RunWindows(window=WINDOW))
     assert (failed.decision, failed.failure) == (SpendDecision.FAILED, "HTTP 503 after 3 retries")
     assert prompter.told == [
         "JobsPipe: the cost check failed (HTTP 503 after 3 retries), so it is left out of this run."

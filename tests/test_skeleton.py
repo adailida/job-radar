@@ -18,7 +18,7 @@ from job_radar.matching.job_key import JobKey
 from job_radar.matching.job_matcher import JobMatcher
 from job_radar.matching.normalizer import Normalizer
 from job_radar.matching.place_codes import PlaceCodes
-from job_radar.models import CandidateProfile, RunConfig, Search, SearchCriteria, Window
+from job_radar.models import CandidateProfile, RunConfig, RunWindows, Search, SearchCriteria, Window
 from job_radar.pipeline.pipeline import Step
 from job_radar.pipeline.steps.convert import ConvertStep
 from job_radar.pipeline.steps.dedupe import DedupeStep
@@ -46,7 +46,7 @@ from job_radar.sources.base import JobBoardParser, JobBoardSource, JobDescriber
 from job_radar.sources.board_client import BoardClient
 from job_radar.sources.demo import DemoParser, DemoSource
 from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
-from job_radar.storage.checkpoints import Checkpoints, FileCheckpoints, RunStats
+from job_radar.storage.checkpoints import Checkpoints, CoverageLog, FileCheckpoints, RunStats
 from job_radar.storage.drop_log import DropLog, FileDropLog
 from job_radar.storage.error_log import ErrorLog, FileErrorLog
 from job_radar.storage.gap_cache import FileGapCache, GapCache
@@ -66,6 +66,7 @@ WARNINGS = FileWarningLog(FOLDER)
 GUARD = UsageLimitGuard(TerminalPrompter(), FilePendingLog(FOLDER), WARNINGS)
 SEARCH = SearchCriteria(searches=(Search(name="default", roles=("Software Engineer",)),))
 WINDOW = Window(start=date(2026, 10, 29), end=date(2026, 11, 5))
+WINDOWS = RunWindows(window=WINDOW)
 CHECKPOINTS = FileCheckpoints(FOLDER, WINDOW)
 LLM = ClaudeCli("haiku")
 RANKER = LlmRanker(LLM, batch_size=20)
@@ -86,11 +87,18 @@ def steps():
     """One of each step, in run order."""
     return [
         FetchStep(
-            [GetroSource("board", CLIENT)], SEARCH, WINDOW, [], FileSpendLog(FOLDER), WARNINGS, 100
+            [GetroSource("board", CLIENT)],
+            SEARCH,
+            WINDOWS,
+            [],
+            FileSpendLog(FOLDER),
+            WARNINGS,
+            100,
+            CHECKPOINTS,
         ),
         ConvertStep({"getro": GetroParser(PlaceCodes())}, FileSourceCountLog(FOLDER), WARNINGS, {}),
         DedupeStep(JobKey(Normalizer(), AtsLinks()), date(2026, 11, 5)),
-        FilterStep(SEARCH, WINDOW, JobMatcher(Normalizer()), FileDropLog(FOLDER, Words())),
+        FilterStep(SEARCH, WINDOWS, JobMatcher(Normalizer()), FileDropLog(FOLDER, Words())),
         DescribeStep({"getro": GetroDescriber("board", CLIENT, HtmlText())}, TerminalPrompter()),
         LlmCapStep(60, TerminalPrompter(), FilePendingLog(FOLDER), WARNINGS),
         RecommendTopJobsStep(RANKER, PROFILE, 10, 40, GUARD, WARNINGS),
@@ -104,8 +112,7 @@ def steps():
             ASKS,
             GAPS,
             "run",
-            WINDOW,
-            None,
+            WINDOWS,
             40,
             {"getro": "Fast Forward"},
             FileSourceCountLog(FOLDER),
@@ -124,6 +131,7 @@ IMPLEMENTATIONS = [
     (DemoParser(PlaceCodes()), JobBoardParser),
     (CHECKPOINTS, Checkpoints),
     (CHECKPOINTS, RunStats),
+    (CHECKPOINTS, CoverageLog),
     (CHECKPOINTS, KeptJobs),
     (TRENDS, TrendSource),
     (ASKS, AskSource),

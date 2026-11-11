@@ -8,7 +8,7 @@ from pydantic import Field
 from job_radar.models.llm import GapStatus, RequirementType
 from job_radar.models.model import Model
 from job_radar.models.posting import Job
-from job_radar.models.run import StepCount, Window
+from job_radar.models.run import SourceWindow, StepCount, Window
 from job_radar.models.spend import Spend
 
 
@@ -93,8 +93,9 @@ class ReportContent(Model):
     """
 
     run: str  # the run's folder name, e.g. "2026-11-09T13-58-11"
-    window: Window
+    window: Window  # spans every source's window
     not_covered: Window | None = None  # days a long break left out, before the window
+    source_windows: tuple[SourceWindow, ...] = ()  # each source's own dates, when they differ
     sources: tuple[SourceSummary, ...] = ()  # the run's sources, in the order they were fetched
     alerts: tuple[Alert, ...] = ()
     min_score: int  # the lowest score a recommended job may have

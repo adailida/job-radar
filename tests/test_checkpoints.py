@@ -1,10 +1,11 @@
 import json
+from datetime import date
 
 import pytest
 from fakes import WINDOW, job
 
-from job_radar.models import Job, StepCount
-from job_radar.storage.checkpoints import FileCheckpoints
+from job_radar.models import Job, SourceWindow, StepCount, Window, WindowReason
+from job_radar.storage.checkpoints import FileCheckpoints, Manifest
 
 
 def test_saved_items_load_back(tmp_path):
@@ -105,3 +106,50 @@ def test_complete_keeps_a_steps_output_under_its_kept_name(tmp_path):
     checkpoints.complete()
     assert sorted(p.name for p in tmp_path.iterdir()) == ["jobs.jsonl", "manifest.json"]
     assert (tmp_path / "jobs.jsonl").read_text().count("\n") == 1
+
+
+GETRO = SourceWindow(
+    source="getro",
+    window=Window(start=date(2026, 11, 2), end=date(2026, 11, 5)),
+    reason=WindowReason.SINCE_LAST_RUN,
+)
+JOBSPIPE = SourceWindow(source="jobspipe", window=WINDOW, reason=WindowReason.CATCHING_UP)
+
+
+def test_the_manifest_keeps_each_sources_window_and_whether_it_was_covered(tmp_path):
+    checkpoints = FileCheckpoints(tmp_path, WINDOW, sources=[GETRO, JOBSPIPE])
+    checkpoints.record({"getro": True, "jobspipe": False})
+    checkpoints.save("fetch", [])
+    manifest = Manifest.model_validate_json((tmp_path / "manifest.json").read_text())
+    assert manifest.version == 3
+    assert manifest.sources == (
+        GETRO.model_copy(update={"covered": True}),
+        JOBSPIPE.model_copy(update={"covered": False}),
+    )
+    assert [count.step for count in manifest.steps] == ["fetch"]
+
+
+def test_a_fetch_done_again_replaces_what_was_covered(tmp_path):
+    checkpoints = FileCheckpoints(tmp_path, WINDOW, sources=[GETRO, JOBSPIPE])
+    checkpoints.record({"getro": True, "jobspipe": False})
+    checkpoints.record({"getro": True, "jobspipe": True})
+    manifest = Manifest.model_validate_json((tmp_path / "manifest.json").read_text())
+    assert [source.covered for source in manifest.sources] == [True, True]
+
+
+def test_an_older_manifest_reads_and_gains_its_sources_when_fetched_again(tmp_path):
+    older = {
+        "version": 2,
+        "window": {"start": "2026-10-22", "end": "2026-11-05"},
+        "not_covered": None,
+        "config": None,
+        "completed": False,
+        "steps": [],
+    }
+    (tmp_path / "manifest.json").write_text(json.dumps(older))
+    checkpoints = FileCheckpoints(tmp_path, WINDOW)
+    assert checkpoints.funnel() == []
+    checkpoints.record({"getro": True})
+    manifest = Manifest.model_validate_json((tmp_path / "manifest.json").read_text())
+    assert manifest.version == 3
+    assert manifest.sources == (SourceWindow(source="getro", window=WINDOW, covered=True),)
