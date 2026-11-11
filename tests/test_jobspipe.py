@@ -103,9 +103,10 @@ def source(handler, filters=None, ask_above=25, prompter=None) -> JobsPipeSource
 def test_query_sends_each_criterion_and_asks_for_unknowns_a_criterion_keeps():
     body = source(
         lambda r: None, filters={"max_ghost_score": 40, "include_unknown": ["seniority"]}
-    ).query(SEARCH, WINDOW)
+    ).query(SEARCH, date(2026, 11, 8))
     assert body == {
         "posted_at_gte": "2026-11-08",
+        "posted_at_lte": "2026-11-08",
         "job_title_or": ["engineer", "developer"],
         "job_title_not": ["civil"],
         "work_arrangement_or": ["remote"],
@@ -118,43 +119,72 @@ def test_query_sends_each_criterion_and_asks_for_unknowns_a_criterion_keeps():
 
 
 class FakeApi:
-    """JobsPipe over MockTransport: the account, then pages of a set size with cursors."""
+    """JobsPipe over MockTransport: the account, free counts, and each day's jobs in pages.
 
-    def __init__(self, total: int, status: int = 200, credits: int = 100):
-        self.total, self.status, self.bodies = total, status, []
-        self.served, self.credits = 0, credits
+    Each search finds `total` jobs a day, or what `days` says for a day (by its
+    ISO date). The count for a day in `uncountable` times out; the search for a
+    day in `timed_out` comes back empty with 200, as JobsPipe's does when it
+    times out. Another `status` answers every search with that error, and 504
+    every count too.
+    """
+
+    def __init__(
+        self,
+        total: int = 0,
+        status: int = 200,
+        credits: int = 100,
+        days: dict[str, int] | None = None,
+        uncountable: tuple[str, ...] = (),
+        timed_out: tuple[str, ...] = (),
+    ):
+        self.total, self.status, self.credits = total, status, credits
+        self.days, self.uncountable, self.timed_out = days or {}, uncountable, timed_out
+        self.bodies: list[dict] = []
+        self.estimates: list[dict] = []
+        self.served, self.left = 0, 0
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         if request.url.path == "/v1/account":
             return httpx.Response(200, json={"credits_remaining": 100, "credits_used": 40})
+        body = json.loads(request.content)
+        day = body["posted_at_gte"]
         if request.url.path == "/v1/jobs/export/estimate":
-            if self.status == 504:
+            self.estimates.append(body)
+            if self.status == 504 or day in self.uncountable:
                 return httpx.Response(504, json={"error": "Job search timed out."})
-            return httpx.Response(200, json={"rows": self.total})
+            return httpx.Response(200, json={"rows": self.days.get(day, self.total)})
         if self.status != 200:
             return httpx.Response(self.status, json={"error": "bad", "message": "No credits left."})
-        body = json.loads(request.content)
         self.bodies.append(body)
-        count = min(body["limit"], self.total - self.served)
+        if "cursor" not in body:
+            self.left = 0 if day in self.timed_out else self.days.get(day, self.total)
+        count = min(body["limit"], self.left)
         data = [
             {"id": str(self.served + n), "job_title": "Engineer", "company": "Acme"}
             for n in range(count)
         ]
         self.served += count
-        cursor = "more" if self.served < self.total else None
+        self.left -= count
         meta = {
             "credits_charged": count,
             "credits_remaining": self.credits - self.served,
-            "next_cursor": cursor,
+            "next_cursor": "more" if self.left else None,
         }
         return httpx.Response(200, json={"metadata": meta, "data": data})
 
 
+DAY = Window(start=date(2026, 11, 9), end=date(2026, 11, 9))
+ONE = SearchCriteria(searches=(SEARCH,))
+
+
+def jobs(pages) -> int:
+    """How many jobs the pages hold."""
+    return sum(len(json.loads(p.body)["data"]) for p in pages)
+
+
 def test_fetch_pages_with_the_cursor_up_to_the_cap():
     api, prompter = FakeApi(total=30), FakePrompter()
-    pages = source(api, ask_above=30, prompter=prompter).fetch(
-        SearchCriteria(searches=(SEARCH,)), WINDOW
-    )
+    pages = source(api, ask_above=30, prompter=prompter).fetch(ONE, DAY)
     assert [b["limit"] for b in api.bodies] == [25, 5]
     assert "cursor" not in api.bodies[0] and api.bodies[1]["cursor"] == "more"
     assert [p.page for p in pages] == [1, 2]
@@ -165,9 +195,7 @@ def test_a_fetch_is_never_partial():
     # Acceptance (Cost): a fetch is never partial: a source is fetched in full or not at all.
     api, prompter = FakeApi(total=100), FakePrompter(False)
     with pytest.raises(JobsPipeError) as over:
-        source(api, ask_above=30, prompter=prompter).fetch_paid(
-            SearchCriteria(searches=(SEARCH,)), WINDOW, cap=30
-        )
+        source(api, ask_above=30, prompter=prompter).fetch_paid(ONE, DAY, cap=30)
     assert str(over.value) == (
         "found more jobs than the 30 approved, so none are used, as a fetch is all or nothing "
         "(30 credits used; jobs paid for are free again this month)"
@@ -178,9 +206,7 @@ def test_a_fetch_is_never_partial():
 def test_reaching_the_cap_with_jobs_left_asks_to_keep_going():
     api, prompter = FakeApi(total=100), FakePrompter(False)
     with pytest.raises(JobsPipeError):
-        source(api, prompter=prompter).fetch_paid(
-            SearchCriteria(searches=(SEARCH,)), WINDOW, cap=30
-        )
+        source(api, prompter=prompter).fetch_paid(ONE, DAY, cap=30)
     assert prompter.asked == [
         "JobsPipe: 30 jobs fetched (30 credits) and more to go. Keep going for up to 30 more?"
     ]
@@ -189,9 +215,7 @@ def test_reaching_the_cap_with_jobs_left_asks_to_keep_going():
 
 def test_keep_going_fetches_the_rest_from_where_it_stopped():
     api, prompter = FakeApi(total=60, credits=200), FakePrompter(True)
-    paid = source(api, prompter=prompter).fetch_paid(
-        SearchCriteria(searches=(SEARCH,)), WINDOW, cap=30
-    )
+    paid = source(api, prompter=prompter).fetch_paid(ONE, DAY, cap=30)
     assert [b["limit"] for b in api.bodies] == [25, 5, 25, 5]
     assert [b.get("cursor") for b in api.bodies] == [None, "more", "more", "more"]
     assert sum(len(json.loads(p.body)["data"]) for p in paid.pages) == 60
@@ -203,9 +227,7 @@ def test_keep_going_fetches_the_rest_from_where_it_stopped():
 def test_keep_going_asks_again_each_time_a_chunk_runs_out():
     api, prompter = FakeApi(total=70, credits=200), FakePrompter(True, True, False)
     with pytest.raises(JobsPipeError, match="more jobs than the 60 approved") as over:
-        source(api, prompter=prompter).fetch_paid(
-            SearchCriteria(searches=(SEARCH,)), WINDOW, cap=20
-        )
+        source(api, prompter=prompter).fetch_paid(ONE, DAY, cap=20)
     assert prompter.asked == [
         "JobsPipe: 20 jobs fetched (20 credits) and more to go. Keep going for up to 20 more?",
         "JobsPipe: 40 jobs fetched (40 credits) and more to go. Keep going for up to 20 more?",
@@ -216,18 +238,16 @@ def test_keep_going_asks_again_each_time_a_chunk_runs_out():
 
 def test_keep_going_goes_on_to_the_searches_left():
     api, prompter = FakeApi(total=25, credits=200), FakePrompter(True)
-    paid = source(api, prompter=prompter).fetch_paid(TWO, WINDOW, cap=25)
+    paid = source(api, prompter=prompter).fetch_paid(TWO, DAY, cap=25)
     assert len(prompter.asked) == 1
     assert "cursor" not in api.bodies[1]
-    assert sum(len(json.loads(p.body)["data"]) for p in paid.pages) == 25
+    assert jobs(paid.pages) == 50
 
 
 def test_keep_going_never_goes_past_the_credits_left():
     api, prompter = FakeApi(total=100, credits=50), FakePrompter(True)
     with pytest.raises(JobsPipeError) as over:
-        source(api, prompter=prompter).fetch_paid(
-            SearchCriteria(searches=(SEARCH,)), WINDOW, cap=30
-        )
+        source(api, prompter=prompter).fetch_paid(ONE, DAY, cap=30)
     assert prompter.asked == [
         "JobsPipe: 30 jobs fetched (30 credits) and more to go. Keep going for up to 20 more?"
     ]
@@ -244,34 +264,31 @@ def test_keep_going_with_no_one_to_answer_means_no():
 
     terminal = TerminalPrompter(read=closed, write=lambda line: None)
     with pytest.raises(JobsPipeError, match="more jobs than the 30 approved"):
-        source(FakeApi(total=100), prompter=terminal).fetch_paid(
-            SearchCriteria(searches=(SEARCH,)), WINDOW, cap=30
-        )
+        source(FakeApi(total=100), prompter=terminal).fetch_paid(ONE, DAY, cap=30)
 
 
 def test_a_search_the_cap_leaves_unasked_asks_too():
     api, prompter = FakeApi(total=100), FakePrompter(False)
     with pytest.raises(JobsPipeError, match="more jobs than the 25 approved"):
-        source(api, prompter=prompter).fetch_paid(TWO, WINDOW, cap=25)
+        source(api, prompter=prompter).fetch_paid(TWO, DAY, cap=25)
     assert len(api.bodies) == 1 and len(prompter.asked) == 1
 
 
 def test_a_cap_of_nothing_fetches_nothing():
     api = FakeApi(total=5)
-    assert source(api).fetch_paid(TWO, WINDOW, cap=0).pages == ()
+    assert source(api).fetch_paid(TWO, DAY, cap=0).pages == ()
     assert api.bodies == []
 
 
-def test_fetch_stops_when_the_results_run_out():
-    api = FakeApi(total=3)
-    two = SearchCriteria(searches=(SEARCH, SEARCH.model_copy(update={"name": "seattle"})))
-    pages = source(api).fetch(two, WINDOW)
-    assert [len(json.loads(p.body)["data"]) for p in pages] == [3, 0]
+def test_fetch_stops_each_day_when_its_results_run_out():
+    api = FakeApi(days={"2026-11-09": 3, "2026-11-08": 0})
+    pages = source(api).fetch(TWO, WINDOW)
+    assert [len(json.loads(p.body)["data"]) for p in pages] == [3, 0, 3, 0]
 
 
 def test_an_error_from_jobspipe_fails_with_its_message():
     with pytest.raises(JobsPipeError, match="^HTTP 402: No credits left.$"):
-        source(FakeApi(total=5, status=402)).fetch(SearchCriteria(searches=(SEARCH,)), WINDOW)
+        source(FakeApi(total=5, status=402)).fetch(ONE, DAY)
 
 
 def test_secrets_come_from_the_environment_first_then_the_file(tmp_path, monkeypatch):
@@ -353,7 +370,7 @@ def test_live_estimate_answers_for_free():
 def test_with_match_if_missing_off_no_unknowns_are_asked_for():
     client = BoardClient(httpx.Client(), 0, lambda s: None)
     strict = JobsPipeSource(client, {}, (25, None), FakePrompter(), match_if_missing=False)
-    assert "include_unknown" not in strict.query(SEARCH, WINDOW)
+    assert "include_unknown" not in strict.query(SEARCH, date(2026, 11, 8))
 
 
 TWO = SearchCriteria(searches=(SEARCH, SEARCH.model_copy(update={"name": "seattle"})))
@@ -361,7 +378,7 @@ TWO = SearchCriteria(searches=(SEARCH, SEARCH.model_copy(update={"name": "seattl
 
 def test_plan_adds_up_free_estimates_and_reads_the_credits():
     plan = source(FakeApi(total=12), ask_above=25).plan(TWO, WINDOW)
-    assert (plan.estimate, plan.estimated, plan.credits_left) == (24, True, 100)
+    assert (plan.estimate, plan.estimated, plan.credits_left) == (48, True, 100)
     assert (plan.ask_above, plan.budget_left) == (25, 100)
 
 
@@ -379,9 +396,114 @@ def test_when_jobspipe_cant_count_the_estimate_is_the_ask_above_limit():
 
 
 def test_fetch_paid_spends_within_the_cap_and_says_what_it_cost():
-    paid = source(FakeApi(total=10), ask_above=250).fetch_paid(TWO, WINDOW, cap=20)
-    assert (paid.charged, paid.credits_left, paid.extra_approved) == (10, 90, 0)
-    assert sum(len(json.loads(p.body)["data"]) for p in paid.pages) == 10
+    paid = source(FakeApi(total=10), ask_above=250).fetch_paid(TWO, DAY, cap=20)
+    assert (paid.charged, paid.credits_left, paid.extra_approved) == (20, 80, 0)
+    assert jobs(paid.pages) == 20
+
+
+def test_each_search_asks_one_day_at_a_time_newest_first():
+    api = FakeApi(total=1)
+    three_days = Window(start=date(2026, 11, 7), end=date(2026, 11, 9))
+    source(api, ask_above=250).fetch_paid(TWO, three_days, cap=10)
+    days = ["2026-11-09", "2026-11-08", "2026-11-07"] * 2
+    assert [(b["posted_at_gte"], b["posted_at_lte"]) for b in api.bodies] == [
+        (day, day) for day in days
+    ]
+
+
+def test_a_one_day_window_sends_one_query_per_search():
+    api = FakeApi(total=3)
+    src = source(api, ask_above=250)
+    assert src.plan(TWO, DAY).estimate == 6
+    src.fetch_paid(TWO, DAY, cap=10)
+    assert len(api.estimates) == 2 and len(api.bodies) == 2
+
+
+def test_plan_counts_each_search_and_day_and_adds_them_up():
+    api = FakeApi(days={"2026-11-09": 5, "2026-11-08": 7})
+    plan = source(api, ask_above=250).plan(TWO, WINDOW)
+    assert (plan.estimate, plan.estimated) == (24, True)
+    assert [(c.search, c.day.day, c.found) for c in plan.counts] == [
+        ("remote-us", 9, 5),
+        ("remote-us", 8, 7),
+        ("seattle", 9, 5),
+        ("seattle", 8, 7),
+    ]
+    assert [(b["posted_at_gte"], b["posted_at_lte"]) for b in api.estimates] == [
+        ("2026-11-09", "2026-11-09"),
+        ("2026-11-08", "2026-11-08"),
+    ] * 2
+
+
+def test_one_day_jobspipe_cant_count_makes_the_estimate_the_ask_above_limit():
+    api = FakeApi(total=5, uncountable=("2026-11-08",))
+    plan = source(api, ask_above=25).plan(TWO, WINDOW)
+    assert (plan.estimate, plan.estimated) == (25, False)
+
+
+def test_a_day_pages_with_the_cursor_before_the_next_day_starts():
+    api = FakeApi(days={"2026-11-09": 30, "2026-11-08": 2})
+    paid = source(api, ask_above=250).fetch_paid(ONE, WINDOW, cap=100)
+    assert [(b["posted_at_gte"], b["limit"], b.get("cursor")) for b in api.bodies] == [
+        ("2026-11-09", 25, None),
+        ("2026-11-09", 25, "more"),
+        ("2026-11-08", 25, None),
+    ]
+    assert jobs(paid.pages) == 32
+
+
+def test_the_cap_and_keep_going_carry_on_across_days():
+    api, prompter = FakeApi(total=20, credits=200), FakePrompter(True)
+    paid = source(api, prompter=prompter).fetch_paid(ONE, WINDOW, cap=25)
+    assert [(b["posted_at_gte"], b["limit"], b.get("cursor")) for b in api.bodies] == [
+        ("2026-11-09", 25, None),
+        ("2026-11-08", 5, None),
+        ("2026-11-08", 25, "more"),
+    ]
+    assert prompter.asked == [
+        "JobsPipe: 25 jobs fetched (25 credits) and more to go. Keep going for up to 25 more?"
+    ]
+    assert (jobs(paid.pages), paid.charged, paid.credits_left, paid.extra_approved) == (
+        40,
+        40,
+        160,
+        25,
+    )
+
+
+def test_a_day_its_count_said_had_jobs_that_comes_back_empty_fails_jobspipe():
+    api = FakeApi(days={"2026-11-09": 4, "2026-11-08": 12}, timed_out=("2026-11-08",))
+    prompter = FakePrompter()
+    src = source(api, ask_above=250, prompter=prompter)
+    counts = src.plan(ONE, WINDOW).counts
+    with pytest.raises(JobsPipeError) as empty:
+        src.fetch_paid(ONE, WINDOW, cap=20, counts=counts)
+    assert str(empty.value) == (
+        "the search for remote-us on 8 Nov came back empty though its count found 12, "
+        "so it probably timed out; none of the jobs are used, and the next run fetches "
+        "these dates again (4 credits used; jobs paid for are free again this month)"
+    )
+    assert prompter.told == ["JobsPipe: 4 jobs, 4 credits used, 96 left."]
+
+
+def test_a_day_its_count_found_empty_can_come_back_empty():
+    api = FakeApi(days={"2026-11-09": 4, "2026-11-08": 0})
+    src = source(api, ask_above=250)
+    paid = src.fetch_paid(ONE, WINDOW, cap=20, counts=src.plan(ONE, WINDOW).counts)
+    assert (len(paid.pages), jobs(paid.pages)) == (2, 4)
+
+
+def test_an_empty_day_jobspipe_couldnt_count_is_left_to_the_fetch_step():
+    api = FakeApi(total=4, uncountable=("2026-11-08",), timed_out=("2026-11-08",))
+    src = source(api, ask_above=250)
+    plan = src.plan(ONE, WINDOW)
+    assert not plan.estimated
+    assert jobs(src.fetch_paid(ONE, WINDOW, cap=250, counts=plan.counts).pages) == 4
+
+
+def test_a_day_whose_search_errors_fails_jobspipe():
+    with pytest.raises(JobsPipeError, match="^HTTP 504 after 3 retries: No credits left.$"):
+        source(FakeApi(total=5, status=504)).fetch(ONE, WINDOW)
 
 
 def test_jobspipe_limits_come_from_the_plan_unless_the_settings_set_them():

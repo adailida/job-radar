@@ -105,4 +105,5 @@ class CostCheck:
             cap=cap,
             credits_before=plan.credits_left,
             budget_left=plan.budget_left,
+            counts=plan.counts,
         )

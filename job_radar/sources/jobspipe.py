@@ -2,13 +2,15 @@
 
 import json
 import re
-from datetime import date
+from collections.abc import Iterator
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pycountry
 
 from job_radar.matching.place_codes import PlaceCodes
 from job_radar.models import (
+    DayCount,
     IfMissing,
     Location,
     PaidFetch,
@@ -33,15 +35,17 @@ class JobsPipeError(JobRadarError):
 
 
 class JobsPipeSource:
-    """Searches JobsPipe once per search, newest first, asking before it spends more than agreed.
+    """Searches JobsPipe per search and day, newest first, asking before it spends more than agreed.
 
     Each search's criteria are sent so JobsPipe filters on its side, with the
-    source-only filters from the settings added as written. One credit buys
-    one job for the calendar month; jobs already paid for are free. Before a
-    run it says what the searches would cost, for free: the account's credits
-    and an estimate of the matches. The plan sets the limit a run asks above
-    and the monthly budget unless the settings override them. Stateless:
-    holds only its client, filters, limits and who it asks.
+    source-only filters from the settings added as written. Each day of the
+    window is its own query, as phrase searches over longer spans time out.
+    One credit buys one job for the calendar month; jobs already paid for are
+    free. Before a run it says what the searches would cost, for free: the
+    account's credits and the matches counted for each search and day. The
+    plan sets the limit a run asks above and the monthly budget unless the
+    settings override them. Stateless: holds only its client, filters, limits
+    and who it asks.
     """
 
     name = "jobspipe"
@@ -75,19 +79,24 @@ class JobsPipeSource:
     def plan(self, criteria: SearchCriteria, window: Window) -> SpendPlan:
         """What the searches would cost this run, and the limits, without spending a credit.
 
-        When JobsPipe can't count a search (a slow phrase search can time out),
-        the estimate is the ask-above limit, marked as not counted.
+        Each search is counted for each day and the counts added up. When
+        JobsPipe can't count one (a slow phrase search can time out), the
+        estimate is the ask-above limit, marked as not counted. The plan keeps
+        each count it got, for the fetch.
         """
         account = self._account()
         left = account["credits_remaining"]
-        estimate, counted = 0, True
-        for search in criteria.searches:
+        counts: list[DayCount] = []
+        counted = True
+        for search, day in self._queries(criteria, window):
             self._client.pause()
-            response = self._client.post(self.ESTIMATE, json=self.query(search, window))
+            response = self._client.post(self.ESTIMATE, json=self.query(search, day))
             if response.status_code != 200:
-                estimate, counted = self._ask_above, False
+                counted = False
                 break
-            estimate += response.json().get("rows") or 0
+            found = response.json().get("rows") or 0
+            counts.append(DayCount(search=search.name, day=day, found=found))
+        estimate = sum(count.found for count in counts) if counted else self._ask_above
         used = account.get("credits_used") or 0
         budget_left = left if self._budget is None else max(self._budget - used, 0)
         return SpendPlan(
@@ -97,25 +106,30 @@ class JobsPipeSource:
             credits_left=left,
             ask_above=self._ask_above,
             budget_left=budget_left,
+            counts=tuple(counts),
         )
 
     def fetch(self, criteria: SearchCriteria, window: Window) -> list[RawPage]:
         """Pages of every search, when no cost check ran; above the limit, it asks to go on."""
         return list(self.fetch_paid(criteria, window, self._ask_above).pages)
 
-    def fetch_paid(self, criteria: SearchCriteria, window: Window, cap: int) -> PaidFetch:
-        """Pages of every search until each runs out, asking before spending more than `cap`.
+    def fetch_paid(
+        self, criteria: SearchCriteria, window: Window, cap: int, counts: tuple[DayCount, ...] = ()
+    ) -> PaidFetch:
+        """Pages of every search and day until each runs out, asking before spending over `cap`.
 
         When `cap` credits are spent with jobs still to fetch, the user is
         asked whether to keep going for up to `cap` more, within the credits
         left, and again each time that runs out. A fetch is never partial: if
-        the user says no, or the credits run out, it raises `JobsPipeError`
-        instead of giving part of the results.
+        the user says no, the credits run out, or a day its plan's `counts`
+        found jobs for comes back empty, it raises `JobsPipeError` instead of
+        giving part of the results.
         """
+        found = {(count.search, count.day): count.found for count in counts}
         pages: list[RawPage] = []
         budget, charged, left, approved = cap, 0, 0, cap
-        searches = criteria.searches if cap > 0 else ()  # nothing agreed, nothing fetched
-        for search in searches:
+        queries = self._queries(criteria, window) if cap > 0 else ()  # none agreed, none sent
+        for search, day in queries:
             cursor: str | None = None
             while True:
                 if budget <= 0:
@@ -123,13 +137,16 @@ class JobsPipeSource:
                     approved += budget
                 if pages:
                     self._client.pause()
-                body = self.query(search, window) | {"limit": min(self.PAGE_SIZE, budget)}
+                body = self.query(search, day) | {"limit": min(self.PAGE_SIZE, budget)}
                 page = self._search(body | ({"cursor": cursor} if cursor else {}))
                 pages.append(RawPage(source=self.name, page=len(pages) + 1, body=json.dumps(page)))
                 metadata, jobs = page.get("metadata", {}), page.get("data", [])
                 budget -= len(jobs)
                 charged += metadata.get("credits_charged") or 0
                 left = metadata.get("credits_remaining", left)
+                if not jobs and cursor is None and found.get((search.name, day), 0) > 0:
+                    self._told(pages, charged, left)
+                    raise self._timed_out(search, day, found[search.name, day], charged)
                 cursor = metadata.get("next_cursor")
                 if not jobs or not cursor:
                     break
@@ -163,6 +180,20 @@ class JobsPipeSource:
             f"all or nothing ({charged} credits used; jobs paid for are free again this month)"
         )
 
+    @staticmethod
+    def _timed_out(search: Search, day: date, found: int, charged: int) -> JobsPipeError:
+        """The error for a day that came back empty though its count found jobs.
+
+        JobsPipe answers a search that timed out with no jobs and no error, so
+        the count is what tells it apart from a day with none.
+        """
+        return JobsPipeError(
+            f"the search for {search.name} on {day.day} {day:%b} came back empty though its "
+            f"count found {found}, so it probably timed out; none of the jobs are used, and "
+            f"the next run fetches these dates again ({charged} credits used; jobs paid for "
+            "are free again this month)"
+        )
+
     def _told(self, pages: list[RawPage], charged: int, left: int) -> None:
         """Tell the user what the fetch found and spent."""
         self._prompter.tell(
@@ -174,14 +205,22 @@ class JobsPipeSource:
         """How many jobs the pages hold."""
         return sum(len(json.loads(page.body)["data"]) for page in pages)
 
-    def query(self, search: Search, window: Window) -> dict:
-        """The search body for one search and the window, with the extra filters added.
+    @staticmethod
+    def _queries(criteria: SearchCriteria, window: Window) -> Iterator[tuple[Search, date]]:
+        """Each search with each day of the window, newest day first."""
+        days = (window.end - window.start).days + 1
+        for search in criteria.searches:
+            for back in range(days):
+                yield search, window.end - timedelta(days=back)
+
+    def query(self, search: Search, day: date) -> dict:
+        """The search body for one search on one day, with the extra filters added.
 
         A criterion that keeps jobs which don't say also asks JobsPipe to
         return jobs whose value is unknown, so both sides agree, unless that is
         turned off to spend less.
         """
-        body: dict = {"posted_at_gte": window.start.isoformat()}
+        body: dict = {"posted_at_gte": day.isoformat(), "posted_at_lte": day.isoformat()}
         unknown: list[str] = []
         if search.roles:
             body["job_title_or"] = list(search.roles)

@@ -169,7 +169,7 @@ class Paying:
     def fetch(self, criteria, window):
         return []
 
-    def fetch_paid(self, criteria, window, cap):
+    def fetch_paid(self, criteria, window, cap, counts=()):
         page = RawPage(source=self.name, page=1, body="{}")
         return PaidFetch(pages=(page,), charged=self._charged, credits_left=self._left)
 
