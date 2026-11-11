@@ -8,6 +8,7 @@ from pydantic import Field, ValidationError
 from job_radar.llm.llm import Llm, UsageLimit
 from job_radar.llm.usage_limit_guard import UsageLimitReached
 from job_radar.models import CandidateProfile, Job, Model, Recommendation, Salary
+from job_radar.utils.progress import NoProgress, Progress
 
 
 @runtime_checkable
@@ -46,8 +47,8 @@ class LlmRanker:
     was wrong; if that fails too, the batch is split in half and each half
     asked on its own, and a job that still fails gets no score. Postings are
     untrusted text, so the prompt tells the model to treat them as data.
-    Stateless: holds only its model, the batch size and how much of each
-    description it sends.
+    Says which prompt it is on as it goes. Stateless: holds only its model, the batch
+    size, how much of each description it sends and who it tells.
     """
 
     SYSTEM = (
@@ -87,8 +88,15 @@ class LlmRanker:
         "additionalProperties": False,
     }
 
-    def __init__(self, llm: Llm, batch_size: int, description_chars: int = 4000) -> None:
-        """Keep the model, how many jobs go in one prompt, and how much of each description."""
+    def __init__(
+        self,
+        llm: Llm,
+        batch_size: int,
+        description_chars: int = 4000,
+        progress: Progress | None = None,
+    ) -> None:
+        """Keep the model, jobs per prompt, how much of each description, and who is told."""
+        self._progress = progress or NoProgress()
         self._llm = llm
         self._batch_size = batch_size
         self._description_chars = description_chars
@@ -102,6 +110,7 @@ class LlmRanker:
         size = self._batch_size
         scored: list[Recommendation] = []
         for start in range(0, len(jobs), size):
+            self._progress.detail(f"prompt {start // size + 1} of {-(-len(jobs) // size)}")
             try:
                 scored += self._batch(jobs[start : start + size], profile)
             except UsageLimit:

@@ -9,6 +9,7 @@ import httpx
 from job_radar.app.cost_check import CostCheck
 from job_radar.app.job_radar_app import JobRadarApp
 from job_radar.app.resume_offer import ResumeOffer
+from job_radar.app.run_banner import RunBanner
 from job_radar.app.runs_command import RunsCommand
 from job_radar.app.window import WindowChooser, WindowPlanner
 from job_radar.config.profile_loader import ProfileLoader
@@ -67,7 +68,9 @@ from job_radar.storage.spend_log import FileSpendLog
 from job_radar.storage.warning_log import FileWarningLog, TerminalWarnings
 from job_radar.utils.clock import Clock
 from job_radar.utils.html_text import HtmlText
+from job_radar.utils.progress import LineProgress, NoProgress, Progress, TerminalProgress
 from job_radar.utils.prompter import Prompter
+from job_radar.utils.terminal import Terminal
 
 
 @dataclass(frozen=True)
@@ -90,8 +93,8 @@ class AppFactory:
 
     Wires concrete classes together, so every other class depends only on
     interfaces. Stateless: holds only the settings, the user's folder, the
-    example folder the demo runs on, the clock, the prompter and where
-    secrets are read.
+    example folder the demo runs on, the clock, the prompter, where
+    secrets are read and the terminal progress is shown on (none: nothing is shown).
     """
 
     USER_AGENT = "job-radar (+https://github.com/adailida/job-radar)"
@@ -104,24 +107,32 @@ class AppFactory:
         clock: Clock,
         prompter: Prompter,
         secrets: Secrets,
+        terminal: Terminal | None = None,
     ) -> None:
-        """Keep the settings, the user's and the example folders, the clock and the prompter."""
+        """Keep the settings, the user's and the example folders, the clock and the prompter.
+
+        With a `terminal`, runs show their progress on it (unless turned off);
+        the prompter should write through the same terminal.
+        """
         self._settings = settings
         self._local = local
         self._example = example
         self._secrets = secrets
         self._clock = clock
         self._prompter = prompter
+        self._terminal = terminal
 
-    def create(self, demo: bool = False) -> JobRadarApp:
+    def create(self, demo: bool = False, quiet: bool = False) -> JobRadarApp:
         """Build the app, reading the user's files first so a setup error stops before anything.
 
         With `demo`, the run uses the built-in demo board, the made-up person
         in the example folder and keyword scoring: no network, no LLM, nothing
         from the user's folder. Demo runs keep their own history, so they never
-        move a real run's windows.
+        move a real run's windows. Unless `quiet` (or the `verbose` setting is
+        off), the run shows a start banner and a line per step.
         """
-        parts = self._demo() if demo else self._real()
+        progress = self._progress(quiet)
+        parts = self._demo(progress) if demo else self._real(progress)
         runs = self._runs(demo)
         planner = WindowPlanner(self._settings.lookback_days)
         history = FileRunHistory(runs, TerminalWarnings(self._prompter))
@@ -130,9 +141,40 @@ class AppFactory:
         offer = ResumeOffer(history, self._prompter, Words())
         paid = [source for source in parts.sources if isinstance(source, PaidSource)]
         cost = CostCheck(paid, parts.criteria, self._prompter)
-        pipeline = partial(self._pipeline, parts, runs, self._gap_cache(demo))
+        pipeline = partial(self._pipeline, parts, runs, self._gap_cache(demo), progress)
         lock = FileRunLock(self._settings.output)
-        return JobRadarApp(offer, chooser, cost, pipeline, lock)
+        banner = None if isinstance(progress, NoProgress) else self._banner(parts, progress, demo)
+        return JobRadarApp(offer, chooser, cost, pipeline, lock, banner)
+
+    def _progress(self, quiet: bool) -> Progress:
+        """How a run shows its progress: in place on a terminal, a line at a time elsewhere.
+
+        Nothing when `quiet`, when the settings turn it off, or with no terminal.
+        """
+        if quiet or not self._settings.verbose or self._terminal is None:
+            return NoProgress()
+        if self._terminal.tty:
+            return TerminalProgress(self._terminal, self._clock)
+        return LineProgress(self._terminal, self._clock)
+
+    def _banner(self, parts: Parts, progress: Progress, demo: bool) -> RunBanner:
+        """The start banner for a run: its config folder, searches, sources, model and limits."""
+        jobspipe = self._settings.sources.jobspipe
+        paid = any(isinstance(source, PaidSource) for source in parts.sources)
+        credits = (
+            (jobspipe.ask_above_credits or JobsPipeSource.PLANS[jobspipe.plan][0]) if paid else None
+        )
+        return RunBanner(
+            config=f"{(self._example if demo else self._local).name}/",
+            searches=[search.name for search in parts.criteria.searches],
+            sources={source.name: source.label for source in parts.sources},
+            progress=progress,
+            clock=self._clock,
+            model=None if demo else self._settings.llm.model,
+            ask_above_credits=credits,
+            ask_above_jobs=None if demo else self._settings.llm.ask_above_jobs,
+            demo=demo,
+        )
 
     def runs_command(self, demo: bool = False) -> RunsCommand:
         """Build the `runs` and `delete` commands, for real runs or demo runs."""
@@ -157,6 +199,7 @@ class AppFactory:
         parts: Parts,
         runs: Path,
         gap_cache: Path,
+        progress: Progress,
         windows: RunWindows,
         run_id: str | None,
         approvals: list[Approval],
@@ -215,7 +258,7 @@ class AppFactory:
             NewJobsFilterStep(seen, window.end, self._settings.new_only),
             FilterStep(parts.criteria, windows, JobMatcher(normalizer), FileDropLog(folder, words)),
             CarriedOverStep(LastRunPending(history, runs)),
-            DescribeStep({d.source: d for d in parts.describers}, self._prompter),
+            DescribeStep({d.source: d for d in parts.describers}, self._prompter, progress),
             LlmCapStep(self._settings.llm.ask_above_jobs, self._prompter, pending, warnings),
             ClassifyStep(parts.classifier, self._prompter, guard, warnings),
             MatchStep(parts.criteria, JobMatcher(normalizer)),
@@ -251,7 +294,7 @@ class AppFactory:
                 warnings,
             ),
         ]
-        return Pipeline(steps, checkpoints, FileErrorLog(folder))
+        return Pipeline(steps, checkpoints, FileErrorLog(folder), progress)
 
     def _searches(self, folder: Path) -> SearchCriteria:
         """The searches in a folder's `profile.yaml`, with every domain they name checked."""
@@ -272,7 +315,7 @@ class AppFactory:
                     f"the settings define {', '.join(known)}"
                 )
 
-    def _jobspipe(self) -> JobsPipeSource:
+    def _jobspipe(self, progress: Progress) -> JobsPipeSource:
         """The JobsPipe source, with its key from the environment or `config_local/.env`."""
         jobspipe = self._settings.sources.jobspipe
         key = self._secrets.get(jobspipe.api_key_env)
@@ -288,10 +331,10 @@ class AppFactory:
         ask_above, budget = JobsPipeSource.PLANS[jobspipe.plan]
         limits = (jobspipe.ask_above_credits or ask_above, jobspipe.monthly_budget or budget)
         return JobsPipeSource(
-            client, jobspipe.filters, limits, self._prompter, jobspipe.match_if_missing
+            client, jobspipe.filters, limits, self._prompter, jobspipe.match_if_missing, progress
         )
 
-    def _demo(self) -> Parts:
+    def _demo(self, progress: Progress) -> Parts:
         """The parts of a demo run: the demo board, keyword scoring and the example person.
 
         The searches, CV and preferences come from the example folder, so the
@@ -310,7 +353,7 @@ class AppFactory:
             ProfileLoader(self._example).load(),
         )
 
-    def _real(self) -> Parts:
+    def _real(self, progress: Progress) -> Parts:
         """The boards, ranker and profile of a real run: the boards, Claude and the user's files.
 
         Reads the searches, the CV, the preferences and any API key, then
@@ -322,24 +365,30 @@ class AppFactory:
         http = httpx.Client(headers={"User-Agent": self.USER_AGENT}, timeout=20)
         getro = BoardClient(http)
         network = self._settings.sources.getro.network
-        sources: list[JobBoardSource] = [GetroSource(network, getro)]
+        sources: list[JobBoardSource] = [GetroSource(network, getro, progress)]
         parsers: list[JobBoardParser] = [GetroParser(PlaceCodes())]
         if self._settings.sources.jobspipe.enabled:
-            sources.append(self._jobspipe())
+            sources.append(self._jobspipe(progress))
             parsers.append(JobsPipeParser(PlaceCodes(), HtmlText()))
         llm_settings = self._settings.llm
         llm = ClaudeCli(llm_settings.model, llm_settings.timeout_seconds)
         llm.check()
-        ranker = LlmRanker(llm, llm_settings.batch_size, llm_settings.max_description_chars)
+        ranker = LlmRanker(
+            llm, llm_settings.batch_size, llm_settings.max_description_chars, progress
+        )
         classifier = LlmClassifier(
             llm,
             llm_settings.classify_batch_size,
             llm_settings.classify_description_chars,
             self._settings.job_types,
             self._settings.domains,
+            progress,
         )
         extractor = LlmExtractor(
-            llm, llm_settings.extract_batch_size, llm_settings.extract_description_chars
+            llm,
+            llm_settings.extract_batch_size,
+            llm_settings.extract_description_chars,
+            progress,
         )
         return Parts(
             sources,
@@ -349,6 +398,6 @@ class AppFactory:
             classifier,
             extractor,
             ranker,
-            LlmGapJudge(llm),
+            LlmGapJudge(llm, progress),
             profile,
         )

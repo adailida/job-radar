@@ -27,6 +27,7 @@ from job_radar.models import (
 from job_radar.sources.board_client import BoardClient
 from job_radar.utils.errors import JobRadarError
 from job_radar.utils.html_text import HtmlText
+from job_radar.utils.progress import NoProgress, Progress
 from job_radar.utils.prompter import Prompter
 
 
@@ -44,8 +45,8 @@ class JobsPipeSource:
     free. Before a run it says what the searches would cost, for free: the
     account's credits and the matches counted for each search and day. The
     plan sets the limit a run asks above and the monthly budget unless the
-    settings override them. Stateless: holds only its client, filters, limits
-    and who it asks.
+    settings override them. Says which search and day it is on as it goes.
+    Stateless: holds only its client, filters, limits and who it asks and tells.
     """
 
     name = "jobspipe"
@@ -63,6 +64,7 @@ class JobsPipeSource:
         limits: tuple[int, int | None],
         prompter: Prompter,
         match_if_missing: bool = True,
+        progress: Progress | None = None,
     ) -> None:
         """Keep the client (which carries the key), the extra filters, the limits, who to tell.
 
@@ -75,6 +77,7 @@ class JobsPipeSource:
         self._ask_above, self._budget = limits
         self._prompter = prompter
         self._match_if_missing = match_if_missing
+        self._progress = progress or NoProgress()
 
     def plan(self, criteria: SearchCriteria, window: Window) -> SpendPlan:
         """What the searches would cost this run, and the limits, without spending a credit.
@@ -128,13 +131,19 @@ class JobsPipeSource:
         found = {(count.search, count.day): count.found for count in counts}
         pages: list[RawPage] = []
         budget, charged, left, approved = cap, 0, 0, cap
+        so_far = 0
         queries = self._queries(criteria, window) if cap > 0 else ()  # none agreed, none sent
-        for search, day in queries:
+        days = (window.end - window.start).days + 1
+        for number, (search, day) in enumerate(queries):
             cursor: str | None = None
             while True:
                 if budget <= 0:
                     budget = self._more(pages, charged, left, cap, approved)
                     approved += budget
+                self._progress.detail(
+                    f"{self.label} {search.name}, {day:%b} {day.day} "
+                    f"(day {number % days + 1} of {days}), {so_far} jobs so far"
+                )
                 if pages:
                     self._client.pause()
                 body = self.query(search, day) | {"limit": min(self.PAGE_SIZE, budget)}
@@ -142,6 +151,7 @@ class JobsPipeSource:
                 pages.append(RawPage(source=self.name, page=len(pages) + 1, body=json.dumps(page)))
                 metadata, jobs = page.get("metadata", {}), page.get("data", [])
                 budget -= len(jobs)
+                so_far += len(jobs)
                 charged += metadata.get("credits_charged") or 0
                 left = metadata.get("credits_remaining", left)
                 if not jobs and cursor is None and found.get((search.name, day), 0) > 0:

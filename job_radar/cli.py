@@ -11,6 +11,7 @@ from job_radar.config.settings import SettingsFile
 from job_radar.utils.clock import Clock
 from job_radar.utils.errors import JobRadarError, SetupError
 from job_radar.utils.prompter import TerminalPrompter
+from job_radar.utils.terminal import Terminal
 
 
 class Cli:
@@ -34,7 +35,9 @@ class Cli:
             print(f"Could not set up the run: {error}")
             return 2
         secrets = EnvSecrets(Cli.LOCAL / ".env")
-        factory = AppFactory(settings, Cli.LOCAL, Cli.EXAMPLE, Clock(), TerminalPrompter(), secrets)
+        terminal = Terminal()
+        prompter = TerminalPrompter(terminal.read, terminal.write)
+        factory = AppFactory(settings, Cli.LOCAL, Cli.EXAMPLE, Clock(), prompter, secrets, terminal)
         return Cli(factory).main(sys.argv[1:])
 
     def __init__(self, factory: AppFactory) -> None:
@@ -59,6 +62,11 @@ class Cli:
             action="store_true",
             help="made-up postings, as the person in config_local_example/: no network, no LLM",
         )
+        run.add_argument(
+            "--quiet",
+            action="store_true",
+            help="don't show the start banner and a line per step (the verbose setting, off)",
+        )
         runs = commands.add_parser("runs", help="list earlier runs, newest first")
         runs.add_argument("--demo", action="store_true", help="list demo runs instead")
         delete = commands.add_parser("delete", help="delete earlier runs, after asking")
@@ -74,7 +82,7 @@ class Cli:
             parser.print_help()
             return 0
         try:
-            app = self._factory.create(demo=args.demo)
+            app = self._factory.create(demo=args.demo, quiet=args.quiet)
         except SetupError as error:
             print(f"Could not set up the run: {error}")
             return 2

@@ -316,3 +316,55 @@ def grouper(group_by: str = "job_type"):
     from job_radar.report.opening_grouper import OpeningGrouper
 
     return OpeningGrouper(group_by, ["engineering", "data"], ["climate", "health"])
+
+
+class StepClock(Clock):
+    """A clock that moves only when told to, for timing steps and throttling updates."""
+
+    def __init__(self):
+        """Start on the morning of Nov 12, 2026."""
+        self._now = datetime(2026, 11, 12, 9, 14, 0, tzinfo=timezone(timedelta(hours=-5)))
+
+    def now(self) -> datetime:
+        """The current moment of this clock."""
+        return self._now
+
+    def advance(self, seconds: float) -> None:
+        """Move the clock forward."""
+        self._now += timedelta(seconds=seconds)
+
+
+class RecordingProgress:
+    """A progress reporter that keeps what it is told, as (kind, text) pairs."""
+
+    def __init__(self):
+        """Start with nothing reported."""
+        self.events: list[tuple[str, str]] = []
+
+    def note(self, text: str) -> None:
+        """Remember a line."""
+        self.events.append(("note", text))
+
+    def begin(self, number: int, total: int, name: str) -> None:
+        """Remember a step starting."""
+        self.events.append(("begin", f"{number}/{total} {name}"))
+
+    def detail(self, text: str) -> None:
+        """Remember a live count."""
+        self.events.append(("detail", text))
+
+    def done(self, summary: str) -> None:
+        """Remember a step finishing."""
+        self.events.append(("done", summary))
+
+    def skipped(self, number: int, total: int, name: str) -> None:
+        """Remember a step left out."""
+        self.events.append(("skipped", f"{number}/{total} {name}"))
+
+    def failed(self) -> None:
+        """Remember a step failing."""
+        self.events.append(("failed", ""))
+
+    def details(self) -> list[str]:
+        """Just the live counts."""
+        return [text for kind, text in self.events if kind == "detail"]

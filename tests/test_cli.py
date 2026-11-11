@@ -35,7 +35,7 @@ class FailingFactory:
     def __init__(self, folder):
         self._folder = folder
 
-    def create(self, demo: bool = False) -> JobRadarApp:
+    def create(self, demo: bool = False, quiet: bool = False) -> JobRadarApp:
         step = FakeStep("fetch", error=RuntimeError("board down"))
         pipeline = Pipeline(
             [step], FileCheckpoints(self._folder, WINDOW), FileErrorLog(self._folder)
@@ -62,7 +62,7 @@ class FixedWindow:
 class BrokenFactory:
     """Fails to build the app, as with a missing CV."""
 
-    def create(self, demo: bool = False) -> JobRadarApp:
+    def create(self, demo: bool = False, quiet: bool = False) -> JobRadarApp:
         raise ProfileError("no CV in config_local/: add one of cv.pdf, cv.md, cv.txt")
 
 

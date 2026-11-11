@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from job_radar.llm.llm import Llm, UsageLimit
 from job_radar.llm.usage_limit_guard import UsageLimitReached
 from job_radar.models import Classification, Job, Model, Seniority
+from job_radar.utils.progress import NoProgress, Progress
 
 
 @runtime_checkable
@@ -48,8 +49,8 @@ class LlmClassifier:
     when it can't tell. A bad answer is asked again once with what was wrong;
     if that fails too, the batch is split in half and each half asked on its
     own. A job that still fails gets no labels, so its searches' `if_missing`
-    rules apply. Stateless: holds only its model, batch size, description
-    length and the lists.
+    rules apply. Says which prompt it is on as it goes. Stateless: holds only its
+    model, batch size, description length, the lists and who it tells.
     """
 
     VERSION = "classify-1"
@@ -74,8 +75,10 @@ class LlmClassifier:
         description_chars: int,
         job_types: Mapping[str, str],
         domains: Mapping[str, str],
+        progress: Progress | None = None,
     ) -> None:
-        """Keep the model, the batch size, how much of each description, and the two lists."""
+        """Keep the model, the batch size, how much of each description, the lists, who is told."""
+        self._progress = progress or NoProgress()
         self._llm = llm
         self._batch_size = batch_size
         self._description_chars = description_chars
@@ -91,6 +94,7 @@ class LlmClassifier:
         size = self._batch_size
         found: dict[str, Classification] = {}
         for start in range(0, len(jobs), size):
+            self._progress.detail(f"prompt {start // size + 1} of {-(-len(jobs) // size)}")
             try:
                 found |= self._batch(jobs[start : start + size])
             except UsageLimit:

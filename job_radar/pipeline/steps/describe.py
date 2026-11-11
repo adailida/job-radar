@@ -4,6 +4,7 @@ from collections.abc import Mapping
 
 from job_radar.models import Job
 from job_radar.sources.base import JobDescriber
+from job_radar.utils.progress import NoProgress, Progress
 from job_radar.utils.prompter import Prompter
 
 
@@ -13,24 +14,37 @@ class DescribeStep:
     Runs after the filter, so only jobs worth ranking cost a request. A job
     whose primary posting already has a description, or whose board has no
     describer (it sends descriptions with its postings), passes through as it
-    is. Tells the user first how long it will take. Stateless: holds only its
-    describers and the prompter.
+    is. Tells the user first how long it will take, and which job it is on as it
+    goes. Stateless: holds only its describers, the prompter and who it tells.
     """
 
     name = "describe"
     output = Job
 
-    def __init__(self, describers: Mapping[str, JobDescriber], prompter: Prompter) -> None:
-        """Keep one describer per board, by board name, and how to tell the user things."""
+    def __init__(
+        self,
+        describers: Mapping[str, JobDescriber],
+        prompter: Prompter,
+        progress: Progress | None = None,
+    ) -> None:
+        """Keep one describer per board, by board name, who to tell things, who shows progress."""
         self._describers = describers
         self._prompter = prompter
+        self._progress = progress or NoProgress()
 
     def run(self, data: list[Job]) -> list[Job]:
         """Describe every job that needs it, in order; the others pass through."""
         needed = [job for job in data if self._describer(job)]
         if needed:
             self._prompter.tell(self._estimate(needed))
-        return [self._described(job) for job in data]
+        done = 0
+        described: list[Job] = []
+        for job in data:
+            if self._describer(job):
+                done += 1
+                self._progress.detail(f"description {done} of {len(needed)}")
+            described.append(self._described(job))
+        return described
 
     def _describer(self, job: Job) -> JobDescriber | None:
         """The describer for the job's primary posting, or none when it needs no description."""

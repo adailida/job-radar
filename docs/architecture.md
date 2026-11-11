@@ -13,7 +13,7 @@ The first real run: `job-radar run` fetches Fast Forward through its search API,
 The package `job_radar/`, in reading order from the command down. A module is named after its main class, the interface it implements, or its step.
 
 - `cli.py`: `Cli`, the `job-radar` command and the entry point
-- `app/`: the app around a run: `JobRadarApp`, `AppFactory`, the window (`WindowPlanner`, `WindowChooser`), `ResumeOffer`, `CostCheck`, `RunsCommand` and the run results
+- `app/`: the app around a run: `JobRadarApp`, `AppFactory`, the window (`WindowPlanner`, `WindowChooser`), `ResumeOffer`, `CostCheck`, `RunBanner`, `RunsCommand` and the run results
 - `pipeline/`: `Pipeline` and `Step`; `pipeline/steps/` has one module per step, named after it
 - `sources/`: one adapter per job board (Getro, JobsPipe, demo), their interfaces and `BoardClient`
 - `llm/`: `Llm` and `ClaudeCli`, the LLM passes (ranker, classifier, extractor, gap judge) and `UsageLimitGuard`
@@ -21,7 +21,7 @@ The package `job_radar/`, in reading order from the command down. A module is na
 - `report/`: the report sections (trends, asks, gaps, openings), `ReportRenderer`, `ReportWriter` and `Words`
 - `storage/`: where state lives on disk: checkpoints, run history, seen jobs, the logs, the run lock and the gap cache
 - `config/`: code that reads the user's files: settings, profile, searches, secrets
-- `utils/`: `Clock`, `Prompter`, `HtmlText` and the base errors
+- `utils/`: `Clock`, `Prompter`, `Terminal` and `Progress` (what a run shows), `HtmlText` and the base errors
 - `models/`: the domain models, by area; imported from `job_radar.models`
 
 Defaults are in `config/` at the repo root; the user's overrides and personal files are in `config_local/` (never committed), under the same names. `config_local_example/` (committed) mirrors `config_local/` for a made-up person: a template to copy, and what `--demo` runs on.
@@ -54,7 +54,8 @@ classDiagram
         -example: Path
         -clock: Clock
         -prompter: Prompter
-        +create(demo) JobRadarApp
+        -terminal: Terminal
+        +create(demo, quiet) JobRadarApp
     }
     class SettingsFile {
         -file: YamlFile
@@ -131,7 +132,9 @@ classDiagram
         -steps: list~Step~
         -checkpoints: Checkpoints
         -errors: ErrorLog
+        -progress: Progress
         +run() RunResult
+        +step_names() list~str~
     }
     class Step {
         <<interface>>
@@ -190,6 +193,8 @@ classDiagram
     JobRadarApp o-- RunLock : holds, taken around the run
     RunLock <|.. FileRunLock : implements
     Pipeline o-- ErrorLog : holds, for a step's bug
+    Pipeline o-- Progress : holds, tells each step's start and end
+    JobRadarApp o-- RunBanner : holds, shown before the pipeline runs
     Cli ..> ErrorLog : calls write, for a bug outside any step
     ErrorLog <|.. FileErrorLog : implements
 
@@ -209,7 +214,81 @@ classDiagram
     style FileErrorLog stroke:#2e7d32,stroke-width:3px
 ```
 
-`JobRadarApp` holds `WindowChooser` (next diagram).
+`JobRadarApp` holds `WindowChooser` (next diagram). `Progress` and `RunBanner` are in "Run progress" below.
+
+### Run progress
+
+What a run shows. The pipeline tells `Progress` when each step starts and ends; the slow steps and sources tell it what they are doing now. The factory gives the same `Progress` to all of them, and one `Terminal` writes for both it and the prompter, so a question or a message never lands on the live line. State is shaded.
+
+```mermaid
+classDiagram
+    direction TB
+
+    class Progress {
+        <<interface>>
+        +note(text)
+        +begin(number, total, name)
+        +detail(text)
+        +done(summary)
+        +skipped(number, total, name)
+        +failed()
+    }
+    class NoProgress
+    class TerminalProgress {
+        -label: str
+        -started: datetime
+    }
+    class LineProgress {
+        -label: str
+        -started: datetime
+        -printed: datetime
+        -interval: float
+    }
+    class Terminal {
+        -live: str
+        +write(text)
+        +read(prompt) str
+        +live(text)
+        +settle(text)
+        +tty: bool
+    }
+    class RunBanner {
+        +show(windows, steps, resuming)
+        +lines(windows, steps, resuming) list~str~
+    }
+    class TerminalPrompter {
+        -read
+        -write
+    }
+
+    Progress <|.. NoProgress : implements
+    Progress <|.. TerminalProgress : implements
+    Progress <|.. LineProgress : implements
+    TerminalProgress o-- Terminal : holds
+    LineProgress o-- Terminal : holds
+    TerminalProgress o-- Clock : holds, times the steps
+    LineProgress o-- Clock : holds, times and throttles
+    TerminalPrompter ..> Terminal : writes and reads through
+    RunBanner o-- Progress : holds, shows its lines with note
+    RunBanner o-- Clock : holds
+    JobRadarApp ..> RunBanner : calls show
+    Pipeline ..> Progress : calls begin, done, skipped, failed
+    GetroSource o-- Progress : holds, calls detail per page
+    JobsPipeSource o-- Progress : holds, calls detail per search and day
+    DescribeStep o-- Progress : holds, calls detail per job
+    LlmClassifier o-- Progress : holds, calls detail per prompt
+    LlmExtractor o-- Progress : holds, calls detail per prompt
+    LlmRanker o-- Progress : holds, calls detail per prompt
+    LlmGapJudge o-- Progress : holds, calls detail per prompt
+    AppFactory ..> Progress : creates, by terminal, quiet and the verbose setting
+
+    style Progress stroke:#2e7d32,stroke-width:3px
+    style NoProgress stroke:#2e7d32,stroke-width:3px
+    style TerminalProgress stroke:#2e7d32,stroke-width:3px,fill:#fff3cd
+    style LineProgress stroke:#2e7d32,stroke-width:3px,fill:#fff3cd
+    style Terminal stroke:#2e7d32,stroke-width:3px,fill:#fff3cd
+    style RunBanner stroke:#2e7d32,stroke-width:3px
+```
 
 ### Agreeing the windows
 
@@ -936,7 +1015,7 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `SettingsFile` | | Read `config/settings.yaml`, then merge `config_local/settings.yaml` over it at any depth; no local file means every default. `Settings` holds only types and limits | `YamlFile`, `Settings` |
 | `SearchesFile` | | Read the searches from `config_local/profile.yaml` (the demo: `config_local_example/profile.yaml`), filling each from `common`; required for a real run | `YamlFile`, `SearchCriteria` |
 | `YamlFile` | | Read one YAML file into a model; errors name the file and the key's path | `pyyaml`, models |
-| `JobRadarApp` | | Take the run lock; resume the last run if it failed and the user says yes, or agree new windows; have the pipeline built for them, launch it, and hand back how it ended; release the lock however it ends | `ResumeOffer`, `WindowChooser`, `CostCheck`, `Pipeline`, `RunResult`, `RunLock` |
+| `JobRadarApp` | | Take the run lock; resume the last run if it failed and the user says yes, or agree new windows; have the pipeline built for them, show the start banner, launch it, and hand back how it ended; release the lock however it ends | `ResumeOffer`, `WindowChooser`, `CostCheck`, `RunBanner`, `Pipeline`, `RunResult`, `RunLock` |
 | `RunLock`, `FileRunLock` | Interface | One run at a time: `output/run.lock` holds the running process's id; a lock whose process no longer exists is removed; a live one raises `RunInProgress` | the output folder |
 | `JobRadarError`, `SetupError` | Exceptions | The errors the app expects, each with a message that says what's wrong and how to fix it; `SetupError` stops a run before it starts (`ConfigError`, `ProfileError`, `LlmUnavailable`, `RunInProgress`). Anything else is a bug | nothing |
 | `ErrorLog`, `FileErrorLog` | Repository | Write an unexpected error's traceback to `error.log`, in the run folder or the output folder, and say where | its folder |
@@ -949,8 +1028,11 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `RunHistory`, `FileRunHistory` | Repository | Read-only: every run (id, windows, completed or not, its steps), the window of the last completed one, and each source's window in the last completed run that covered it, from the run folders; a folder whose manifest can't be read is left out with a warning | the run folders, `WarningLog` |
 | `RunFolders` | | Delete a run folder, only one that exists directly under the runs folder | the run folders |
 | `RunsCommand` | | `job-radar runs`: list runs, newest first. `job-radar delete`: delete runs after asking, Enter meaning no | `RunHistory`, `RunFolders`, `Prompter`, `Words` |
-| `Prompter`, `TerminalPrompter` | Interface | Tell the user things and ask yes or no in the terminal | the terminal |
-| `Pipeline` | Pipeline | Run the steps in order; skip the steps already saved and read the last of them back; save each output; turn an error into `RunFailed` (a bug's traceback to the error log) and the final `Report` into `RunSucceeded`, with its alerts; delete the checkpoints on success | `Step`, `Checkpoints`, `ErrorLog`, `Report`, `RunResult` |
+| `Prompter`, `TerminalPrompter` | Interface | Tell the user things and ask yes or no in the terminal, through the `Terminal` | `Terminal` |
+| `Terminal` | | The one writer to the terminal: print a line, ask a question, show one live line redrawn in place. Clears the live line before anything else is written or asked and draws it again after (stateful: the live line) | the output stream |
+| `Progress`, `NoProgress`, `TerminalProgress`, `LineProgress` | Interface | Show a numbered line per step with its count and time, and live counts inside slow steps: in place on a terminal, one throttled line per update otherwise, nothing when quiet (the terminal and line ones are stateful: the current step's label and start) | `Terminal`, `Clock` |
+| `RunBanner` | | Before the pipeline starts, show the config folder, searches, each source with its dates, limits, model and the step list | `Progress`, `Clock` |
+| `Pipeline` | Pipeline | Run the steps in order; skip the steps already saved and read the last of them back; save each output; turn an error into `RunFailed` (a bug's traceback to the error log) and the final `Report` into `RunSucceeded`, with its alerts; delete the checkpoints on success; tell `Progress` each step's start, end (with its count), skip or failure | `Step`, `Checkpoints`, `ErrorLog`, `Progress`, `Report`, `RunResult` |
 | `Step` | Interface | The shape every step shares | models |
 | `Checkpoints` | Repository | Save and load each step's output for one run; record counts in the manifest; once the run succeeds, mark it completed and delete the outputs | models |
 | `RunStats` | Interface | Read-only: how many items each finished step produced | models |
@@ -1028,6 +1110,7 @@ sequenceDiagram
     participant wc as WindowChooser
     participant pr as TerminalPrompter
     participant p as Pipeline
+    participant pg as Progress
     participant s as each Step
     box rgba(255, 193, 7, 0.25) STATE: the run folders on disk
         participant lk as FileRunLock
@@ -1066,18 +1149,23 @@ sequenceDiagram
         app->>f: build the pipeline for the windows
         f->>f: make the run folder, build the steps, FileCheckpoints and Pipeline
         f-->>app: Pipeline
+        app->>pg: RunBanner.show(): config, searches, sources and dates, limits, model, steps
         app->>p: run()
         opt resuming
             p->>cp: has(step), from the first step on
             p->>cp: load(the last saved step), once
+            p->>pg: skipped(number, total, name), for each saved step
         end
         loop each step not saved yet, in order
+            p->>pg: begin(number, total, name)
             p->>s: run(data)
+            s-->>pg: detail(5 of 11), for the slow steps and their sources
             opt something went wrong that doesn't stop the run
                 s->>wl: warn(code, message), each once
             end
             s-->>p: output, passed on in memory as the next data
             p->>cp: save(step, output)
+            p->>pg: done(count), or failed() when it raised
             Note right of cp: writes NN-step.jsonl, adds its count to manifest.json
         end
         Note right of cp: the fetch step also records in manifest.json which sources it covered in full

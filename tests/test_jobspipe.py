@@ -27,6 +27,7 @@ from job_radar.models import (
 from job_radar.sources.board_client import BoardClient
 from job_radar.sources.jobspipe import JobsPipeError, JobsPipeParser, JobsPipeSource
 from job_radar.utils.html_text import HtmlText
+from job_radar.utils.progress import NoProgress
 from job_radar.utils.prompter import TerminalPrompter
 
 FIXTURE = Path(__file__).parent / "fixtures" / "jobspipe" / "search_page.json"
@@ -348,7 +349,7 @@ def test_a_run_fetches_from_jobspipe_and_fast_forward(tmp_path, monkeypatch):
         FakePrompter(),
         {"JOBSPIPE_API_KEY": "jp_test"},
     )
-    parts = factory._real()
+    parts = factory._real(NoProgress())
     assert [s.name for s in parts.sources] == ["getro", "jobspipe"]
     assert [p.source for p in parts.parsers] == ["getro", "jobspipe"]
 
