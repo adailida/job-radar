@@ -2,8 +2,8 @@ from datetime import date
 
 from fakes import FakePrompter, posting
 
-from job_radar.model import Job
-from job_radar.steps.describe import DescribeStep
+from job_radar.models import Job
+from job_radar.pipeline.steps.describe import DescribeStep
 
 
 class FakeDescriber:

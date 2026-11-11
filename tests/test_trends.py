@@ -4,9 +4,7 @@ from decimal import Decimal
 import pytest
 from fakes import MemoryWarningLog
 
-from job_radar.checkpoints import FileCheckpoints
-from job_radar.history import FileRunHistory
-from job_radar.model import (
+from job_radar.models import (
     Classification,
     Job,
     Location,
@@ -23,10 +21,12 @@ from job_radar.model import (
     Window,
     WorkMode,
 )
-from job_radar.report_renderer import MarkdownRenderer
-from job_radar.seen import FileSeenJobs
-from job_radar.trends import MarketRuns, MarketTrends, RunJobs, TrendBuilder
-from job_radar.words import Words
+from job_radar.report.report_renderer import MarkdownRenderer
+from job_radar.report.trends import MarketRuns, MarketTrends, RunJobs, TrendBuilder
+from job_radar.report.words import Words
+from job_radar.storage.checkpoints import FileCheckpoints
+from job_radar.storage.run_history import FileRunHistory
+from job_radar.storage.seen_jobs import FileSeenJobs
 
 MONTHS = TrendBuilder("month")
 

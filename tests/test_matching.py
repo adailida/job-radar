@@ -3,8 +3,9 @@ from decimal import Decimal
 
 import pytest
 
-from job_radar.matching import JobMatcher
-from job_radar.model import (
+from job_radar.matching.job_matcher import JobMatcher
+from job_radar.matching.normalizer import Normalizer
+from job_radar.models import (
     IfMissing,
     Job,
     Location,
@@ -17,7 +18,6 @@ from job_radar.model import (
     WorkMode,
     WorkModes,
 )
-from job_radar.normalize import Normalizer
 
 MATCHER = JobMatcher(Normalizer())
 

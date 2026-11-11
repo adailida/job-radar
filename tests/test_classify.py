@@ -4,9 +4,10 @@ import re
 import pytest
 from fakes import FakePrompter, MemoryWarningLog, guard, job
 
-from job_radar.classify import LlmClassifier, TitleClassifier
-from job_radar.matching import JobMatcher
-from job_radar.model import (
+from job_radar.llm.classifier import LlmClassifier, TitleClassifier
+from job_radar.matching.job_matcher import JobMatcher
+from job_radar.matching.normalizer import Normalizer
+from job_radar.models import (
     Alert,
     AlertCode,
     Classification,
@@ -18,9 +19,8 @@ from job_radar.model import (
     Seniorities,
     Seniority,
 )
-from job_radar.normalize import Normalizer
-from job_radar.steps.classify import ClassifyStep
-from job_radar.steps.match import MatchStep
+from job_radar.pipeline.steps.classify import ClassifyStep
+from job_radar.pipeline.steps.match import MatchStep
 
 JOB_TYPES = {"engineering": "builds software", "product": "product management"}
 DOMAINS = {"climate": "climate change", "health": "health care"}

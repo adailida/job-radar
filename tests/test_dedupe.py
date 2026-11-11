@@ -3,10 +3,11 @@ from decimal import Decimal
 
 from fakes import posting
 
-from job_radar.ats import AtsLinks
-from job_radar.model import Location, Period, Posting, Salary
-from job_radar.normalize import Normalizer
-from job_radar.steps.dedupe import DedupeStep, JobKey
+from job_radar.matching.ats_links import AtsLinks
+from job_radar.matching.job_key import JobKey
+from job_radar.matching.normalizer import Normalizer
+from job_radar.models import Location, Period, Posting, Salary
+from job_radar.pipeline.steps.dedupe import DedupeStep
 
 KEY = JobKey(Normalizer(), AtsLinks())
 TODAY = date(2026, 11, 5)

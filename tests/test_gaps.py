@@ -15,17 +15,9 @@ from fakes import (
     grouper,
 )
 
-from job_radar.asks import RequirementNames
-from job_radar.gaps import (
-    BadGaps,
-    CvGaps,
-    FileGapCache,
-    GapBuilder,
-    KeywordGapJudge,
-    LlmGapJudge,
-)
-from job_radar.llm import LlmError, UsageLimit
-from job_radar.model import (
+from job_radar.llm.gap_judge import BadGaps, KeywordGapJudge, LlmGapJudge
+from job_radar.llm.llm import LlmError, UsageLimit
+from job_radar.models import (
     AskRow,
     Asks,
     CandidateProfile,
@@ -38,9 +30,12 @@ from job_radar.model import (
     RequirementType,
     Window,
 )
-from job_radar.report_renderer import MarkdownRenderer
-from job_radar.steps.report import ReportStep
-from job_radar.words import Words
+from job_radar.pipeline.steps.report import ReportStep
+from job_radar.report.asks import RequirementNames
+from job_radar.report.gaps import CvGaps, GapBuilder
+from job_radar.report.report_renderer import MarkdownRenderer
+from job_radar.report.words import Words
+from job_radar.storage.gap_cache import FileGapCache
 
 SKILL, TOOL, YEARS = RequirementType.SKILL, RequirementType.TOOL, RequirementType.YEARS
 COVERED, PARTLY, MISSING = GapStatus.COVERED, GapStatus.PARTLY, GapStatus.MISSING

@@ -4,8 +4,7 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from job_radar.clock import Clock
-from job_radar.model import (
+from job_radar.models import (
     CandidateProfile,
     Classification,
     Extraction,
@@ -25,6 +24,7 @@ from job_radar.model import (
     Window,
     WorkMode,
 )
+from job_radar.utils.clock import Clock
 
 POSTING = Posting(
     source="getro",

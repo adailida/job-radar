@@ -1,6 +1,6 @@
 import pytest
 
-from job_radar.normalize import Normalizer
+from job_radar.matching.normalizer import Normalizer
 
 NORMALIZE = Normalizer()
 

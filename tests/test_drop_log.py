@@ -2,9 +2,9 @@ from datetime import date
 
 from fakes import job
 
-from job_radar.drop_log import FileDropLog
-from job_radar.model import DropList, DroppedJob, Window
-from job_radar.words import Words
+from job_radar.models import DropList, DroppedJob, Window
+from job_radar.report.words import Words
+from job_radar.storage.drop_log import FileDropLog
 
 WINDOW = Window(start=date(2026, 10, 26), end=date(2026, 11, 9))
 

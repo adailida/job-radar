@@ -16,15 +16,14 @@ from fakes import (
 from test_cost import CRITERIA, WINDOW, Planned, approval, plan
 from test_report import KeepingRenderer, report_step
 
-from job_radar.asks import RequirementNames
-from job_radar.checkpoints import FileCheckpoints
+from job_radar.app.app_factory import AppFactory
+from job_radar.app.cost_check import CostCheck
 from job_radar.cli import Cli
-from job_radar.cost import CostCheck
-from job_radar.factory import AppFactory
-from job_radar.gaps import CvGaps, GapBuilder
-from job_radar.history import FileRunHistory
-from job_radar.llm import LlmError, UsageLimit
-from job_radar.model import (
+from job_radar.config.settings import SettingsFile
+from job_radar.llm.job_ranker import KeywordRanker
+from job_radar.llm.llm import LlmError, UsageLimit
+from job_radar.llm.usage_limit_guard import UsageLimitGuard, UsageLimitReached
+from job_radar.models import (
     Alert,
     AlertCode,
     AskRow,
@@ -36,16 +35,17 @@ from job_radar.model import (
     RequirementType,
     SpendDecision,
 )
-from job_radar.ranking import KeywordRanker
-from job_radar.seen import FileSeenJobs
-from job_radar.settings import SettingsFile
+from job_radar.pipeline.steps.convert import ConvertStep
+from job_radar.pipeline.steps.fetch import FetchStep, NoSourceData
+from job_radar.pipeline.steps.recommend import RecommendTopJobsStep
+from job_radar.report.asks import RequirementNames
+from job_radar.report.gaps import CvGaps, GapBuilder
+from job_radar.sources.board_client import BoardError
 from job_radar.sources.demo import DemoSource
-from job_radar.sources.http import BoardError
-from job_radar.steps.convert import ConvertStep
-from job_radar.steps.fetch import FetchStep, NoSourceData
-from job_radar.steps.recommend import RecommendTopJobsStep
-from job_radar.usage import UsageLimitGuard, UsageLimitReached
-from job_radar.warning_log import FileWarningLog, TerminalWarnings
+from job_radar.storage.checkpoints import FileCheckpoints
+from job_radar.storage.run_history import FileRunHistory
+from job_radar.storage.seen_jobs import FileSeenJobs
+from job_radar.storage.warning_log import FileWarningLog, TerminalWarnings
 
 FIRST_RUN = "2026-11-05T10-00-00"
 
@@ -393,7 +393,7 @@ def test_kept_jobs_that_cant_be_read_count_as_none_with_a_warning(tmp_path):
 def demo_cli(tmp_path, prompter: FakePrompter, hour: int = 10) -> Cli:
     """The real command over demo runs in a temp folder."""
     settings = SettingsFile.defaults(output=str(tmp_path), recommend={"top_n": 3})
-    return Cli(AppFactory(settings, tmp_path / "local", FixedClock(hour), prompter, {}))
+    return Cli(AppFactory(settings, tmp_path / "config_local", FixedClock(hour), prompter, {}))
 
 
 def test_a_demo_run_shows_its_warnings_in_the_report_and_the_terminal(

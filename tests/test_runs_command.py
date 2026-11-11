@@ -2,9 +2,9 @@ from datetime import date
 
 from fakes import FakePrompter
 
-from job_radar.model import RunSummary, StepCount, Window
-from job_radar.runs_command import RunsCommand
-from job_radar.words import Words
+from job_radar.app.runs_command import RunsCommand
+from job_radar.models import RunSummary, StepCount, Window
+from job_radar.report.words import Words
 
 WINDOW = Window(start=date(2026, 10, 26), end=date(2026, 11, 9))
 DONE = RunSummary(

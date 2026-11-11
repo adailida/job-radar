@@ -3,12 +3,12 @@ import json
 import pytest
 from fakes import FakePrompter, FixedClock, MemoryPendingLog, MemoryWarningLog, job
 
+from job_radar.app.app_factory import AppFactory
 from job_radar.cli import Cli
-from job_radar.factory import AppFactory
-from job_radar.model import Alert, AlertCode
-from job_radar.settings import SettingsFile
-from job_radar.steps.llm_cap import CapStopped, LlmCapStep
-from job_radar.usage import FilePendingLog
+from job_radar.config.settings import SettingsFile
+from job_radar.models import Alert, AlertCode
+from job_radar.pipeline.steps.llm_cap import CapStopped, LlmCapStep
+from job_radar.storage.pending_log import FilePendingLog
 
 FIRST_RUN = "2026-11-05T10-00-00"
 QUESTION = "5 jobs would go to Claude, over the cap of 3. Send them all, only the first 3, or stop?"
@@ -69,7 +69,7 @@ def capped_cli(tmp_path, prompter: FakePrompter, hour: int = 10, cap: int = 5) -
     settings = SettingsFile.defaults(
         output=str(tmp_path), recommend={"top_n": 3}, llm={"max_jobs_per_run": cap}
     )
-    return Cli(AppFactory(settings, tmp_path / "local", FixedClock(hour), prompter, {}))
+    return Cli(AppFactory(settings, tmp_path / "config_local", FixedClock(hour), prompter, {}))
 
 
 def counts(folder) -> dict[str, int]:

@@ -7,25 +7,20 @@ from pathlib import Path
 import pytest
 from fakes import FakePrompter, MemoryPendingLog, MemoryWarningLog, job
 
-from job_radar.checkpoints import FileCheckpoints
-from job_radar.classify import LlmClassifier
-from job_radar.extract import LlmExtractor
-from job_radar.history import FileRunHistory
-from job_radar.llm import ClaudeCli, LlmError, UsageLimit
-from job_radar.model import CandidateProfile, Job, Recommendation, Window
-from job_radar.ranking import LlmRanker
-from job_radar.report_renderer import MarkdownRenderer
-from job_radar.steps.carried_over import CarriedOverStep
-from job_radar.steps.classify import ClassifyStep
-from job_radar.steps.recommend import RecommendTopJobsStep
-from job_radar.usage import (
-    FilePendingLog,
-    LastRunPending,
-    LimitStopped,
-    UsageLimitGuard,
-    UsageLimitReached,
-)
-from job_radar.words import Words
+from job_radar.llm.classifier import LlmClassifier
+from job_radar.llm.extractor import LlmExtractor
+from job_radar.llm.job_ranker import LlmRanker
+from job_radar.llm.llm import ClaudeCli, LlmError, UsageLimit
+from job_radar.llm.usage_limit_guard import LimitStopped, UsageLimitGuard, UsageLimitReached
+from job_radar.models import CandidateProfile, Job, Recommendation, Window
+from job_radar.pipeline.steps.carried_over import CarriedOverStep
+from job_radar.pipeline.steps.classify import ClassifyStep
+from job_radar.pipeline.steps.recommend import RecommendTopJobsStep
+from job_radar.report.report_renderer import MarkdownRenderer
+from job_radar.report.words import Words
+from job_radar.storage.checkpoints import FileCheckpoints
+from job_radar.storage.pending_log import FilePendingLog, LastRunPending
+from job_radar.storage.run_history import FileRunHistory
 
 PROFILE = CandidateProfile(cv="A CV.", preferences="A job.")
 
@@ -186,7 +181,7 @@ def test_carried_over_jobs_join_unless_this_run_found_them_again():
 
 
 def test_the_report_says_how_many_jobs_were_carried_over():
-    from job_radar.model import ReportContent
+    from job_radar.models import ReportContent
 
     window = Window(start=date(2026, 11, 8), end=date(2026, 11, 9))
     content = ReportContent(

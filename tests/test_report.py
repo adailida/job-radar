@@ -19,7 +19,8 @@ from fakes import (
     job,
 )
 
-from job_radar.model import (
+from job_radar.app.run_result import RunSucceeded
+from job_radar.models import (
     Alert,
     AlertCode,
     Approval,
@@ -43,10 +44,9 @@ from job_radar.model import (
     Window,
     WorkMode,
 )
-from job_radar.report_renderer import MarkdownRenderer
-from job_radar.result import RunSucceeded
-from job_radar.steps.report import ReportStep
-from job_radar.words import Words
+from job_radar.pipeline.steps.report import ReportStep
+from job_radar.report.report_renderer import MarkdownRenderer
+from job_radar.report.words import Words
 
 GOLDEN = Path(__file__).parent / "fixtures" / "report" / "report.md"
 RUN = "2026-11-09T13-58-11"

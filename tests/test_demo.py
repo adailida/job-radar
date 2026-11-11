@@ -2,9 +2,9 @@ from datetime import date
 
 from fakes import job
 
-from job_radar.model import CandidateProfile, Search, SearchCriteria, Window
-from job_radar.places import PlaceCodes
-from job_radar.ranking import KeywordRanker
+from job_radar.llm.job_ranker import KeywordRanker
+from job_radar.matching.place_codes import PlaceCodes
+from job_radar.models import CandidateProfile, Search, SearchCriteria, Window
 from job_radar.sources.demo import DemoParser, DemoSource
 
 SEARCH = SearchCriteria(searches=(Search(name="default", roles=()),))

@@ -1,10 +1,10 @@
 from fakes import REPORT, WINDOW, FakeStep, job
 
-from job_radar.checkpoints import FileCheckpoints
-from job_radar.error_log import FileErrorLog
-from job_radar.model import StepCount
-from job_radar.pipeline import Pipeline
-from job_radar.result import RunFailed, RunSucceeded
+from job_radar.app.run_result import RunFailed, RunSucceeded
+from job_radar.models import StepCount
+from job_radar.pipeline.pipeline import Pipeline
+from job_radar.storage.checkpoints import FileCheckpoints
+from job_radar.storage.error_log import FileErrorLog
 
 
 def test_fresh_run_succeeds_with_the_report(tmp_path):

@@ -10,7 +10,7 @@ Every task, before its box is ticked:
 2. `uv run ruff check` and `uv run ruff format --check` are clean
 3. Each acceptance criterion the task covers (from [requirements.md](requirements.md)) has a test named after it
 4. If the code differs from design.md, design.md and its decisions log are updated in the same commit
-5. No personal data: fixtures scrubbed, nothing from `local/`
+5. No personal data: fixtures scrubbed, nothing from `config_local/`
 6. The owner reviewed the PR; it is squash-merged after the owner's OK, one commit per task on main
 7. If the flow changed, the diagrams in architecture.md are updated in the same PR
 8. The box below is ticked (`- [x]`) in the same commit
@@ -37,7 +37,7 @@ Goal: `job-radar run` fetches Fast Forward, recommends the top N jobs against th
   - Tests: models round-trip to JSON; models are frozen; each concrete class satisfies its interface
 
 - [x] **3. End to end with demo data**
-  - `job-radar run --demo` goes through every step on made-up postings and writes a report: no network, no LLM, nothing from `local/`
+  - `job-radar run --demo` goes through every step on made-up postings and writes a report: no network, no LLM, nothing from `config_local/`
   - `Pipeline.run`: steps in order, errors wrapped in `RunFailed`, discard on success; `FileCheckpoints`: one JSON Lines file per step (temp file, then rename), `manifest.json`, `funnel`; `RunSucceeded` and `RunFailed` messages and exit codes
   - `Cli` with `run` and `--demo`, `JobRadarApp`, `AppFactory`, `Settings` with defaults in code, `Clock`; exit codes 0 (success), 1 (failed run), 2 (setup error)
   - Every step in a simple form: fetch and convert complete; dedupe merges exact repeats only; filter keeps every job; recommend keeps the top N; a short report
@@ -79,7 +79,7 @@ Goal: `job-radar run` fetches Fast Forward, recommends the top N jobs against th
   - Tests: `HtmlText` cases; the describer on fixtures, with 404, inactive, retries and failures; the step describes, passes through, keeps order and says how long; live check (opt-in)
 
 - [x] **7b. Recommend**
-  - `ProfileLoader`: `cv.pdf`, `cv.md` or `cv.txt`, and `preferences.md`, from `local/`; missing, empty or scanned files are setup errors
+  - `ProfileLoader`: `cv.pdf`, `cv.md` or `cv.txt`, and `preferences.md`, from `config_local/`; missing, empty or scanned files are setup errors
   - `ClaudeCli`: flags verified on Claude Code 2.1.319; one plain turn from an empty folder, 120s limit, optional JSON schema; the login checked with `claude auth status` before the run
   - `LlmRanker`: 20 jobs a prompt under short ids, descriptions cut to 4,000 characters, a JSON schema; a bad answer asked again once with what was wrong, then the step fails; real runs switch from `KeywordRanker` and the demo profile
   - Tests, with a fake `Llm` and a fake command runner: batching and order; the prompt's contents; each kind of bad answer retried, then the step fails; the command's flags, folder, errors and login check; each profile case; live check (opt-in)
@@ -102,8 +102,8 @@ Goal: `job-radar run` fetches Fast Forward, recommends the top N jobs against th
 One line each for now; each task gets its detail, against the class names in architecture.md, when it starts.
 
 - [x] **10. Settings file:** YAML with defaults, unknown keys rejected, an example file
-  - `local/settings.yaml` over the defaults (nested: `llm`, `recommend`, `sources`), and the searches from `local/profile.yaml` (`common` and `searches`, roles only); errors name the file and the key's path
-  - `examples/profile.example.yaml`; the defaults moved to `job_radar/default_settings.yaml` in task 16, read first on every run
+  - `config_local/settings.yaml` over the defaults (nested: `llm`, `recommend`, `sources`), and the searches from `config_local/profile.yaml` (`common` and `searches`, roles only); errors name the file and the key's path
+  - `config/profile.example.yaml`; the defaults moved into a YAML file in task 16, now `config/settings.yaml`, read first on every run
   - Fetch and filter take all the searches; a job is kept if any matches. The demo has its own search in code
 - [x] **11a. Search criteria:** excluded titles, work mode, locations (ISO codes, read from the place text by `PlaceCodes`), minimum salary, each with `if_missing`; `JobMatcher` names the criterion a job fails
 - [x] **11b. Dropped by the filter:** a `dropped.md` next to the report, titles by the reason they were dropped, so silent misses show; the report links it
@@ -114,7 +114,7 @@ One line each for now; each task gets its detail, against the class names in arc
 - [x] **14. Time window in the report:** when the lookback cap cut a gap, the report says so and which dates it covers (the window itself is task 4)
 - [x] **15a. Stronger keys:** an ATS key from Greenhouse, Lever, Ashby and Workable links, a fuzzy key on company, title and country; postings sharing any key merge, transitively
 - [x] **15b. Only new jobs:** each completed run keeps the jobs its filter passed (`jobs.jsonl`); `NewJobsFilterStep` (`new_jobs_filter`) after dedupe drops jobs an earlier completed run kept (fuzzy keys within 60 days, ATS keys always); `new_only` setting
-- [x] **16. JobsPipe:** `JobsPipeSource` and `JobsPipeParser`, fixtures recorded with a few credits; off by default, key from `.env`, a per-run cap on jobs, JobsPipe-only filters in settings
+- [x] **16. JobsPipe:** `JobsPipeSource` and `JobsPipeParser`, fixtures recorded with a few credits; off by default, key from `.env` (now `config_local/.env`), a per-run cap on jobs, JobsPipe-only filters in settings
 - [x] **17. Cost checks:** estimate, limits, ask before spending, monthly spend; the estimate and the monthly spend come from free JobsPipe calls; `spend.jsonl` and a report line per paid source
 - [x] **18a. Classify and match:** seniority, job type, domain and sector from the LLM (50 jobs a prompt); `seniority` and `domains` criteria; job types and domains in settings
 - [x] **18b. Extract:** requirements (skills, tools, certifications, years) from matched jobs, 10 a prompt, kept with the job
@@ -151,8 +151,8 @@ One line each for now; each task gets its detail, against the class names in arc
   - Step 1: Fast Forward with the full settings, a low LLM job limit and a 1-day lookback
   - Step 2: add JobsPipe with very tight limits: per-run max about 25 credits, one narrow search, 1-day lookback. Check that credits spent (before and after) match the estimate, then the report and run data
   - Step 3: widen step by step (limits, searches, lookback), checking spend against the estimate each time, before switching to the full settings
-  - `examples/` complete; README usage moved from "planned" to real
-  - Built: llm.max_jobs_per_run (60), README First run, examples/cv.example.md
+  - Examples complete (now in `config/`); README usage moved from "planned" to real
+  - Built: llm.max_jobs_per_run (60), README First run, config/cv.example.md
   - Done Nov 9 to 10, narrowed by the owner to short windows (no widening: the owner runs the full thing after his code changes):
     - Nov 9: Fast Forward 1 and 14 days; JobsPipe Nov 8 to 9 (18 credits, matched the estimate within the cap; 10 recommended, top 86)
     - Nov 10: every step on, Nov 8 to 10: the cost check estimated 46 JobsPipe credits, over the 25 cap, and the owner skipped JobsPipe; Fast Forward only, 3 haiku prompts, one alert. Found and fixed: "Myanmar (Burma)" wasn't read as a country, so an on-site job in Yangon passed the `seattle` search as "no place given"

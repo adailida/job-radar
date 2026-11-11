@@ -7,7 +7,7 @@ A personal job-search radar that runs in your terminal. It pulls job postings fr
 - **What employers ask for**: skills, tools, certifications and years of experience, ranked by how often they appear
 - **Experience to gain**: frequent requirements your CV doesn't cover yet, with suggestions
 
-Each person runs their own copy. Everything about you (CV, searches, settings) stays in a local folder that is never committed.
+Each person runs their own copy. Everything about you (CV, searches, settings) stays in `config_local/`, a folder that is never committed.
 
 ## Status
 
@@ -37,17 +37,17 @@ Each run fetches postings, merges duplicates across sources, drops ones you've a
         cd job-radar
         uv sync
 
-2. **Create your files in `local/`** (gitignored, never committed):
-   - `profile.yaml`: what you're searching for: roles, excluded titles, work mode, places, minimum salary, seniority and domains (cause areas, as the settings name them). Copy [examples/profile.example.yaml](examples/profile.example.yaml) and change it
-   - your CV as `cv.pdf` (with a text layer, not a scan), `cv.md` or `cv.txt`. [examples/cv.example.md](examples/cv.example.md) shows a made-up one
-   - `preferences.md`: your ideal job in your own words (what you want to do, where, for whom, what matters to you). Claude reads it with your CV when it ranks jobs
-   - optionally `settings.yaml`, with only the settings you change. The app reads [job_radar/default_settings.yaml](job_radar/default_settings.yaml) first, every setting with its default, and merges yours over it
+2. **Create your files in `config_local/`** (gitignored, never committed). Each has a same-named example or default in `config/`:
+   - `profile.yaml`: what you're searching for: roles, excluded titles, work mode, places, minimum salary, seniority and domains (cause areas, as the settings name them). Copy [config/profile.example.yaml](config/profile.example.yaml) and change it
+   - your CV as `cv.pdf` (with a text layer, not a scan), `cv.md` or `cv.txt`. [config/cv.example.md](config/cv.example.md) shows a made-up one
+   - `preferences.md`: your ideal job in your own words (what you want to do, where, for whom, what matters to you). Claude reads it with your CV when it ranks jobs. [config/preferences.example.md](config/preferences.example.md) shows a made-up one
+   - optionally `settings.yaml`, with only the settings you change. The app reads [config/settings.yaml](config/settings.yaml) first, every setting with its default, and merges yours over it
 
 3. **Log in to Claude Code.** Install [Claude Code](https://claude.com/claude-code) and log in; `claude auth status` should say you are. A real run checks this before it fetches anything.
 
-4. **Try the demo:** `uv run job-radar run --demo`. It runs every step on made-up postings: no network, no LLM, and nothing from `local/`. Its runs go under `output/demo/`, apart from real ones.
+4. **Try the demo:** `uv run job-radar run --demo`. It runs every step on made-up postings: no network, no LLM, and nothing from `config_local/`. Its runs go under `output/demo/`, apart from real ones.
 
-5. **Run for real:** `uv run job-radar run`. This fetches Fast Forward (free), filters the jobs against your searches, and has Claude label, read and rank the ones left. A first run fetches the last 14 days and asks before going ahead. For a small first run, put this in `local/settings.yaml`:
+5. **Run for real:** `uv run job-radar run`. This fetches Fast Forward (free), filters the jobs against your searches, and has Claude label, read and rank the ones left. A first run fetches the last 14 days and asks before going ahead. For a small first run, put this in `config_local/settings.yaml`:
 
         lookback_days: 1
         llm:
@@ -55,7 +55,7 @@ Each run fetches postings, merges duplicates across sources, drops ones you've a
 
    `llm.max_jobs_per_run` (60 by default) is a safety cap on how many jobs one run sends to Claude. Over it, the run asks: "75 jobs would go to Claude, over the cap of 60. Send them all, only the first 60, or stop? (a/f/s, Enter for f)". The first 60 go on and the rest are carried over to the next run, so none are lost; stop ends the run before any call to Claude, and running the same command again resumes it and asks again. Read the report at the path the terminal gives.
 
-6. **Add JobsPipe** (paid, off by default), for LinkedIn, Indeed and employers' own ATS. Put `JOBSPIPE_API_KEY=...` in `.env` at the repo root (never committed) and turn it on in `local/settings.yaml`, with a low per-run max to start:
+6. **Add JobsPipe** (paid, off by default), for LinkedIn, Indeed and employers' own ATS. Put `JOBSPIPE_API_KEY=...` in `config_local/.env` (never committed) and turn it on in `config_local/settings.yaml`, with a low per-run max to start:
 
         sources:
           jobspipe:

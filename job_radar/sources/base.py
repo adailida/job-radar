@@ -2,7 +2,7 @@
 
 from typing import Protocol, runtime_checkable
 
-from job_radar.model import PaidFetch, Posting, RawPage, SearchCriteria, SpendPlan, Window
+from job_radar.models import PaidFetch, Posting, RawPage, SearchCriteria, SpendPlan, Window
 
 
 @runtime_checkable

@@ -7,9 +7,8 @@ from decimal import Decimal
 
 import pycountry
 
-from job_radar.errors import JobRadarError
-from job_radar.html_text import HtmlText
-from job_radar.model import (
+from job_radar.matching.place_codes import PlaceCodes
+from job_radar.models import (
     IfMissing,
     Location,
     PaidFetch,
@@ -23,9 +22,10 @@ from job_radar.model import (
     Window,
     WorkMode,
 )
-from job_radar.places import PlaceCodes
-from job_radar.prompter import Prompter
-from job_radar.sources.http import BoardClient
+from job_radar.sources.board_client import BoardClient
+from job_radar.utils.errors import JobRadarError
+from job_radar.utils.html_text import HtmlText
+from job_radar.utils.prompter import Prompter
 
 
 class JobsPipeError(JobRadarError):

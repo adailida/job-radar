@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from job_radar.llm import ClaudeCli, LlmError
+from job_radar.llm.llm import ClaudeCli, LlmError
 
 
 class Runner:

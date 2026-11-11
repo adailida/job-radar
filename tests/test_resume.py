@@ -2,12 +2,12 @@ from datetime import date
 
 from fakes import FakePrompter, NoCost, NoLock
 
-from job_radar.app import JobRadarApp
-from job_radar.model import RunSummary, StepCount, Window
-from job_radar.result import RunCancelled
-from job_radar.resume import ResumeOffer
-from job_radar.window import WindowPlan, WindowReason
-from job_radar.words import Words
+from job_radar.app.job_radar_app import JobRadarApp
+from job_radar.app.resume_offer import ResumeOffer
+from job_radar.app.run_result import RunCancelled
+from job_radar.app.window import WindowPlan, WindowReason
+from job_radar.models import RunSummary, StepCount, Window
+from job_radar.report.words import Words
 
 WINDOW = Window(start=date(2026, 10, 26), end=date(2026, 11, 9))
 FAILED = RunSummary(

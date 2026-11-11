@@ -6,8 +6,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from job_radar.html_text import HtmlText
-from job_radar.model import (
+from job_radar.matching.place_codes import PlaceCodes
+from job_radar.models import (
     Location,
     Period,
     RawPage,
@@ -17,9 +17,9 @@ from job_radar.model import (
     Window,
     WorkMode,
 )
-from job_radar.places import PlaceCodes
+from job_radar.sources.board_client import BoardClient, BoardError
 from job_radar.sources.getro import GetroDescriber, GetroParser, GetroSource
-from job_radar.sources.http import BoardClient, BoardError
+from job_radar.utils.html_text import HtmlText
 
 FIXTURES = Path(__file__).parent / "fixtures" / "getro"
 FIXTURE = FIXTURES / "search_page.json"

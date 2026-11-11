@@ -5,12 +5,12 @@ import sys
 from pathlib import Path
 
 from job_radar import __version__
-from job_radar.clock import Clock
-from job_radar.errors import JobRadarError, SetupError
-from job_radar.factory import AppFactory
-from job_radar.prompter import TerminalPrompter
-from job_radar.secrets import EnvSecrets
-from job_radar.settings import SettingsFile
+from job_radar.app.app_factory import AppFactory
+from job_radar.config.secrets import EnvSecrets
+from job_radar.config.settings import SettingsFile
+from job_radar.utils.clock import Clock
+from job_radar.utils.errors import JobRadarError, SetupError
+from job_radar.utils.prompter import TerminalPrompter
 
 
 class Cli:
@@ -22,7 +22,7 @@ class Cli:
     only the factory that builds the app.
     """
 
-    LOCAL = Path("local")  # the user's folder: CV, preferences, profile and settings
+    LOCAL = Path("config_local")  # the user's folder: CV, preferences, profile, settings, keys
 
     @staticmethod
     def start() -> int:
@@ -32,7 +32,7 @@ class Cli:
         except SetupError as error:
             print(f"Could not set up the run: {error}")
             return 2
-        secrets = EnvSecrets(Path(".env"))
+        secrets = EnvSecrets(Cli.LOCAL / ".env")
         factory = AppFactory(settings, Cli.LOCAL, Clock(), TerminalPrompter(), secrets)
         return Cli(factory).main(sys.argv[1:])
 

@@ -2,9 +2,8 @@ from datetime import date
 
 from fakes import FakeHistory, FakePrompter, FixedClock
 
-from job_radar.model import Window
-from job_radar.window import WindowPlan, WindowPlanner, WindowReason
-from job_radar.window_chooser import WindowChooser
+from job_radar.app.window import WindowChooser, WindowPlan, WindowPlanner, WindowReason
+from job_radar.models import Window
 
 TODAY = date(2026, 11, 5)
 PLANNER = WindowPlanner(lookback_days=14)

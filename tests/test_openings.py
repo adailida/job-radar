@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 from fakes import grouper, posting
 
-from job_radar.model import Classification, Job, Seniority
+from job_radar.models import Classification, Job, Seniority
 
 
 def labelled(

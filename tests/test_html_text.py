@@ -1,4 +1,4 @@
-from job_radar.html_text import HtmlText
+from job_radar.utils.html_text import HtmlText
 
 
 def text(html: str) -> str:

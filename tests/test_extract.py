@@ -4,10 +4,10 @@ from datetime import date
 
 from fakes import FakePrompter, MemoryWarningLog, guard, job
 
-from job_radar.checkpoints import FileCheckpoints
-from job_radar.extract import KeywordExtractor, LlmExtractor
-from job_radar.model import Extraction, Job, Requirement, RequirementType, Window
-from job_radar.steps.extract import ExtractStep
+from job_radar.llm.extractor import KeywordExtractor, LlmExtractor
+from job_radar.models import Extraction, Job, Requirement, RequirementType, Window
+from job_radar.pipeline.steps.extract import ExtractStep
+from job_radar.storage.checkpoints import FileCheckpoints
 
 PYTHON = {"type": "tool", "name": "Python", "years": None}
 

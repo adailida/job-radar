@@ -1,5 +1,5 @@
-from job_radar.model import SourceCount
-from job_radar.source_counts import FileSourceCountLog
+from job_radar.models import SourceCount
+from job_radar.storage.source_count_log import FileSourceCountLog
 
 
 def test_the_count_log_keeps_the_last_counts_written(tmp_path):

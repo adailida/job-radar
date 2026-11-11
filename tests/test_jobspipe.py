@@ -7,9 +7,12 @@ import httpx
 import pytest
 from fakes import FakePrompter
 
-from job_radar.factory import AppFactory
-from job_radar.html_text import HtmlText
-from job_radar.model import (
+from job_radar.app.app_factory import AppFactory
+from job_radar.config.secrets import EnvSecrets
+from job_radar.config.settings import SettingsFile
+from job_radar.config.yaml_file import ConfigError
+from job_radar.matching.place_codes import PlaceCodes
+from job_radar.models import (
     IfMissing,
     MinSalary,
     Period,
@@ -21,12 +24,9 @@ from job_radar.model import (
     WorkMode,
     WorkModes,
 )
-from job_radar.places import PlaceCodes
-from job_radar.secrets import EnvSecrets
-from job_radar.settings import SettingsFile
-from job_radar.sources.http import BoardClient
+from job_radar.sources.board_client import BoardClient
 from job_radar.sources.jobspipe import JobsPipeError, JobsPipeParser, JobsPipeSource
-from job_radar.yaml_file import ConfigError
+from job_radar.utils.html_text import HtmlText
 
 FIXTURE = Path(__file__).parent / "fixtures" / "jobspipe" / "search_page.json"
 WINDOW = Window(start=date(2026, 11, 8), end=date(2026, 11, 9))
@@ -212,7 +212,7 @@ def test_secrets_come_from_the_environment_first_then_the_file(tmp_path, monkeyp
 
 
 def test_jobspipe_on_without_a_key_is_a_setup_error(tmp_path):
-    local = tmp_path / "local"
+    local = tmp_path / "config_local"
     local.mkdir()
     (local / "profile.yaml").write_text("searches: {all: {}}\n")
     (local / "cv.md").write_text("A CV.\n")
@@ -224,16 +224,18 @@ def test_jobspipe_on_without_a_key_is_a_setup_error(tmp_path):
         FakePrompter(),
         {},
     )
-    with pytest.raises(ConfigError, match="JOBSPIPE_API_KEY is not set: add it to .env"):
+    with pytest.raises(
+        ConfigError, match="JOBSPIPE_API_KEY is not set: add it to config_local/.env"
+    ):
         factory.create(demo=False)
 
 
 def test_a_run_fetches_from_jobspipe_and_fast_forward(tmp_path, monkeypatch):
     # Acceptance (Job search): a run fetches from JobsPipe and Fast Forward (JobsPipe on).
-    from job_radar.llm import ClaudeCli
+    from job_radar.llm.llm import ClaudeCli
 
     monkeypatch.setattr(ClaudeCli, "check", lambda self: None)
-    local = tmp_path / "local"
+    local = tmp_path / "config_local"
     local.mkdir()
     (local / "profile.yaml").write_text("searches: {all: {}}\n")
     (local / "cv.md").write_text("A CV.\n")
@@ -252,7 +254,7 @@ def test_a_run_fetches_from_jobspipe_and_fast_forward(tmp_path, monkeypatch):
 
 @pytest.mark.live
 def test_live_estimate_answers_for_free():
-    key = EnvSecrets(Path(".env")).get("JOBSPIPE_API_KEY")
+    key = EnvSecrets(Path("config_local") / ".env").get("JOBSPIPE_API_KEY")
     if not key:
         pytest.skip("no JOBSPIPE_API_KEY")
     response = httpx.post(
@@ -304,7 +306,7 @@ def test_jobspipe_limits_come_from_the_plan_unless_the_settings_set_them():
 
 
 def test_a_domain_the_settings_dont_define_is_a_setup_error(tmp_path):
-    local = tmp_path / "local"
+    local = tmp_path / "config_local"
     local.mkdir()
     (local / "profile.yaml").write_text("searches: {all: {domains: [space]}}\n")
     factory = AppFactory(
