@@ -3,6 +3,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from fakes import EXAMPLE
 
 from job_radar.app.app_factory import AppFactory
 from job_radar.app.run_result import RunCancelled, RunFailed, RunResult, RunSucceeded
@@ -172,7 +173,9 @@ def test_step_names_are_unique():
 
 def test_cli_still_shows_version(capsys):
     cli = Cli(
-        AppFactory(SettingsFile.defaults(), Path("config_local"), Clock(), TerminalPrompter(), {})
+        AppFactory(
+            SettingsFile.defaults(), Path("config_local"), EXAMPLE, Clock(), TerminalPrompter(), {}
+        )
     )
     with pytest.raises(SystemExit) as exit_:
         cli.main(["--version"])

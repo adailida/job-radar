@@ -16,15 +16,6 @@ from job_radar.models import (
     WorkModes,
 )
 
-DEMO_SEARCHES = SearchCriteria(
-    searches=(
-        Search(
-            name="demo", roles=("engineer", "engineering", "developer", "tech lead", "architect")
-        ),
-    )
-)
-"""A made-up search for `job-radar run --demo` and the end-to-end tests."""
-
 
 class _Criteria(Model):
     """The criteria of one search, as written in the file. An unset field comes from `common`."""
@@ -56,14 +47,14 @@ class SearchesFile:
         """Keep the path of the user's `profile.yaml`."""
         self._path = path
         self._file = YamlFile(
-            path, fix=f"Fix it in {path}; config/profile.example.yaml shows every key"
+            path, fix=f"Fix it in {path}; config_local_example/profile.yaml shows every key"
         )
 
     def load(self) -> SearchCriteria:
         """Every search in the file, with `common` filled in, in the file's order."""
         if not self._file.exists():
             raise ConfigError(
-                f"no {self._path}: copy config/profile.example.yaml there and set your roles"
+                f"no {self._path}: copy config_local_example/profile.yaml there and set your roles"
             )
         profile = self._file.load(_ProfileFile)
         return SearchCriteria(

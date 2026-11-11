@@ -1,7 +1,7 @@
 import os
 
 import pytest
-from fakes import WINDOW, FakePrompter, FakeStep, FixedClock, NoCost
+from fakes import EXAMPLE, WINDOW, FakePrompter, FakeStep, FixedClock, NoCost
 
 from job_radar.app.app_factory import AppFactory
 from job_radar.app.job_radar_app import JobRadarApp
@@ -71,7 +71,7 @@ def test_this_process_is_running_and_a_finished_one_is_not():
 def demo_cli(tmp_path, prompter: FakePrompter) -> Cli:
     """The real command over demo runs in a temp folder."""
     settings = SettingsFile.defaults(output=str(tmp_path))
-    return Cli(AppFactory(settings, tmp_path / "config_local", FixedClock(), prompter, {}))
+    return Cli(AppFactory(settings, tmp_path / "config_local", EXAMPLE, FixedClock(), prompter, {}))
 
 
 def test_a_run_takes_the_lock_and_releases_it_when_it_ends(tmp_path):
@@ -197,12 +197,17 @@ def test_errors_stop_the_run_with_a_clear_message_for_invalid_user_input(tmp_pat
     local.mkdir()
     (local / "profile.yaml").write_text("searches:\n  one:\n    rols: [engineer]\n")
     factory = AppFactory(
-        SettingsFile.defaults(output=str(tmp_path)), local, FixedClock(), FakePrompter(), {}
+        SettingsFile.defaults(output=str(tmp_path)),
+        local,
+        EXAMPLE,
+        FixedClock(),
+        FakePrompter(),
+        {},
     )
     assert Cli(factory).main(["run"]) == 2
     assert capsys.readouterr().out == (
         f"Could not set up the run: {local / 'profile.yaml'}: searches.one.rols: unknown key. "
-        f"Fix it in {local / 'profile.yaml'}; config/profile.example.yaml shows every key\n"
+        f"Fix it in {local / 'profile.yaml'}; config_local_example/profile.yaml shows every key\n"
     )
 
 
@@ -212,7 +217,12 @@ def test_an_unreadable_cv_names_the_file_and_the_fix(tmp_path, capsys):
     (local / "profile.yaml").write_text("searches:\n  one:\n    roles: [engineer]\n")
     (local / "cv.md").write_text("   \n")
     factory = AppFactory(
-        SettingsFile.defaults(output=str(tmp_path)), local, FixedClock(), FakePrompter(), {}
+        SettingsFile.defaults(output=str(tmp_path)),
+        local,
+        EXAMPLE,
+        FixedClock(),
+        FakePrompter(),
+        {},
     )
     assert Cli(factory).main(["run"]) == 2
     assert capsys.readouterr().out == f"Could not set up the run: {local / 'cv.md'} has no text\n"
@@ -220,7 +230,7 @@ def test_an_unreadable_cv_names_the_file_and_the_fix(tmp_path, capsys):
 
 def test_a_missing_api_key_names_the_key_and_the_fix(tmp_path):
     settings = SettingsFile.defaults(output=str(tmp_path), sources={"jobspipe": {"enabled": True}})
-    factory = AppFactory(settings, tmp_path, FixedClock(), FakePrompter(), {})
+    factory = AppFactory(settings, tmp_path, EXAMPLE, FixedClock(), FakePrompter(), {})
     with pytest.raises(ConfigError) as missing:
         factory._jobspipe()
     assert str(missing.value) == (

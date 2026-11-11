@@ -8,17 +8,6 @@ from pypdf.errors import PdfReadError
 from job_radar.models import CandidateProfile
 from job_radar.utils.errors import SetupError
 
-DEMO_PROFILE = CandidateProfile(
-    cv=(
-        "Backend engineer with eight years of Python. Built data pipelines, APIs and "
-        "platform tooling for small teams. Senior engineer on my last two teams."
-    ),
-    preferences=(
-        "A senior data or platform role at a mission-driven organisation. Remote or hybrid."
-    ),
-)
-"""A made-up profile for `job-radar run --demo` and the end-to-end tests."""
-
 
 class ProfileError(SetupError):
     """The CV or preferences can't be read: missing, empty, or a PDF with no text."""

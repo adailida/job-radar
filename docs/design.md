@@ -2,6 +2,8 @@
 
 How job-radar meets [requirements.md](requirements.md).
 
+**Status: built.** The MVP is done (Nov 10): the code follows this design, and the decisions log (section 14) records where it changed. Changes after the MVP are logged there too, with their PR.
+
 Redesigned on Nov 4: sections 1 to 6 and 9 follow the classes in [architecture.md](architecture.md). Sections 7, 8 and 10 to 12 still use some older names (`RunStore`, `Prompter`, `run()`, stages); each is brought in line by the task that builds it. Section 13 follows the code since task 24.
 
 ## 1. Pipeline
@@ -147,7 +149,7 @@ No free functions: every behaviour belongs to a class with one responsibility, o
 ### CLI
 
 - `job-radar run`: one run
-- `job-radar run --demo`: one run on a made-up board and profile, with keyword scoring in place of the LLM: no network, no LLM, nothing from `config_local/`. For trying the tool and for the end-to-end tests. A flag, not a setting: a demo is a one-off choice for one command. Demo runs keep their own run folders and history under `output/demo/`, so they never move a real run's window
+- `job-radar run --demo`: one run on a made-up board as the made-up person in `config_local_example/` (its searches, CV and preferences), with keyword scoring in place of the LLM: no network, no LLM, nothing personal from `config_local/`. For trying the tool and for the end-to-end tests. A flag, not a setting: a demo is a one-off choice for one command. Demo runs keep their own run folders and history under `output/demo/`, so they never move a real run's window
 - `job-radar runs` lists runs, newest first: status, window, and what a run recommended or the last step a failed one finished. `job-radar delete <run-id>...` deletes runs after confirmation; `--all` deletes every run. `--demo` works on demo runs
 
 ### Layout
@@ -500,11 +502,15 @@ Opt-in (`@pytest.mark.live`, skipped by default), run by hand to catch API chang
 ### Files
 
 ```
-config/                    committed: the defaults and examples
+config/                    committed: only the defaults the app reads
   settings.yaml            every setting with its default, commented: read first, every run
-  profile.example.yaml     every profile key, for a made-up person
-  cv.example.md            a fictional person's CV
-  preferences.example.md   the same person's ideal job
+config_local_example/      committed: a copy-and-edit template of config_local/, for a made-up person;
+                           --demo runs on it
+  settings.yaml            a few common overrides, commented
+  profile.yaml             the searches, with the profile keys explained
+  cv.md                    a fictional person's CV
+  preferences.md           the same person's ideal job
+  .env                     the API key names, with no values
 config_local/              gitignored as a whole: the user's overrides and personal files
   settings.yaml            only the settings the user overrides
   profile.yaml             user input: the searches
@@ -513,7 +519,8 @@ config_local/              gitignored as a whole: the user's overrides and perso
   .env                     API keys
 ```
 
-- Defaults and overrides in two folders with the same file names: `config_local/settings.yaml` is merged over `config/settings.yaml`, and each personal file has its example under the same name in `config/`
+- Defaults and overrides in two folders with the same file names: `config_local/settings.yaml` is merged over `config/settings.yaml`
+- `config_local_example/` mirrors `config_local/` file for file, so a first setup is `cp -r config_local_example config_local`, then editing. `.env` is ignored everywhere but there, where it holds no key
 - One gitignored folder for everything personal: the repo is public, and one rule covers any personal file added later
 - Paths can be overridden with `--profile` and `--settings`
 - The CV is read locally (PDF via `pypdf`); the LLM sees only text. A scanned PDF with no text layer stops the run with an error asking for a text PDF. Word files later
@@ -1001,7 +1008,7 @@ The run folder is created only after the window and the spend are agreed, so a s
 | Kind | Example message |
 |---|---|
 | Settings invalid | Could not set up the run: config_local/settings.yaml: recommend.min_scor: unknown key. Fix it in config_local/settings.yaml; config/settings.yaml lists every setting with its default |
-| Profile invalid | Could not set up the run: config_local/profile.yaml: searches.one.rols: unknown key. Fix it in config_local/profile.yaml; config/profile.example.yaml shows every key |
+| Profile invalid | Could not set up the run: config_local/profile.yaml: searches.one.rols: unknown key. Fix it in config_local/profile.yaml; config_local_example/profile.yaml shows every key |
 | CV unreadable | Could not set up the run: config_local/cv.pdf has no text (a scanned PDF? Export a text PDF, or use cv.md) |
 | API key missing | Could not set up the run: JOBSPIPE_API_KEY is not set: add it to config_local/.env, or set sources.jobspipe.enabled: false in config_local/settings.yaml |
 | LLM unavailable | Could not set up the run: `claude` is not logged in: run `claude auth login` |
@@ -1171,7 +1178,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Salaries show whole thousands ("$129k"); a place that only repeats the work mode is left out | The amounts as posted; every place | Boards post salaries to the cent, and Fast Forward gives "Remote" as a place for remote jobs |
 | Places in the report are separated by "; " | ", " | Places contain commas ("Amsterdam, Netherlands"), so commas between them were ambiguous |
 | Settings are nested from the start (`llm`, `recommend`, `sources`), with only the keys that do something today | Flat keys now, nested later; every key in the sample above now | The file format doesn't change as tasks add keys; a key that does nothing would mislead |
-| `profile.yaml` is required for a real run (terminal prompts, task 12, deferred after the MVP on Nov 10); the demo has its own search in code | Default roles in code when the file is missing | A run without the user's searches sends the wrong jobs to the LLM; a clear error costs one copy of the example |
+| `profile.yaml` is required for a real run (terminal prompts, task 12, deferred after the MVP on Nov 10); the demo reads the example's, in `config_local_example/` | Default roles in code when the file is missing | A run without the user's searches sends the wrong jobs to the LLM; a clear error costs one copy of the example |
 | The settings are read in `Cli.start`, before the factory | The factory reads them | `AppFactory` keeps taking `Settings`, so tests pass settings directly. A bad file still exits with 2 |
 | Fetch and filter take all the searches (`SearchCriteria`); a job is kept if any search matches | One search until task 11 | `profile.yaml` lists several searches; boards with server-side queries (JobsPipe) will need them all |
 | `--settings` and `--profile` flags wait until something needs another path | Add them now | The fixed files in `config_local/` are enough for one person |
@@ -1219,4 +1226,5 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | A new opening's line includes the salary | Title, company, place, date, score and link only | The acceptance criteria ask for the salary on each job in the report |
 | The demo classifier labels job types from title words | Leave job types unknown in the demo | The demo run shows real grouping, and the end-to-end test checks it |
 | The code is grouped in folders by responsibility (app, pipeline and its steps, sources, llm, matching, report, storage, config, utils, models), read from the command down; a module is named after its main class, its interface, or its step | One flat package (the earlier layout); folders by layer only | Changed Nov 10 (PR #32): with over 40 modules in one folder, finding a class meant searching. Folders say what each part is for, and the naming rule says where a class lives without searching |
-| Defaults and examples in a committed `config/`, the user's overrides and personal files in a gitignored `config_local/`, with the same file names | Defaults inside the package (`job_radar/default_settings.yaml`), examples in `examples/`, personal files in `local/` and keys in `.env` at the repo root (the earlier layout) | Two folders side by side make the override plain: `config_local/settings.yaml` goes over `config/settings.yaml`, and each personal file has its example under the same name. Keys move into `config_local/` too, so one ignored folder holds everything personal |
+| Defaults in a committed `config/`, the user's overrides and personal files in a gitignored `config_local/`, and a committed `config_local_example/` that mirrors `config_local/` file for file | Examples beside the defaults in `config/` (PR #32); defaults inside the package (`job_radar/default_settings.yaml`), examples in `examples/`, personal files in `local/` and keys in `.env` at the repo root (the earlier layout) | Changed Nov 11 (PR #33): `config/` holds only what the app reads, so it is plain which files are defaults. Set up by copying one folder (`cp -r config_local_example config_local`) and editing, with every file already under its right name. Keys live in `config_local/` too, so one ignored folder holds everything personal |
+| The demo runs on `config_local_example/`: its searches, CV and preferences, read by `SearchesFile` and `ProfileLoader` | A demo search and profile as constants in code (`--demo` before PR #33) | The demo shows what a fresh copy of the example would do, through the same readers as a real run, so the example files are tested on every demo run and can't go stale. The demo keeps its made-up board, keyword scoring and `output/demo/` |
