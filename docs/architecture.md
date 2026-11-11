@@ -4,7 +4,7 @@ How the code is put together: which classes exist, what each one is responsible 
 
 **Shown now:** the MVP as built (done Nov 10, tasks 1 to 26). One run goes from the command to the report: Fast Forward, and JobsPipe when it's on, then dedupe, the filter, and Claude labelling, reading and ranking jobs through `claude -p`, then the report with trends, asks and gaps. `--demo` runs the same steps offline, as the made-up person in `config_local_example/`. Every class shown works. Green borders marked what worked as each PR landed and were not added to every box, so a plain box is not an unbuilt one. Deferred after the MVP: keywords in descriptions and terminal prompts for user input. Each PR that changes the flow updates these diagrams.
 
-**History:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads the user's settings over the defaults and the searches from their profile; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. PR #17 notes in the report the days a long break left out. PR #18 merges postings on the employer's own id, read from ATS links, and on company, title and country. PR #19 drops jobs an earlier completed run already found, in `NewJobsFilterStep`. PR #20 adds JobsPipe, a paid API, off by default and capped per run, and moves the default settings into a YAML file, which the app reads first. PR #21 agrees what paid sources may spend before anything is fetched. PR #22 labels each job (seniority, job type, domain, sector) and adds a match step for the `seniority` and `domains` criteria. PR #23 finds what each matched job asks for: skills, tools, certifications and years. PR #24 carries jobs the LLM's usage limit stopped over to the next run. PR #25 adds market trends to the report: periods, coverage, figures, the change and notes on changed searches or sources. PR #26 adds the What employers ask for section. PR #27 adds the Experience to gain section. PR #28 completes the report: sources line, alerts, new openings grouped by job type, display names, terminal summary. PR #29 completes errors and warnings: a failing source no longer stops the run, warnings in the report and terminal, one run at a time. PR #30 adds the acceptance checklist. PR #31 adds a cap on jobs sent to the LLM, the README first-run walkthrough and an example CV. With it the MVP's tasks are done. PR #32 regroups the code into folders and moves defaults to config/ and personal files to config_local/. PR #33 adds config_local_example/, a copy-and-edit template of config_local/, which --demo runs on. PR #33 also opens the README with requirements and a quick start. After it, the per-run limits are named `llm.ask_above_jobs` and `sources.jobspipe.ask_above_credits`, and a JobsPipe fetch that reaches its cap asks to keep going instead of failing ("A paid source: the cost check and the fetch", below).
+**History:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads the user's settings over the defaults and the searches from their profile; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. PR #17 notes in the report the days a long break left out. PR #18 merges postings on the employer's own id, read from ATS links, and on company, title and country. PR #19 drops jobs an earlier completed run already found, in `NewJobsFilterStep`. PR #20 adds JobsPipe, a paid API, off by default and capped per run, and moves the default settings into a YAML file, which the app reads first. PR #21 agrees what paid sources may spend before anything is fetched. PR #22 labels each job (seniority, job type, domain, sector) and adds a match step for the `seniority` and `domains` criteria. PR #23 finds what each matched job asks for: skills, tools, certifications and years. PR #24 carries jobs the LLM's usage limit stopped over to the next run. PR #25 adds market trends to the report: periods, coverage, figures, the change and notes on changed searches or sources. PR #26 adds the What employers ask for section. PR #27 adds the Experience to gain section. PR #28 completes the report: sources line, alerts, new openings grouped by job type, display names, terminal summary. PR #29 completes errors and warnings: a failing source no longer stops the run, warnings in the report and terminal, one run at a time. PR #30 adds the acceptance checklist. PR #31 adds a cap on jobs sent to the LLM, the README first-run walkthrough and an example CV. With it the MVP's tasks are done. PR #32 regroups the code into folders and moves defaults to config/ and personal files to config_local/. PR #33 adds config_local_example/, a copy-and-edit template of config_local/, which --demo runs on. PR #33 also opens the README with requirements and a quick start. After it, the per-run limits are named `llm.ask_above_jobs` and `sources.jobspipe.ask_above_credits`, and a JobsPipe fetch that reaches its cap asks to keep going instead of failing ("A paid source: the cost check and the fetch", below). Then each source tracks the dates it covered in full: a source that failed, was skipped or came back empty catches up in the next run, from its own window ("Agreeing the windows", below).
 
 The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, fetches their full descriptions, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, the made-up person in `config_local_example/` and keyword scoring in place of the LLM.
 
@@ -35,7 +35,7 @@ Defaults are in `config/` at the repo root; the user's overrides and personal fi
 
 ## Classes and dependencies
 
-Three diagrams: the app and the pipeline that runs the steps, how the app agrees the run's window, then the steps and what each one uses. Boxes marked with a pattern name (Repository, Adapter, Strategy) are interfaces.
+Three diagrams: the app and the pipeline that runs the steps, how the app agrees the run's windows, then the steps and what each one uses. Boxes marked with a pattern name (Repository, Adapter, Strategy) are interfaces.
 
 ### App and pipeline
 
@@ -81,7 +81,7 @@ classDiagram
         -offer: ResumeOffer
         -chooser: WindowChooser
         -cost: CostCheck
-        -build: window, run to resume, approvals, to Pipeline
+        -build: windows, run to resume, approvals, to Pipeline
         -lock: RunLock
         +run() RunResult
     }
@@ -104,7 +104,7 @@ classDiagram
     class CostCheck {
         -sources: list~PaidSource~
         -prompter: Prompter
-        +check(window) list~Approval~
+        +check(windows) list~Approval~
     }
     class ResumeOffer {
         -history: RunHistory
@@ -150,9 +150,14 @@ classDiagram
         <<interface>>
         +funnel() list~StepCount~
     }
+    class CoverageLog {
+        <<interface>>
+        +record(covered)
+    }
     class FileCheckpoints {
         -folder: Path
         -window: Window
+        -sources: tuple~SourceWindow~
     }
 
     Cli ..> SettingsFile : calls load, before the factory
@@ -166,7 +171,7 @@ classDiagram
     Cli ..> JobRadarApp : calls run
     Cli ..> RunResult : calls message, exit_code
     AppFactory ..> JobRadarApp : creates
-    AppFactory ..> Pipeline : creates, for the agreed window
+    AppFactory ..> Pipeline : creates, for the agreed windows
     AppFactory ..> FileCheckpoints : creates
     JobRadarApp ..> Pipeline : has it built, calls run
     JobRadarApp o-- ResumeOffer : holds
@@ -181,6 +186,7 @@ classDiagram
     RunResult <|-- RunCancelled : extends
     Checkpoints <|.. FileCheckpoints : implements
     RunStats <|.. FileCheckpoints : implements
+    CoverageLog <|.. FileCheckpoints : implements
     JobRadarApp o-- RunLock : holds, taken around the run
     RunLock <|.. FileRunLock : implements
     Pipeline o-- ErrorLog : holds, for a step's bug
@@ -205,7 +211,9 @@ classDiagram
 
 `JobRadarApp` holds `WindowChooser` (next diagram).
 
-### Agreeing the window
+### Agreeing the windows
+
+Each source gets its own window, from where the last completed run that covered it in full ended. The run's window spans them all.
 
 ```mermaid
 classDiagram
@@ -217,11 +225,12 @@ classDiagram
         -planner: WindowPlanner
         -prompter: Prompter
         -clock: Clock
-        +choose() Window or none
+        -sources: dict~str, str~
+        +choose() RunWindows or none
     }
     class WindowPlanner {
         -lookback_days: int
-        +plan(today, last) WindowPlan
+        +plan(today, last, newest) WindowPlan
     }
     class WindowPlan {
         <<immutable data>>
@@ -229,9 +238,26 @@ classDiagram
         +reason: WindowReason
         +last_run: date
     }
+    class RunWindows {
+        <<immutable data>>
+        +window: Window
+        +not_covered: Window
+        +sources: tuple~SourceWindow~
+        +of(source) Window
+        +differ() bool
+    }
+    class SourceWindow {
+        <<immutable data>>
+        +source: str
+        +window: Window
+        +reason: WindowReason
+        +not_covered: Window
+        +covered: bool
+    }
     class RunHistory {
         <<Repository>>
         +last_window() Window
+        +last_covered(source) Window
         +runs() list~RunSummary~
     }
     class FileRunHistory {
@@ -269,7 +295,9 @@ classDiagram
     WindowChooser o-- RunHistory : holds
     WindowChooser o-- WindowPlanner : holds
     WindowChooser o-- Prompter : holds
-    WindowPlanner ..> WindowPlan : creates
+    WindowPlanner ..> WindowPlan : creates, one per source
+    WindowChooser ..> RunWindows : creates, from the plans
+    RunWindows *-- SourceWindow : one per source
     RunHistory <|.. FileRunHistory : implements
     FileRunHistory o-- WarningLog : holds, warns about unreadable runs
     WarningLog <|.. TerminalWarnings : implements, outside a run
@@ -303,11 +331,12 @@ classDiagram
     class FetchStep {
         -sources: list~JobBoardSource~
         -criteria: SearchCriteria
-        -window: Window
+        -windows: RunWindows
         -approvals: dict~str, Approval~
         -log: SpendLog
         -warnings: WarningLog
         -low_credits: int
+        -coverage: CoverageLog
     }
     class WarningLog {
         <<Repository>>
@@ -419,7 +448,7 @@ classDiagram
     }
     class FilterStep {
         -criteria: SearchCriteria
-        -window: Window
+        -windows: RunWindows
         -matcher: JobMatcher
         -log: DropLog
     }
@@ -563,7 +592,7 @@ classDiagram
         -asks: AskSource
         -gaps: GapSource
         -run_id: str
-        -window: Window
+        -windows: RunWindows
         -min_score: int
         -sources: dict~str, str~
         -counts: SourceCountLog
@@ -665,6 +694,7 @@ classDiagram
         +run: str
         +window: Window
         +not_covered: Window
+        +source_windows: tuple~SourceWindow~
         +sources: tuple~SourceSummary~
         +alerts: tuple~Alert~
         +min_score: int
@@ -725,6 +755,7 @@ classDiagram
     FetchStep o-- SpendLog : holds
     SpendLog <|.. FileSpendLog : implements
     FetchStep o-- WarningLog : holds, warns
+    FetchStep o-- CoverageLog : holds, records the sources covered in full
     ConvertStep o-- WarningLog : holds, warns
     ClassifyStep o-- WarningLog : holds, warns
     ExtractStep o-- WarningLog : holds, warns
@@ -905,7 +936,7 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `SettingsFile` | | Read `config/settings.yaml`, then merge `config_local/settings.yaml` over it at any depth; no local file means every default. `Settings` holds only types and limits | `YamlFile`, `Settings` |
 | `SearchesFile` | | Read the searches from `config_local/profile.yaml` (the demo: `config_local_example/profile.yaml`), filling each from `common`; required for a real run | `YamlFile`, `SearchCriteria` |
 | `YamlFile` | | Read one YAML file into a model; errors name the file and the key's path | `pyyaml`, models |
-| `JobRadarApp` | | Take the run lock; resume the last run if it failed and the user says yes, or agree a new window; have the pipeline built for it, launch it, and hand back how it ended; release the lock however it ends | `ResumeOffer`, `WindowChooser`, `CostCheck`, `Pipeline`, `RunResult`, `RunLock` |
+| `JobRadarApp` | | Take the run lock; resume the last run if it failed and the user says yes, or agree new windows; have the pipeline built for them, launch it, and hand back how it ended; release the lock however it ends | `ResumeOffer`, `WindowChooser`, `CostCheck`, `Pipeline`, `RunResult`, `RunLock` |
 | `RunLock`, `FileRunLock` | Interface | One run at a time: `output/run.lock` holds the running process's id; a lock whose process no longer exists is removed; a live one raises `RunInProgress` | the output folder |
 | `JobRadarError`, `SetupError` | Exceptions | The errors the app expects, each with a message that says what's wrong and how to fix it; `SetupError` stops a run before it starts (`ConfigError`, `ProfileError`, `LlmUnavailable`, `RunInProgress`). Anything else is a bug | nothing |
 | `ErrorLog`, `FileErrorLog` | Repository | Write an unexpected error's traceback to `error.log`, in the run folder or the output folder, and say where | its folder |
@@ -913,9 +944,9 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `TerminalWarnings` | Implements `WarningLog` | Outside a run, tell each warning once in the terminal; remembers what it told (stateful, for one command) | `Prompter` |
 | `ResumeOffer` | | When the newest run didn't complete, ask whether to resume it (Enter for yes) | `RunHistory`, `Prompter`, `Words` |
 | `RunResult`, `RunSucceeded`, `RunFailed`, `RunCancelled` | Polymorphism | Say how a run ended, in words and as an exit code | nothing |
-| `WindowChooser` | | Tell the user which dates the run fetches and why; ask first on a first run or after a long break | `RunHistory`, `WindowPlanner`, `Prompter`, `Clock` |
-| `WindowPlanner` | | Decide the window from today, the last completed run and the lookback | `Window` |
-| `RunHistory`, `FileRunHistory` | Repository | Read-only: every run (id, window, completed or not, its steps) and the window of the last completed one, from the run folders; a folder whose manifest can't be read is left out with a warning | the run folders, `WarningLog` |
+| `WindowChooser` | | Work out each source's window; tell the user which dates the run fetches and why, a line per source when they differ; ask first when a source was never covered or was last covered before the lookback | `RunHistory`, `WindowPlanner`, `Prompter`, `Clock` |
+| `WindowPlanner` | | Decide a source's window from today, the last completed run that covered it, the newest completed run and the lookback | `Window` |
+| `RunHistory`, `FileRunHistory` | Repository | Read-only: every run (id, windows, completed or not, its steps), the window of the last completed one, and each source's window in the last completed run that covered it, from the run folders; a folder whose manifest can't be read is left out with a warning | the run folders, `WarningLog` |
 | `RunFolders` | | Delete a run folder, only one that exists directly under the runs folder | the run folders |
 | `RunsCommand` | | `job-radar runs`: list runs, newest first. `job-radar delete`: delete runs after asking, Enter meaning no | `RunHistory`, `RunFolders`, `Prompter`, `Words` |
 | `Prompter`, `TerminalPrompter` | Interface | Tell the user things and ask yes or no in the terminal | the terminal |
@@ -923,9 +954,9 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `Step` | Interface | The shape every step shares | models |
 | `Checkpoints` | Repository | Save and load each step's output for one run; record counts in the manifest; once the run succeeds, mark it completed and delete the outputs | models |
 | `RunStats` | Interface | Read-only: how many items each finished step produced | models |
-| `FileCheckpoints` | Implements both | One JSON Lines file per step, numbered in run order (`01-fetch.jsonl`), plus `manifest.json` (the window, each step's count, completed or not), in the run folder | its run folder |
-| `FetchStep` | Step | Fetch raw pages from every configured job board; a paid one within its approval, or not at all when skipped, recording what it spent. A board that fails is left out with a warning; when every board tried fails, raise `NoSourceData` naming each. Warn about a board that gave nothing, one skipped by you, a budget reached and credits below `alerts.low_credits` | `JobBoardSource`, `PaidSource`, `SpendLog`, `WarningLog` |
-| `CostCheck` | | Before anything is fetched: each paid source's free estimate against the ask-above limit, the budget and the credits left; go ahead on its own within them, else ask go ahead, skip or stop (Enter for skip). A source whose check fails is left out as `failed` | `PaidSource`, `Prompter` |
+| `FileCheckpoints` | Implements both | One JSON Lines file per step, numbered in run order (`01-fetch.jsonl`), plus `manifest.json` (the window, each source's window and whether the fetch covered it, each step's count, completed or not), in the run folder | its run folder |
+| `FetchStep` | Step | Fetch raw pages from every configured job board, each for its own window; a paid one within its approval, or not at all when skipped, recording what it spent. A board that fails is left out with a warning; when every board tried fails, raise `NoSourceData` naming each. Warn about a board that gave nothing, one skipped by you, a budget reached and credits below `alerts.low_credits`. Record which boards it covered in full: not one that failed, was skipped, or gave nothing though its count found jobs | `JobBoardSource`, `PaidSource`, `SpendLog`, `WarningLog`, `CoverageLog` |
+| `CostCheck` | | Before anything is fetched: each paid source's free estimate, for its own window, against the ask-above limit, the budget and the credits left; go ahead on its own within them, else ask go ahead, skip or stop (Enter for skip). A source whose check fails is left out as `failed` | `PaidSource`, `Prompter` |
 | `SpendLog`, `FileSpendLog` | Repository | Keep what each paid source spent in a run, in `spend.jsonl`; the report reads it | its run folder |
 | `JobBoardSource`, `GetroSource` | Adapter | Query one board's API, page by page, and give the board's name for people (`label`: "Fast Forward" for Getro network 997, "JobsPipe", "Demo board"); `GetroSource` stops at the page that reaches past the window | `BoardClient` |
 | `JobsPipeSource` | Adapter, `PaidSource` | One JobsPipe search per user search, with the criteria and the JobsPipe-only filters sent; cursor paging within the agreed cap; reaching it with jobs left, ask to keep going for another cap's worth within the credits left (Enter for no, which fails the source). Its plan is free: the account's credits and an estimate of the matches; the plan (free, seeker) sets the ask-above limit and monthly budget unless settings override them | `BoardClient`, `Prompter` |
@@ -943,7 +974,7 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `Normalizer` | | Put company names, titles and places in canonical form for comparing | nothing |
 | `NewJobsFilterStep` | Step | Drop jobs with a key an earlier completed run kept; with `new_only` off, keep all | `SeenJobs` |
 | `SeenJobs`, `FileSeenJobs` | Repository | Read-only: the jobs each completed run kept in `jobs.jsonl`, and their keys; strong keys for good, fuzzy keys for 60 days. A kept file that can't be read counts as none, with a warning | `RunHistory`, the run folders, `WarningLog` |
-| `FilterStep` | Step | Keep the jobs posted in the window that match any search | `SearchCriteria`, `Window`, `JobMatcher` |
+| `FilterStep` | Step | Keep the jobs posted in their source's window that match any search | `SearchCriteria`, `RunWindows`, `JobMatcher` |
 | `JobMatcher` | | Say whether a job meets one search, and which criterion it fails first: roles, excluded title, work mode, location, salary; `if_missing` settles what the posting doesn't say | `Normalizer` |
 | `DescribeStep` | Step | Fill in the full description of each kept job's primary posting, through the describer for its board; say first how long it takes. Jobs that have one, or whose board has no describer, pass through | `JobDescriber`, `Prompter` |
 | `LlmCapStep` | Step | A safety cap before the first LLM step: over `llm.ask_above_jobs` (60), ask whether to send all, only the first ones (the rest carried over, a warning) or stop before any LLM call (Enter for the first ones); under it, ask nothing | `Prompter`, `PendingLog`, `WarningLog` |
@@ -962,7 +993,7 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `KeywordRanker` | Strategy | Score a job by the share of its title words found in the profile, for `--demo` and tests | models |
 | `Llm`, `ClaudeCli` | Interface | Send one prompt to a language model; `ClaudeCli` runs `claude -p` on the subscription, one plain turn from an empty folder, and checks the login before a run | `claude` |
 | `ProfileLoader` | | Read the CV (`cv.pdf`, `cv.md` or `cv.txt`) and `preferences.md` from `config_local/` (the demo: `config_local_example/`) into a `CandidateProfile`; say what's missing | `config_local/`, `config_local_example/` |
-| `ReportStep` | Step | Put together what the report says (`ReportContent`: the run, its window, its sources with postings and credits, the alerts, the recommended jobs, the new openings by group, the market trends, what employers ask for, how the CV compares with it, the funnel), then have it formatted and written; its summary for the terminal counts new openings, recommended jobs and alerts and gives each alert. Warns when no new job matched, then reads every warning of the run as the alerts | `RunStats`, `SourceCountLog`, `SpendLog`, `KeptJobs`, `OpeningGrouper`, `TrendSource`, `AskSource`, `GapSource`, `ReportRenderer`, `ReportWriter`, `WarningLog` |
+| `ReportStep` | Step | Put together what the report says (`ReportContent`: the run, its window, each source's own window when they differ, its sources with postings and credits, the alerts, the recommended jobs, the new openings by group, the market trends, what employers ask for, how the CV compares with it, the funnel), then have it formatted and written; its summary for the terminal counts new openings, recommended jobs and alerts and gives each alert. Warns when no new job matched, then reads every warning of the run as the alerts | `RunStats`, `SourceCountLog`, `SpendLog`, `KeptJobs`, `OpeningGrouper`, `TrendSource`, `AskSource`, `GapSource`, `ReportRenderer`, `ReportWriter`, `WarningLog` |
 | `OpeningGrouper` | | Put this run's matched jobs under the `report.group_by` headings (job type, domain, or domains inside job types), in the settings' order, then "Other", then "Not labelled"; empty groups left out; newest posted first; a recommended job keeps its score | models |
 | `RunsSource`, `MarketRuns` | Interface | Gather the runs the market sections look at: the completed runs (their kept jobs, windows and configs) and this run (its kept output); free | `RunHistory`, `SeenJobs`, `KeptJobs` |
 | `TrendSource`, `MarketTrends` | Interface | Have the trends worked out over those runs | `RunsSource`, `TrendBuilder` |
@@ -1015,24 +1046,24 @@ sequenceDiagram
     app->>lk: take output/run.lock (this process's id)
     Note over app,lk: another live run: RunInProgress, Cli exits with 2. A lock left by a dead process is removed
     app->>app: ResumeOffer.offer(): if the newest run failed, ask "Resume it?"
-    Note over app: yes: build the pipeline in that run's folder, with its window, and run it (below)
+    Note over app: yes: build the pipeline in that run's folder, with its windows, and run it (below)
     app->>wc: choose()
-    wc->>h: last_window()
-    h-->>wc: the last completed run's window, or none
-    wc->>wc: WindowPlanner.plan(today, last)
-    wc->>pr: tell(which dates, and why)
-    opt first run, or the last run is older than the lookback
+    wc->>h: last_window(), then last_covered(source) for each source
+    h-->>wc: the last completed run's window, and each source's in the last run that covered it, or none
+    wc->>wc: WindowPlanner.plan(today, last covered, newest end) for each source
+    wc->>pr: tell(which dates, and why: once when the sources share them, else a line per source)
+    opt a source never covered, or last covered before the lookback
         wc->>pr: confirm("Continue?")
         pr->>U: Continue? (y/n, Enter for y)
         U-->>pr: y or n
         pr-->>wc: yes or no
     end
     alt you said n
-        wc-->>app: no window
+        wc-->>app: no windows
         app-->>cli: RunCancelled: nothing fetched, no run folder
     else
-        wc-->>app: the plan: the window, and the days a long break left out
-        app->>f: build the pipeline for the window
+        wc-->>app: RunWindows: each source's window and the days a long break left out, and the window spanning them
+        app->>f: build the pipeline for the windows
         f->>f: make the run folder, build the steps, FileCheckpoints and Pipeline
         f-->>app: Pipeline
         app->>p: run()
@@ -1049,6 +1080,7 @@ sequenceDiagram
             p->>cp: save(step, output)
             Note right of cp: writes NN-step.jsonl, adds its count to manifest.json
         end
+        Note right of cp: the fetch step also records in manifest.json which sources it covered in full
         alt every step succeeded
             p->>cp: complete()
             Note right of cp: marks the run completed, deletes the step files
@@ -1068,7 +1100,7 @@ sequenceDiagram
 - Warnings never stop a run: the steps record them in `warnings.jsonl`, and the report step reads them last, as the report's Alerts and the alert lines in the terminal. Before a run folder exists (choosing the window), `TerminalWarnings` tells them in the terminal instead
 - A failed run keeps every saved step. Running the same command again offers to resume it: the pipeline skips the saved steps and loads the last saved output from disk, once
 - Outputs pass between steps in memory; the disk is only written, except when resuming
-- The window: a first run fetches the lookback (14 days). A later run starts one day before the last completed run's last day: that day again, since the last run may have been early in it, and one more, for postings listed a day late. Never further back than the lookback. Repeats are removed once jobs already seen are recognised (task 15)
+- The windows: each source has its own. A source no completed run covered fetches the lookback (14 days). Otherwise it starts one day before the last day of the last completed run that covered it in full: that day again, since that run may have been early in it, and one more, for postings listed a day late. So a source the last run missed (it failed, was skipped, or came back empty though its count found jobs) catches up from where it was last covered. Never further back than the lookback. The run's window spans the sources' windows. Repeats are removed once jobs already seen are recognised (task 15)
 
 ### Inside the steps
 
@@ -1097,9 +1129,10 @@ sequenceDiagram
 
     p->>fetch: run(nothing)
     loop each job board
-        fetch->>ds: fetch(search, window)
+        fetch->>ds: fetch(search, its own window)
         ds-->>fetch: RawPages, the same made-up pages every run
     end
+    fetch->>cp: record(each board: covered in full or not), in manifest.json
     fetch-->>p: RawPages
     p->>conv: run(RawPages)
     loop each page
@@ -1112,7 +1145,7 @@ sequenceDiagram
     dd->>dd: group by JobKey.of(posting): company, title and places, normalized
     dd-->>p: Jobs
     p->>fl: run(Jobs)
-    fl->>fl: matches(job): in the window, and a role in the title
+    fl->>fl: matches(job): in its source's window, and a role in the title
     fl-->>p: Jobs
     p->>de: run(Jobs)
     de->>de: no describer for the demo board: its postings have descriptions
@@ -1142,7 +1175,7 @@ sequenceDiagram
 
 ### A paid source: the cost check and the fetch
 
-A real run with JobsPipe on. The cost check runs in `JobRadarApp` after the window is agreed and before the run folder exists; the fetch is the pipeline's first step. Both ask through the same `TerminalPrompter`; with no one to answer, each takes its default (skip, and no). Built after the MVP: reaching the cap asks to keep going, where it failed the source before.
+A real run with JobsPipe on. The cost check runs in `JobRadarApp` after the windows are agreed and before the run folder exists; the fetch is the pipeline's first step. Both ask through the same `TerminalPrompter`; with no one to answer, each takes its default (skip, and no). Built after the MVP: reaching the cap asks to keep going, where it failed the source before.
 
 ```mermaid
 sequenceDiagram
@@ -1156,10 +1189,11 @@ sequenceDiagram
     participant api as JobsPipe API
     box rgba(255, 193, 7, 0.25) STATE: the run folder on disk
         participant sl as FileSpendLog
+        participant cp as FileCheckpoints
     end
 
-    app->>cc: check(window)
-    cc->>jp: plan(criteria, window)
+    app->>cc: check(windows)
+    cc->>jp: plan(criteria, JobsPipe's own window)
     jp->>api: GET /v1/account, POST /v1/jobs/export/estimate per search (free)
     api-->>jp: credits left and used, match counts (or a timeout)
     jp-->>cc: SpendPlan(estimate, counted or not, credits left, ask_above, budget left)
@@ -1172,7 +1206,7 @@ sequenceDiagram
     cc-->>app: Approval(decision, cap = the estimate plus 10%, within the credits left)
     Note over app: x: the run stops, nothing fetched, no run folder
     app->>fetch: run(nothing), in the new run folder
-    fetch->>jp: fetch_paid(criteria, window, cap)
+    fetch->>jp: fetch_paid(criteria, JobsPipe's own window, cap)
     loop each search, page by page with the cursor
         jp->>api: POST /v1/jobs/search (one credit a job not already paid for this month)
         api-->>jp: a page, credits charged and left, the next cursor
@@ -1189,18 +1223,20 @@ sequenceDiagram
     fetch->>sl: write(Spend(approval, charged, credits after, extra_approved))
     Note over fetch: JobsPipeError: JobsPipe is left out with a source_failed warning, and the free sources go on
     fetch-->>fetch: warn when the budget is reached or credits are low
+    fetch->>cp: record(each source: covered in full or not)
+    Note over fetch,cp: not covered: failed, skipped or failed at the cost check, or no jobs though the count found some. The next run fetches its dates again
 ```
 
 ## The run folder
 
-Each run gets its own folder, named by its start time, to the second. Demo runs go under `output/demo/` instead of `output/runs/`, so they never move a real run's window:
+Each run gets its own folder, named by its start time, to the second. Demo runs go under `output/demo/` instead of `output/runs/`, so they never move a real run's windows:
 
 ```
 output/runs/2026-11-05T10-00-00/
     01-fetch.jsonl  02-convert.jsonl  03-dedupe.jsonl  04-new_jobs_filter.jsonl  05-filter.jsonl
     06-carried_over.jsonl  07-describe.jsonl  08-llm_cap.jsonl  09-classify.jsonl  10-match.jsonl
     11-extract.jsonl  12-recommend.jsonl  13-report.jsonl
-    manifest.json     # the window, days left out after a long break, what the run searched for and where, each finished step and its count, completed or not
+    manifest.json     # the window, days left out after a long break, each source's own window and whether it was covered in full, what the run searched for and where, each finished step and its count, completed or not
     report.md
     dropped.md        # what the filter dropped, by reason
     jobs.jsonl        # after success: the matched jobs, with labels and requirements, read by later runs as seen

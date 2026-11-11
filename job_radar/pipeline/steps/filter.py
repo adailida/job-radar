@@ -1,7 +1,7 @@
 """Step 5: keep the jobs that match one of the searches."""
 
 from job_radar.matching.job_matcher import JobMatcher
-from job_radar.models import DropList, DroppedJob, Job, SearchCriteria, Window
+from job_radar.models import DropList, DroppedJob, Job, RunWindows, SearchCriteria
 from job_radar.storage.drop_log import DropLog
 
 
@@ -10,20 +10,20 @@ class FilterStep:
 
     A job matches a search when it meets every criterion set in it; a
     criterion left empty lets every job through. Also drops jobs posted before
-    the run's window, for boards that return everything they have. Hands the
-    jobs the searches dropped, with why, to the drop log. Stateless: holds only
-    the searches, the window, the matcher and the drop log.
+    their source's window, for boards that return everything they have. Hands
+    the jobs the searches dropped, with why, to the drop log. Stateless: holds
+    only the searches, the windows, the matcher and the drop log.
     """
 
     name = "filter"
     output = Job
 
     def __init__(
-        self, criteria: SearchCriteria, window: Window, matcher: JobMatcher, log: DropLog
+        self, criteria: SearchCriteria, windows: RunWindows, matcher: JobMatcher, log: DropLog
     ) -> None:
-        """Keep the searches, the run's window, the matcher, and where dropped jobs are listed."""
+        """Keep the searches, the run's windows, the matcher, and where dropped jobs are listed."""
         self._criteria = criteria
-        self._window = window
+        self._windows = windows
         self._matcher = matcher
         self._log = log
 
@@ -43,7 +43,7 @@ class FilterStep:
                 dropped.append(DroppedJob(job=job, reasons=reasons))
         self._log.write(
             DropList(
-                window=self._window,
+                window=self._windows.window,
                 checked=len(data),
                 kept=len(kept),
                 before_window=len(data) - len(in_window),
@@ -53,6 +53,8 @@ class FilterStep:
         return kept
 
     def _in_window(self, job: Job) -> bool:
-        """Whether the job's newest posting date is in the window. A job with no date is kept."""
-        dates = [posting.posted_at for posting in job.postings if posting.posted_at]
-        return not dates or max(dates) >= self._window.start
+        """Whether a posting of the job is dated in its source's window. Undated jobs are kept."""
+        dated = [posting for posting in job.postings if posting.posted_at]
+        return not dated or any(
+            posting.posted_at >= self._windows.of(posting.source).start for posting in dated
+        )

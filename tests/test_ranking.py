@@ -9,7 +9,16 @@ from fakes import MemoryDropLog, MemoryWarningLog, guard, job, posting
 from job_radar.llm.job_ranker import BadAnswer, LlmRanker
 from job_radar.matching.job_matcher import JobMatcher
 from job_radar.matching.normalizer import Normalizer
-from job_radar.models import CandidateProfile, Job, Period, Salary, Search, SearchCriteria, Window
+from job_radar.models import (
+    CandidateProfile,
+    Job,
+    Period,
+    RunWindows,
+    Salary,
+    Search,
+    SearchCriteria,
+    Window,
+)
 from job_radar.pipeline.steps.filter import FilterStep
 from job_radar.pipeline.steps.recommend import RecommendTopJobsStep
 
@@ -154,7 +163,9 @@ def test_only_filtered_postings_go_to_the_llm_in_batches():
             start=1,
         )
     ]
-    kept = FilterStep(search, window, JobMatcher(Normalizer()), MemoryDropLog()).run(found)
+    kept = FilterStep(
+        search, RunWindows(window=window), JobMatcher(Normalizer()), MemoryDropLog()
+    ).run(found)
     llm = FakeLlm()
     RecommendTopJobsStep(
         LlmRanker(llm, batch_size=2),

@@ -5,8 +5,14 @@ from fakes import FakePrompter, NoCost, NoLock
 from job_radar.app.job_radar_app import JobRadarApp
 from job_radar.app.resume_offer import ResumeOffer
 from job_radar.app.run_result import RunCancelled
-from job_radar.app.window import WindowPlan, WindowReason
-from job_radar.models import RunSummary, StepCount, Window
+from job_radar.models import (
+    RunSummary,
+    RunWindows,
+    SourceWindow,
+    StepCount,
+    Window,
+    WindowReason,
+)
 from job_radar.report.words import Words
 
 WINDOW = Window(start=date(2026, 10, 26), end=date(2026, 11, 9))
@@ -26,6 +32,9 @@ class ListedRuns:
         self._runs = list(runs)
 
     def last_window(self):
+        return None
+
+    def last_covered(self, source):
         return None
 
     def runs(self) -> list[RunSummary]:
@@ -97,39 +106,65 @@ def test_the_app_resumes_the_offered_run_in_its_folder_with_its_window():
         Offer(FAILED),
         chooser,
         NoCost(),
-        lambda w, gap, run_id, ok: calls.append((w, gap, run_id)) or built,
+        lambda windows, run_id, ok: calls.append((windows, run_id)) or built,
         NoLock(),
     )
     app.run()
-    assert calls == [(WINDOW, None, FAILED.id)]
+    assert calls == [(RunWindows(window=WINDOW), FAILED.id)]
     assert built.ran and not chooser.asked
 
 
+def test_a_resumed_run_keeps_each_sources_own_dates():
+    jobspipe = SourceWindow(source="jobspipe", window=WINDOW, reason=WindowReason.CATCHING_UP)
+    getro = SourceWindow(
+        source="getro",
+        window=Window(start=date(2026, 11, 8), end=date(2026, 11, 9)),
+        reason=WindowReason.SINCE_LAST_RUN,
+        covered=True,
+    )
+    failed = FAILED.model_copy(update={"sources": (getro, jobspipe)})
+    calls = []
+    app = JobRadarApp(
+        Offer(failed),
+        Chooser(None),
+        NoCost(),
+        lambda windows, run_id, ok: calls.append(windows) or Built(),
+        NoLock(),
+    )
+    app.run()
+    [windows] = calls
+    assert windows.sources == (getro, jobspipe)
+    assert (windows.of("getro"), windows.of("jobspipe")) == (getro.window, WINDOW)
+
+
 def test_the_app_starts_a_new_run_when_nothing_is_resumed():
-    plan = WindowPlan(window=WINDOW, reason=WindowReason.FIRST_RUN)
-    built, calls, chooser = Built(), [], Chooser(plan)
+    windows = RunWindows(window=WINDOW)
+    built, calls, chooser = Built(), [], Chooser(windows)
     app = JobRadarApp(
         Offer(None),
         chooser,
         NoCost(),
-        lambda w, gap, run_id, ok: calls.append((w, gap, run_id)) or built,
+        lambda w, run_id, ok: calls.append((w, run_id)) or built,
         NoLock(),
     )
     app.run()
-    assert calls == [(WINDOW, None, None)] and chooser.asked
+    assert calls == [(windows, None)] and chooser.asked
 
 
 class Stop:
     """A cost check where the user chose to stop."""
 
-    def check(self, window):
+    def check(self, windows):
         return None
 
 
 def test_stopping_at_the_cost_check_builds_no_run():
-    plan = WindowPlan(window=WINDOW, reason=WindowReason.FIRST_RUN)
     calls = []
     app = JobRadarApp(
-        Offer(None), Chooser(plan), Stop(), lambda *args: calls.append(args), NoLock()
+        Offer(None),
+        Chooser(RunWindows(window=WINDOW)),
+        Stop(),
+        lambda *args: calls.append(args),
+        NoLock(),
     )
     assert isinstance(app.run(), RunCancelled) and calls == []

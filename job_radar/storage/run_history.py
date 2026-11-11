@@ -19,6 +19,10 @@ class RunHistory(Protocol):
         """The window of the last completed run, or None when no run has completed."""
         ...
 
+    def last_covered(self, source: str) -> Window | None:
+        """A source's dates in the last completed run that covered it, or None if none did."""
+        ...
+
     def runs(self) -> list[RunSummary]:
         """Every run, completed or not, newest first."""
         ...
@@ -27,7 +31,8 @@ class RunHistory(Protocol):
 class FileRunHistory:
     """Reads earlier runs from the run folders under one parent folder.
 
-    Only completed runs count: a failed run is skipped. A folder whose manifest
+    Only completed runs count: a failed run is skipped, and a source counts
+    as covered only by the runs that fetched it in full. A folder whose manifest
     can't be read, such as one from an older version, is skipped with a
     warning. Holds only the parent folder and where warnings go; the run
     folders are the state.
@@ -41,6 +46,12 @@ class FileRunHistory:
     def last_window(self) -> Window | None:
         """The window of the newest completed run."""
         return next((run.window for run in self.runs() if run.completed), None)
+
+    def last_covered(self, source: str) -> Window | None:
+        """The source's dates in the newest completed run that covered it in full."""
+        return next(
+            (window for run in self.runs() if (window := run.covered(source)) is not None), None
+        )
 
     def runs(self) -> list[RunSummary]:
         """Every run folder with a readable manifest, newest first (folders are named by start)."""
@@ -58,6 +69,7 @@ class FileRunHistory:
                         completed=manifest.completed,
                         config=manifest.config,
                         steps=manifest.steps,
+                        sources=manifest.sources,
                     )
                 )
         return found

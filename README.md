@@ -44,7 +44,7 @@ Add `--demo` to `runs` or `delete` for demo runs.
 
 ## What a run does
 
-It agrees the dates first: the last `lookback_days` on a first run (or after a long break, when it asks before going ahead), and since the last run after that. Then it fetches postings from Fast Forward and, when it's on, JobsPipe; merges the same job found in both; drops jobs an earlier run already found; and filters the rest against your searches. Claude labels each job left (seniority, job type, cause area), finds what the matching ones ask for, and ranks them against your CV and preferences. Only sources whose terms allow scripted access are used; nothing is scraped.
+It agrees the dates first: the last `lookback_days` on a first run (or after a long break, when it asks before going ahead), and since the last run after that. Each source keeps its own dates: one that failed, was skipped or came back empty in the last run catches up from where it was last covered, without redoing the others. Then it fetches postings from Fast Forward and, when it's on, JobsPipe; merges the same job found in both; drops jobs an earlier run already found; and filters the rest against your searches. Claude labels each job left (seniority, job type, cause area), finds what the matching ones ask for, and ranks them against your CV and preferences. Only sources whose terms allow scripted access are used; nothing is scraped.
 
 - If your Claude usage limit runs out mid-run, the run asks whether to finish with what's done and carry the rest over to the next run, or stop and resume after the reset
 - If a run fails, run the same command again: it offers to resume after the last step that finished
@@ -63,7 +63,7 @@ Each run writes `output/runs/<time>/report.md`, with `dropped.md` next to it (wh
 - **Experience to gain**: what's asked that your CV doesn't cover yet, with how to gain the most asked. Each requirement is compared with your CV once (kept in `output/cache/gaps.jsonl`); a changed CV is compared again
 - **About this run**: how many jobs each step kept
 
-The header gives the dates covered, how many postings each source gave and what a paid one cost.
+The header gives the dates covered (each source's own when they differ, as when one is catching up), how many postings each source gave and what a paid one cost.
 
 ## Settings worth knowing
 

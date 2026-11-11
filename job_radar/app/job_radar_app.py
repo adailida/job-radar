@@ -6,7 +6,7 @@ from job_radar.app.cost_check import CostCheck
 from job_radar.app.resume_offer import ResumeOffer
 from job_radar.app.run_result import RunCancelled, RunResult
 from job_radar.app.window import WindowChooser
-from job_radar.models import Approval, Window
+from job_radar.models import Approval, RunWindows
 from job_radar.pipeline.pipeline import Pipeline
 from job_radar.storage.run_lock import RunLock
 
@@ -16,7 +16,7 @@ class JobRadarApp:
 
     Takes the run lock first, so only one run goes at a time, and releases
     it however the run ends. Offers to resume the last run if it failed;
-    otherwise agrees a new run's window with the user. Then agrees what paid
+    otherwise agrees a new run's windows with the user. Then agrees what paid
     sources may spend, and only then has the pipeline built for that run and
     launches it as a black box, so stopping at the cost check leaves no run
     behind. Lives only while that command runs. Stateless: holds only the
@@ -29,13 +29,14 @@ class JobRadarApp:
         offer: ResumeOffer,
         chooser: WindowChooser,
         cost: CostCheck,
-        build: Callable[[Window, Window | None, str | None, list[Approval]], Pipeline],
+        build: Callable[[RunWindows, str | None, list[Approval]], Pipeline],
         lock: RunLock,
     ) -> None:
-        """Keep who offers a resume, who agrees the window and the spend, how to build, the lock.
+        """Keep who offers a resume, who agrees the windows and the spend, how to build, the lock.
 
-        `build` takes the window, the days a long break left out (or None),
-        the run to resume (or None for a new run), and the spend approvals.
+        `build` takes the run's windows (each source's own and the one that
+        spans them), the run to resume (or None for a new run), and the spend
+        approvals.
         """
         self._offer = offer
         self._chooser = chooser
@@ -52,16 +53,16 @@ class JobRadarApp:
             return self._run()
 
     def _run(self) -> RunResult:
-        """Resume the failed run or agree a new window, run the pipeline, say how it ended."""
+        """Resume the failed run or agree new windows, run the pipeline, say how it ended."""
         failed = self._offer.offer()
         if failed is not None:
-            window, gap, run_id = failed.window, failed.not_covered, failed.id
+            windows, run_id = failed.windows(), failed.id
         else:
-            plan = self._chooser.choose()
-            if plan is None:
+            chosen = self._chooser.choose()
+            if chosen is None:
                 return RunCancelled()
-            window, gap, run_id = plan.window, plan.not_covered(), None
-        approvals = self._cost.check(window)
+            windows, run_id = chosen, None
+        approvals = self._cost.check(windows)
         if approvals is None:
             return RunCancelled()
-        return self._build(window, gap, run_id, approvals).run()
+        return self._build(windows, run_id, approvals).run()

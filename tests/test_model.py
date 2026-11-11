@@ -18,8 +18,10 @@ from job_radar.models import (
     Report,
     Requirement,
     RequirementType,
+    RunWindows,
     Salary,
     Seniority,
+    SourceWindow,
     StepCount,
     Window,
     WorkMode,
@@ -149,3 +151,29 @@ def test_recommendation_score_out_of_range_rejected():
 
 def test_now_is_timezone_aware():
     assert Clock().now().tzinfo is not None
+
+
+def test_a_runs_window_spans_every_sources_window():
+    early = Window(start=date(2026, 10, 28), end=date(2026, 11, 11))
+    late = Window(start=date(2026, 11, 10), end=date(2026, 11, 11))
+    windows = RunWindows.spanning(
+        [SourceWindow(source="getro", window=late), SourceWindow(source="jobspipe", window=early)]
+    )
+    assert windows.window == early
+    assert (windows.of("getro"), windows.of("jobspipe"), windows.of("demo")) == (late, early, early)
+    assert windows.differ()
+
+
+def test_a_gap_every_source_shares_is_the_runs():
+    window = Window(start=date(2026, 10, 22), end=date(2026, 11, 5))
+    gap = Window(start=date(2026, 10, 1), end=date(2026, 10, 21))
+    same = SourceWindow(source="getro", window=window, not_covered=gap)
+    windows = RunWindows.spanning([same, same.model_copy(update={"source": "jobspipe"})])
+    assert windows.not_covered == gap and not windows.differ()
+    other = same.model_copy(update={"source": "jobspipe", "not_covered": None})
+    assert RunWindows.spanning([same, other]).not_covered is None
+
+
+def test_a_run_needs_a_source():
+    with pytest.raises(ValueError):
+        RunWindows.spanning([])

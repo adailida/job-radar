@@ -3,7 +3,7 @@
 import math
 from collections.abc import Sequence
 
-from job_radar.models import Approval, SearchCriteria, SpendDecision, SpendPlan, Window
+from job_radar.models import Approval, RunWindows, SearchCriteria, SpendDecision, SpendPlan
 from job_radar.sources.base import PaidSource
 from job_radar.utils.errors import JobRadarError
 from job_radar.utils.prompter import Prompter
@@ -32,12 +32,12 @@ class CostCheck:
         self._criteria = criteria
         self._prompter = prompter
 
-    def check(self, window: Window) -> list[Approval] | None:
-        """One approval per paid source, or None if the user chose to stop the run."""
+    def check(self, windows: RunWindows) -> list[Approval] | None:
+        """One approval per paid source, each for its own dates; None if the user chose to stop."""
         approvals = []
         for source in self._sources:
             try:
-                plan = source.plan(self._criteria, window)
+                plan = source.plan(self._criteria, windows.of(source.name))
             except Exception as error:
                 approvals.append(self._failed(source, error))
                 continue
@@ -56,6 +56,7 @@ class CostCheck:
         return Approval(
             source=source.name,
             estimate=0,
+            estimated=False,
             decision=SpendDecision.FAILED,
             cap=0,
             credits_before=0,
@@ -99,6 +100,7 @@ class CostCheck:
         return Approval(
             source=plan.source,
             estimate=plan.estimate,
+            estimated=plan.estimated,
             decision=decision,
             cap=cap,
             credits_before=plan.credits_left,

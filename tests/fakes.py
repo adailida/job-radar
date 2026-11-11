@@ -3,7 +3,16 @@
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from job_radar.models import Job, Location, Posting, Report, StepCount, Window, WorkMode
+from job_radar.models import (
+    Job,
+    Location,
+    Posting,
+    Report,
+    RunWindows,
+    StepCount,
+    Window,
+    WorkMode,
+)
 from job_radar.utils.clock import Clock
 
 EXAMPLE = Path(__file__).parent.parent / "config_local_example"
@@ -88,6 +97,7 @@ def job(source_id: str, title: str = "Data Engineer") -> Job:
 
 REPORT = Report(location="out/report.md", summary="3 jobs recommended")
 WINDOW = Window(start=date(2026, 10, 22), end=date(2026, 11, 5))
+WINDOWS = RunWindows(window=WINDOW)  # every source on the run's window
 
 
 class FakePrompter:
@@ -115,15 +125,32 @@ class FakePrompter:
 
 
 class FakeHistory:
-    """Run history with a set last window."""
+    """Run history with a set last window, and the window each source was last covered in."""
 
-    def __init__(self, last: Window | None):
-        """Keep the last completed run's window."""
+    def __init__(self, last: Window | None, covered: dict[str, Window | None] | None = None):
+        """Keep the last completed run's window; with no `covered`, it covered every source."""
         self._last = last
+        self._covered = covered
 
     def last_window(self) -> Window | None:
         """The set window."""
         return self._last
+
+    def last_covered(self, source: str) -> Window | None:
+        """The source's set window, or the last run's when none were set."""
+        return self._last if self._covered is None else self._covered.get(source)
+
+
+class MemoryCoverage:
+    """A coverage log that keeps what was recorded instead of writing it."""
+
+    def __init__(self):
+        """Start with nothing recorded."""
+        self.covered: dict[str, bool] | None = None
+
+    def record(self, covered) -> None:
+        """Keep the record."""
+        self.covered = dict(covered)
 
 
 class MemoryDropLog:
@@ -157,7 +184,7 @@ class MemorySpendLog:
 class NoCost:
     """A cost check with no paid sources: approves nothing, asks nothing."""
 
-    def check(self, window):
+    def check(self, windows):
         """No approvals."""
         return []
 

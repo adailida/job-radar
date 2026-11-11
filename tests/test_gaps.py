@@ -28,6 +28,7 @@ from job_radar.models import (
     GapStatus,
     ReportContent,
     RequirementType,
+    RunWindows,
     Window,
 )
 from job_radar.pipeline.steps.report import ReportStep
@@ -477,8 +478,7 @@ def step(asks_source, gaps_source, renderer) -> ReportStep:
         asks_source,
         gaps_source,
         "run",
-        WINDOW,
-        None,
+        RunWindows(window=WINDOW),
         40,
         {},
         MemorySourceCountLog(),

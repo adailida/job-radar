@@ -18,10 +18,12 @@ from job_radar.models import (
     RequirementType,
     Seniority,
     SourceSummary,
+    SourceWindow,
     Spend,
     SpendDecision,
     TrendPeriod,
     Trends,
+    WindowReason,
 )
 from job_radar.report.words import Words
 
@@ -67,6 +69,7 @@ class MarkdownRenderer:
             "---",
             f"run: {content.run}",
             f"covers: [{window.start.isoformat()}, {window.end.isoformat()}]",
+            *self._sources_matter(content),
             *self._gap_matter(content),
             f"sources: {{{counts}}}",
             f"new_openings: {content.new_openings}",
@@ -76,7 +79,9 @@ class MarkdownRenderer:
             "",
             f"# job-radar report, {self._words.day(window.end, year=True)}",
             "",
-            f"Covers postings from {self._words.span(window.start, window.end)}.",
+            f"Covers postings from {self._words.span(window.start, window.end)}"
+            + (", each source from where it was last covered:" if content.source_windows else "."),
+            *self._source_dates(content, names),
             *self._gap_note(content),
             "",
             self._sources(content.sources),
@@ -107,6 +112,52 @@ class MarkdownRenderer:
             lines.extend(["", f"{carried} (usage limit or LLM cap)."])
         lines.extend(["", "Jobs the filter dropped, by reason: dropped.md"])
         return "\n".join(lines) + "\n"
+
+    @staticmethod
+    def _sources_matter(content: ReportContent) -> list[str]:
+        """The front matter line for each source's own dates, when they differ."""
+        if not content.source_windows:
+            return []
+        each = ", ".join(
+            f"{s.source}: [{s.window.start.isoformat()}, {s.window.end.isoformat()}]"
+            for s in content.source_windows
+        )
+        return [f"covers_by_source: {{{each}}}"]
+
+    def _source_dates(self, content: ReportContent, names: dict[str, str]) -> list[str]:
+        """A line per source with its own dates and why they start there, when they differ."""
+        if not content.source_windows:
+            return []
+        return [""] + [
+            f"- {names.get(s.source, s.source)}: {self._source_window(s)}"
+            for s in content.source_windows
+        ]
+
+    def _source_window(self, source: SourceWindow) -> str:
+        """One source's dates and why they start there."""
+        window, gap = source.window, source.not_covered
+        span = self._words.span(window.start, window.end)
+        days = (window.end - window.start).days
+        match source.reason:
+            case WindowReason.SINCE_LAST_RUN:
+                return f"{span}, since the last run."
+            case WindowReason.CATCHING_UP:
+                return f"{span}, catching up (missed in the last run)."
+            case WindowReason.FIRST_RUN:
+                return f"{span}, the last {days} days (not covered by an earlier run)."
+            case WindowReason.CAPPED if gap is not None:
+                last = self._words.day(gap.start - timedelta(days=1))
+                return (
+                    f"{span}, the last {days} days only. Not covered: "
+                    f"{self._words.span(gap.start, gap.end)} (last covered on {last}, "
+                    f"and a run reaches back at most {days} days)."
+                )
+            case WindowReason.CAPPED:
+                return (
+                    f"{span}, the last {days} days only (last covered more than {days} days ago)."
+                )
+            case _:
+                return f"{span}."
 
     @staticmethod
     def _gap_matter(content: ReportContent) -> list[str]:

@@ -8,10 +8,10 @@ from job_radar.models import (
     Recommendation,
     Report,
     ReportContent,
+    RunWindows,
     SourceSummary,
     Spend,
     SpendDecision,
-    Window,
 )
 from job_radar.report.asks import AskSource
 from job_radar.report.gaps import GapSource
@@ -29,14 +29,15 @@ from job_radar.storage.warning_log import WarningLog
 class ReportStep:
     """Puts together what the run's report says, then has it formatted and written.
 
-    The content is the run's window and sources, any days a long break left
-    out, the alerts, the recommended jobs, every new matched job by group, the
-    market trends, what employers ask for and how the CV compares with it, the
-    funnel of counts, what paid sources spent and how many jobs are carried
-    over to the next run; the renderer decides only how it looks. The alerts
-    are the run's warnings, read last, after a run with no new jobs has
-    warned about that too. Its summary for the terminal counts the new
-    openings, the recommended jobs and the alerts, and gives each alert.
+    The content is the run's window and sources, each source's own dates
+    when they differ, any days a long break left out, the alerts, the
+    recommended jobs, every new matched job by group, the market trends,
+    what employers ask for and how the CV compares with it, the funnel of
+    counts, what paid sources spent and how many jobs are carried over to
+    the next run; the renderer decides only how it looks. The alerts are
+    the run's warnings, read last, after a run with no new jobs has warned
+    about that too. Its summary for the terminal counts the new openings,
+    the recommended jobs and the alerts, and gives each alert.
     Stateless: holds only where it reads each part from, the renderer, where
     the report goes, and what it needs to know about the run.
     """
@@ -55,8 +56,7 @@ class ReportStep:
         asks: AskSource,
         gaps: GapSource,
         run_id: str,
-        window: Window,
-        not_covered: Window | None,
+        windows: RunWindows,
         min_score: int,
         sources: Mapping[str, str],
         counts: SourceCountLog,
@@ -79,8 +79,7 @@ class ReportStep:
         self._asks = asks
         self._gaps = gaps
         self._run_id = run_id
-        self._window = window
-        self._not_covered = not_covered
+        self._windows = windows
         self._min_score = min_score
         self._sources = sources
         self._counts = counts
@@ -100,8 +99,9 @@ class ReportStep:
         gaps = self._gaps.gaps(asks) if asks is not None else None
         content = ReportContent(
             run=self._run_id,
-            window=self._window,
-            not_covered=self._not_covered,
+            window=self._windows.window,
+            not_covered=self._windows.not_covered,
+            source_windows=self._windows.sources if self._windows.differ() else (),
             sources=self._summaries(spends),
             alerts=tuple(self._warnings.alerts()),
             min_score=self._min_score,

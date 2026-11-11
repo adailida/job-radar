@@ -62,7 +62,7 @@ Job search
 - A run fetches from JobsPipe and Fast Forward and keeps only the postings that match the search criteria
 - A job found in both sources appears once
 - By default, the report lists every matching posting not seen in an earlier run: everything new since the user last checked. With the setting off, it lists all matching postings
-- A run never looks further back than the lookback cap (2 weeks by default). When the last run is older than the cap, the report says so and which dates it covers
+- A run never looks further back than the lookback cap (2 weeks by default), for any source. When a source was last covered before the cap, the report says so and which dates it covers
 - Each job in the report shows title, company, location or remote, salary if posted, source, and a link to the posting
 - Openings are grouped by the grouping in the settings (domain, job type, or both). Group names come from the settings, and a posting that fits none goes under "Other"
 
@@ -90,7 +90,7 @@ Cost
 
 Runs
 - Each run writes one report and saves its run data. The next run reads that data
-- When a run fails, nothing is asked: the next run offers to resume it, and `job-radar delete` removes it. Kept or deleted, a failed run doesn't count toward seen postings, trends or the next run's time window
+- When a run fails, nothing is asked: the next run offers to resume it, and `job-radar delete` removes it. Kept or deleted, a failed run doesn't count toward seen postings, trends or the next run's time windows; nor does a source that failed, was skipped or came back empty although its count found jobs (or, for a paid source, couldn't count), so the next run fetches its dates again
 - The user can delete any earlier run, after a confirmation prompt. Its postings count as unseen again, and its data drops out of the trends
 - Only filtered postings go to the LLM, in batches
 - A new source can be added with its own settings and, if needed, its own module, without changes to filtering, extraction or the report. Tests use a fake source added the same way

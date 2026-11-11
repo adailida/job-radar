@@ -49,9 +49,12 @@ from job_radar.models.run import (
     DroppedJob,
     RunConfig,
     RunSummary,
+    RunWindows,
     SourceCount,
+    SourceWindow,
     StepCount,
     Window,
+    WindowReason,
 )
 from job_radar.models.search import (
     CandidateProfile,
@@ -103,6 +106,7 @@ __all__ = [
     "RequirementType",
     "RunConfig",
     "RunSummary",
+    "RunWindows",
     "Salary",
     "Search",
     "SearchCriteria",
@@ -110,6 +114,7 @@ __all__ = [
     "Seniority",
     "SourceCount",
     "SourceSummary",
+    "SourceWindow",
     "Spend",
     "SpendDecision",
     "SpendPlan",
@@ -119,6 +124,7 @@ __all__ = [
     "TrendPeriod",
     "Trends",
     "Window",
+    "WindowReason",
     "WorkMode",
     "WorkModes",
 ]

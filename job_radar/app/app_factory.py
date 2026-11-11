@@ -27,7 +27,7 @@ from job_radar.matching.job_key import JobKey
 from job_radar.matching.job_matcher import JobMatcher
 from job_radar.matching.normalizer import Normalizer
 from job_radar.matching.place_codes import PlaceCodes
-from job_radar.models import Approval, CandidateProfile, RunConfig, SearchCriteria, Window
+from job_radar.models import Approval, CandidateProfile, RunConfig, RunWindows, SearchCriteria
 from job_radar.pipeline.pipeline import Pipeline, Step
 from job_radar.pipeline.steps.carried_over import CarriedOverStep
 from job_radar.pipeline.steps.classify import ClassifyStep
@@ -119,13 +119,14 @@ class AppFactory:
         With `demo`, the run uses the built-in demo board, the made-up person
         in the example folder and keyword scoring: no network, no LLM, nothing
         from the user's folder. Demo runs keep their own history, so they never
-        move a real run's window.
+        move a real run's windows.
         """
         parts = self._demo() if demo else self._real()
         runs = self._runs(demo)
         planner = WindowPlanner(self._settings.lookback_days)
         history = FileRunHistory(runs, TerminalWarnings(self._prompter))
-        chooser = WindowChooser(history, planner, self._prompter, self._clock)
+        labels = {source.name: source.label for source in parts.sources}
+        chooser = WindowChooser(history, planner, self._prompter, self._clock, labels)
         offer = ResumeOffer(history, self._prompter, Words())
         paid = [source for source in parts.sources if isinstance(source, PaidSource)]
         cost = CostCheck(paid, parts.criteria, self._prompter)
@@ -156,19 +157,24 @@ class AppFactory:
         parts: Parts,
         runs: Path,
         gap_cache: Path,
-        window: Window,
-        not_covered: Window | None,
+        windows: RunWindows,
         run_id: str | None,
         approvals: list[Approval],
     ) -> Pipeline:
-        """Build the steps in order for the run's window, in a new folder or the resumed one."""
+        """Build the steps in order for the run's windows, in a new folder or the resumed one."""
         folder = runs / (run_id or self._clock.stamp())
         folder.mkdir(parents=True, exist_ok=run_id is not None)
         config = RunConfig(
             searches=parts.criteria.searches, sources=tuple(s.name for s in parts.sources)
         )
+        window = windows.window
         checkpoints = FileCheckpoints(
-            folder, window, not_covered, keep={ExtractStep.name: FileSeenJobs.FILE}, config=config
+            folder,
+            window,
+            windows.not_covered,
+            keep={ExtractStep.name: FileSeenJobs.FILE},
+            config=config,
+            sources=windows.sources,
         )
         normalizer = Normalizer()
         words = Words()
@@ -195,18 +201,19 @@ class AppFactory:
             FetchStep(
                 parts.sources,
                 parts.criteria,
-                window,
+                windows,
                 approvals,
                 spend,
                 warnings,
                 self._settings.alerts.low_credits,
+                checkpoints,
             ),
             ConvertStep(
                 {parser.source: parser for parser in parts.parsers}, counts, warnings, labels
             ),
             DedupeStep(JobKey(normalizer, AtsLinks()), window.end),
             NewJobsFilterStep(seen, window.end, self._settings.new_only),
-            FilterStep(parts.criteria, window, JobMatcher(normalizer), FileDropLog(folder, words)),
+            FilterStep(parts.criteria, windows, JobMatcher(normalizer), FileDropLog(folder, words)),
             CarriedOverStep(LastRunPending(history, runs)),
             DescribeStep({d.source: d for d in parts.describers}, self._prompter),
             LlmCapStep(self._settings.llm.ask_above_jobs, self._prompter, pending, warnings),
@@ -231,8 +238,7 @@ class AppFactory:
                 MarketAsks(market, AskBuilder(period, per_type, names), window.end),
                 gaps,
                 folder.name,
-                window,
-                not_covered,
+                windows,
                 self._settings.recommend.min_score,
                 labels,
                 counts,

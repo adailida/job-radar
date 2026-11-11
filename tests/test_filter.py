@@ -4,17 +4,18 @@ from fakes import MemoryDropLog, job, posting
 
 from job_radar.matching.job_matcher import JobMatcher
 from job_radar.matching.normalizer import Normalizer
-from job_radar.models import Job, Search, SearchCriteria, Window
+from job_radar.models import Job, RunWindows, Search, SearchCriteria, SourceWindow, Window
 from job_radar.pipeline.steps.filter import FilterStep
 
 WINDOW = Window(start=date(2026, 10, 29), end=date(2026, 11, 5))
+WINDOWS = RunWindows(window=WINDOW)
 NO_ROLES = SearchCriteria(searches=(Search(name="default", roles=()),))
 
 
 def step(*roles: str) -> FilterStep:
     return FilterStep(
         SearchCriteria(searches=(Search(name="default", roles=roles),)),
-        WINDOW,
+        WINDOWS,
         JobMatcher(Normalizer()),
         MemoryDropLog(),
     )
@@ -47,18 +48,20 @@ def test_roles_match_abbreviated_titles():
 
 def test_no_roles_keeps_every_job():
     jobs = [job("1", "Anything"), job("2", "Something else")]
-    assert FilterStep(NO_ROLES, WINDOW, JobMatcher(Normalizer()), MemoryDropLog()).run(jobs) == jobs
+    assert (
+        FilterStep(NO_ROLES, WINDOWS, JobMatcher(Normalizer()), MemoryDropLog()).run(jobs) == jobs
+    )
 
 
-def dated(source_id: str, posted: date | None) -> Job:
+def dated(source_id: str, posted: date | None, source: str = "demo") -> Job:
     """A job of one posting, posted on this day."""
-    p = posting(source_id).model_copy(update={"posted_at": posted})
+    p = posting(source_id, source=source).model_copy(update={"posted_at": posted})
     return Job(id=p.key, keys=(p.key,), postings=(p,), first_seen=WINDOW.end)
 
 
 def test_filter_drops_jobs_posted_before_the_window():
     jobs = [dated("old", date(2026, 10, 28)), dated("first", WINDOW.start), dated("none", None)]
-    kept = FilterStep(NO_ROLES, WINDOW, JobMatcher(Normalizer()), MemoryDropLog()).run(jobs)
+    kept = FilterStep(NO_ROLES, WINDOWS, JobMatcher(Normalizer()), MemoryDropLog()).run(jobs)
     assert [j.id for j in kept] == ["demo:first", "demo:none"]
 
 
@@ -70,7 +73,7 @@ def test_a_job_matching_any_search_is_kept():
         )
     )
     jobs = [job("1", "Tech Lead"), job("2", "Designer"), job("3", "Engineer")]
-    kept = FilterStep(criteria, WINDOW, JobMatcher(Normalizer()), MemoryDropLog()).run(jobs)
+    kept = FilterStep(criteria, WINDOWS, JobMatcher(Normalizer()), MemoryDropLog()).run(jobs)
     assert [j.postings[0].title for j in kept] == ["Tech Lead", "Engineer"]
 
 
@@ -88,10 +91,28 @@ def test_lists_each_dropped_job_with_why_for_every_search():
         dated("old", date(2026, 10, 1)),
         job("3", "Tech Lead Intern"),
     ]
-    kept = FilterStep(criteria, WINDOW, JobMatcher(Normalizer()), log).run(jobs)
+    kept = FilterStep(criteria, WINDOWS, JobMatcher(Normalizer()), log).run(jobs)
     assert [j.id for j in kept] == ["demo:1"]
     assert (log.drops.checked, log.drops.kept, log.drops.before_window) == (4, 1, 1)
     assert [(d.job.id, d.reasons) for d in log.drops.dropped] == [
         ("demo:2", ("eng: roles", "lead: roles")),
         ("demo:3", ("eng: roles", "lead: excluded title")),
     ]
+
+
+def test_filter_drops_jobs_posted_before_their_own_sources_window():
+    windows = RunWindows.spanning(
+        [
+            SourceWindow(source="getro", window=Window(start=date(2026, 11, 3), end=WINDOW.end)),
+            SourceWindow(source="jobspipe", window=WINDOW),
+        ]
+    )
+    jobs = [
+        dated("ff-old", date(2026, 10, 30), source="getro"),
+        dated("ff-new", date(2026, 11, 3), source="getro"),
+        dated("jp-catching-up", date(2026, 10, 30), source="jobspipe"),
+    ]
+    log = MemoryDropLog()
+    kept = FilterStep(NO_ROLES, windows, JobMatcher(Normalizer()), log).run(jobs)
+    assert [j.id for j in kept] == ["getro:ff-new", "jobspipe:jp-catching-up"]
+    assert (log.drops.window, log.drops.before_window) == (WINDOW, 1)
