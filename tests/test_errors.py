@@ -15,6 +15,7 @@ from job_radar.storage.checkpoints import FileCheckpoints
 from job_radar.storage.error_log import FileErrorLog
 from job_radar.storage.run_lock import FileRunLock, RunInProgress
 from job_radar.utils.errors import JobRadarError
+from job_radar.utils.progress import NoProgress
 
 DEAD = 999_999  # a process id taken as no longer running
 
@@ -96,7 +97,7 @@ class Factory:
     def __init__(self, folder, create_error=None, run_error=None):
         self._folder, self._create_error, self._run_error = folder, create_error, run_error
 
-    def create(self, demo: bool = False) -> JobRadarApp:
+    def create(self, demo: bool = False, quiet: bool = False) -> JobRadarApp:
         if self._create_error:
             raise self._create_error
         pipeline = Pipeline(
@@ -232,7 +233,7 @@ def test_a_missing_api_key_names_the_key_and_the_fix(tmp_path):
     settings = SettingsFile.defaults(output=str(tmp_path), sources={"jobspipe": {"enabled": True}})
     factory = AppFactory(settings, tmp_path, EXAMPLE, FixedClock(), FakePrompter(), {})
     with pytest.raises(ConfigError) as missing:
-        factory._jobspipe()
+        factory._jobspipe(NoProgress())
     assert str(missing.value) == (
         "JOBSPIPE_API_KEY is not set: add it to config_local/.env, "
         "or set sources.jobspipe.enabled: false in config_local/settings.yaml"

@@ -40,7 +40,7 @@ A personal job-search radar that runs in your terminal. Each run fetches new job
     uv run job-radar runs         # list earlier runs, newest first
     uv run job-radar delete <id>  # delete a run after asking (Enter means no); --all for every run
 
-Add `--demo` to `runs` or `delete` for demo runs.
+Add `--demo` to `runs` or `delete` for demo runs. Add `--quiet` to `run` to hide the progress described below.
 
 ## What a run does
 
@@ -50,6 +50,8 @@ It agrees the dates first: the last `lookback_days` on a first run (or after a l
 - If a run fails, run the same command again: it offers to resume after the last step that finished
 - Problems that don't stop a run (a source down, credits running low, jobs Claude couldn't read) are listed under Alerts in the report and in the terminal. A run stops only when it can't start (invalid settings or profile, unreadable CV, missing key, `claude` not logged in, another run going) or no source returned data, with one message saying what to fix
 - Deleting a run makes its jobs new again
+
+A run shows what it is doing: a banner (config folder, searches, each source with its dates, limits, model, steps), then a numbered line per step with its count and time, such as `[ 2/13] convert         done: 470 jobs (0.1s)`. Slow steps (fetch, describe, the Claude steps) show live counts; on a terminal that line updates in place, and otherwise it is one line now and then. `--quiet`, or `verbose: false` in `config_local/settings.yaml`, turns it off.
 
 ## What the report holds
 
@@ -80,6 +82,7 @@ Set these in `config_local/settings.yaml`; [config/settings.yaml](config/setting
             ask_above_credits: 25
 
   Before fetching, a run estimates what JobsPipe will cost (the estimate is free) and checks it against `ask_above_credits`, the monthly budget and the credits left. Over a limit, it asks whether to go ahead, skip JobsPipe this run, or stop. If the fetch reaches what you agreed with jobs still to fetch (as when JobsPipe couldn't count a slow search), it asks whether to keep going for as many again, never past the credits left. Answering no leaves JobsPipe out of this run, as a fetch is all or nothing (the credits spent aren't lost: jobs paid for are free again this month). Compare what a run spent (in the report's header) with the estimate before you widen the limits, searches or lookback
+- `verbose` (true): show the banner and a line per step; `run --quiet` turns it off for one run
 - `new_only` (true): set it to false to see every matching job again, not only new ones
 - `trend_period` (month) and `report.group_by` (job_type): how market trends and new openings are grouped
 

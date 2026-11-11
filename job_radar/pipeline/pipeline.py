@@ -8,6 +8,7 @@ from job_radar.models import Report
 from job_radar.storage.checkpoints import Checkpoints
 from job_radar.storage.error_log import ErrorLog
 from job_radar.utils.errors import JobRadarError
+from job_radar.utils.progress import NoProgress, Progress
 
 
 @runtime_checkable
@@ -35,15 +36,34 @@ class Pipeline:
     output from disk, since nothing is in memory yet. Turns an error into
     `RunFailed`, with an unexpected one's traceback in the error log, and the
     final report into `RunSucceeded`, and on success marks the run
-    completed, which deletes the checkpoints. Stateless: a run's progress
-    lives in its checkpoints.
+    completed, which deletes the checkpoints. Tells the progress reporter
+    when each step starts, ends, is skipped or fails. Stateless: a run's
+    progress lives in its checkpoints.
     """
 
-    def __init__(self, steps: Sequence[Step], checkpoints: Checkpoints, errors: ErrorLog) -> None:
-        """Keep the steps in order, where their outputs are saved, and where bugs are written."""
+    NOUNS = {  # what a step's output is called, singular and plural, by model name
+        "RawPage": ("page", "pages"),
+        "Posting": ("posting", "postings"),
+        "Job": ("job", "jobs"),
+        "Recommendation": ("recommendation", "recommendations"),
+    }
+
+    def __init__(
+        self,
+        steps: Sequence[Step],
+        checkpoints: Checkpoints,
+        errors: ErrorLog,
+        progress: Progress | None = None,
+    ) -> None:
+        """Keep the steps in order, where outputs are saved, where bugs go, who shows progress."""
         self._steps = steps
         self._checkpoints = checkpoints
         self._errors = errors
+        self._progress = progress or NoProgress()
+
+    def step_names(self) -> list[str]:
+        """The names of the steps, in order."""
+        return [step.name for step in self._steps]
 
     def run(self) -> RunResult:
         """Run every step not done yet and return how the run ended.
@@ -54,6 +74,9 @@ class Pipeline:
         start = 0
         while start < len(self._steps) and self._checkpoints.has(self._steps[start].name):
             start += 1
+        total = len(self._steps)
+        for number, step in enumerate(self._steps[:start], start=1):
+            self._progress.skipped(number, total, step.name)
         data: list = []
         if start:
             last = self._steps[start - 1]
@@ -61,12 +84,15 @@ class Pipeline:
                 data = self._checkpoints.load(last.name, last.output)
             except Exception as error:
                 return RunFailed(step=last.name, reason=f"can't read its saved output: {error}")
-        for step in self._steps[start:]:
+        for number, step in enumerate(self._steps[start:], start=start + 1):
+            self._progress.begin(number, total, step.name)
             try:
                 data = step.run(data)
                 self._checkpoints.save(step.name, data)
             except Exception as error:
+                self._progress.failed()
                 return self._failed(step.name, error)
+            self._progress.done(self._summary(step, data))
         match data:
             case [Report() as report]:
                 self._checkpoints.complete()
@@ -76,6 +102,13 @@ class Pipeline:
             case _:
                 last = self._steps[-1].name if self._steps else "none"
                 return RunFailed(step=last, reason="the last step gave no report")
+
+    def _summary(self, step: Step, data: list) -> str:
+        """What a finished step gave, for its line: "470 jobs", or "report written"."""
+        if step.output is Report:
+            return "report written"
+        one, many = self.NOUNS.get(step.output.__name__, ("item", "items"))
+        return f"{len(data)} {one if len(data) == 1 else many}"
 
     def _failed(self, step: str, error: Exception) -> RunFailed:
         """The failed run for an error at a step; an unexpected error's details go to the log."""

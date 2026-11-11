@@ -6,6 +6,7 @@
 output: output            # run folders go under output/runs/, demo runs under output/demo/
 lookback_days: 14         # how far back a run may reach: a first run, or after a long break
 new_only: true            # drop jobs an earlier run already found; false ranks them again
+verbose: true             # show what a run does (banner, a line per step); false, or `run --quiet`, hides it
 trend_period: month       # week, month or quarter: the periods market trends compare,
                           # and how long the "What employers ask for" window is
 

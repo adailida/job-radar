@@ -17,6 +17,7 @@ from job_radar.models import (
 )
 from job_radar.sources.board_client import BoardClient
 from job_radar.utils.html_text import HtmlText
+from job_radar.utils.progress import NoProgress, Progress
 
 
 class GetroSource:
@@ -25,7 +26,8 @@ class GetroSource:
     The search has no date filter, so paging stops at the first page that
     reaches back past the window's start; the filter step drops the older jobs
     on that page. A board that fails part way fails as a whole, so a fetch is
-    never partial. Stateless: holds only the board and its client.
+    never partial. Says which page it is on as it goes. Stateless: holds only the board, its
+    client and who it tells.
     """
 
     name = "getro"
@@ -33,10 +35,11 @@ class GetroSource:
     PAGE_SIZE = 200  # the most the search returns per page
     BOARDS = {"997": "Fast Forward"}  # the boards known by name, by network id
 
-    def __init__(self, network: str, client: BoardClient) -> None:
-        """Keep the board's network id and the client that paces and retries requests."""
+    def __init__(self, network: str, client: BoardClient, progress: Progress | None = None) -> None:
+        """Keep the board's network id, the client that paces and retries requests, who is told."""
         self._network = network
         self._client = client
+        self._progress = progress or NoProgress()
 
     @property
     def label(self) -> str:
@@ -50,13 +53,16 @@ class GetroSource:
         fetch, and the filter step applies the criteria to every board alike.
         """
         pages: list[RawPage] = []
+        so_far = 0
         while True:
             if pages:
                 self._client.pause()
+            self._progress.detail(f"{self.label} page {len(pages) + 1}, {so_far} jobs so far")
             body = self._page(len(pages))
             pages.append(RawPage(source=self.name, page=len(pages) + 1, body=body))
             results = json.loads(body)["results"]
             jobs = results["jobs"]
+            so_far += len(jobs)
             fetched = (len(pages) - 1) * self.PAGE_SIZE + len(jobs)
             if not jobs or fetched >= results["count"] or self._oldest(jobs) < window.start:
                 return pages

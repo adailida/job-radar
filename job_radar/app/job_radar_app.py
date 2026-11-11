@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from job_radar.app.cost_check import CostCheck
 from job_radar.app.resume_offer import ResumeOffer
+from job_radar.app.run_banner import RunBanner
 from job_radar.app.run_result import RunCancelled, RunResult
 from job_radar.app.window import WindowChooser
 from job_radar.models import Approval, RunWindows
@@ -19,9 +20,10 @@ class JobRadarApp:
     otherwise agrees a new run's windows with the user. Then agrees what paid
     sources may spend, and only then has the pipeline built for that run and
     launches it as a black box, so stopping at the cost check leaves no run
-    behind. Lives only while that command runs. Stateless: holds only the
-    resume offer, the window chooser, the cost check, how to build the
-    pipeline and the lock.
+    behind. Shows the start banner, when it has one, just before. Lives only
+    while that command runs. Stateless: holds only the resume offer, the
+    window chooser, the cost check, how to build the pipeline, the lock and
+    the banner.
     """
 
     def __init__(
@@ -31,6 +33,7 @@ class JobRadarApp:
         cost: CostCheck,
         build: Callable[[RunWindows, str | None, list[Approval]], Pipeline],
         lock: RunLock,
+        banner: RunBanner | None = None,
     ) -> None:
         """Keep who offers a resume, who agrees the windows and the spend, how to build, the lock.
 
@@ -43,6 +46,7 @@ class JobRadarApp:
         self._cost = cost
         self._build = build
         self._lock = lock
+        self._banner = banner
 
     def run(self) -> RunResult:
         """Take the lock, then resume or start a run and say how it ended.
@@ -65,4 +69,7 @@ class JobRadarApp:
         approvals = self._cost.check(windows)
         if approvals is None:
             return RunCancelled()
-        return self._build(windows, run_id, approvals).run()
+        pipeline = self._build(windows, run_id, approvals)
+        if self._banner is not None:
+            self._banner.show(windows, pipeline.step_names(), resuming=run_id is not None)
+        return pipeline.run()
