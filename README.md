@@ -1,105 +1,99 @@
 # job-radar
 
-A personal job-search radar that runs in your terminal. It pulls job postings from job APIs, keeps the ones that match your searches, and writes a report each run:
+A personal job-search radar that runs in your terminal. Each run fetches new job postings, keeps the ones that match your searches, has Claude rank them against your CV, and writes a report: the best matches, market trends, what employers ask for, and the experience you could gain.
 
-- **New openings** that match your searches and that you haven't seen before
-- **Market trends** for those searches over time: volume, seniority mix, salary range, remote share
-- **What employers ask for**: skills, tools, certifications and years of experience, ranked by how often they appear
-- **Experience to gain**: frequent requirements your CV doesn't cover yet, with suggestions
+## Before you start
 
-Each person runs their own copy. Everything about you (CV, searches, settings) stays in `config_local/`, a folder that is never committed.
+- **A Claude Pro or Max subscription: required.** job-radar sends jobs to Claude through Claude Code (`claude -p`), using your subscription's usage: no API key and no per-token bill, but runs count toward your plan's usage limits. Rough sizes: a run covering 7 days takes about 25 to 30 haiku prompts; a first run covering 14 days, about 40 to 50. If a limit hits mid-run, the run asks whether to finish with what's done and carry the rest over to the next run.
+- **Claude Code, installed and logged in.** Install [Claude Code](https://claude.com/claude-code), run `claude` once and log in; `claude auth status` should say you're logged in. Every run checks this before it fetches anything.
+- **git and a terminal**, on macOS or Linux. Python and the dependencies come from the setup script.
+- **Optional: a [JobsPipe](https://jobspipe.dev) account**, for jobs from LinkedIn, Indeed and employers' own ATS. Free plan: 1,000 credits, once; Seeker: $19.60 a month for 10,000. One credit per job. Off by default; every run estimates the cost before spending anything, and asks when it's over a limit.
+- **[Fast Forward](https://jobs.ffwd.org)** (tech nonprofits) is free and needs no key: every run uses it.
 
-## Status
+## Get started
 
-The MVP is built: every step of a run works, on made-up data (`uv run job-radar run --demo`), on real Fast Forward jobs, and with JobsPipe turned on. Next are the first real runs with tight limits, widened step by step. See the docs below.
+1. **Get the code and set it up:**
 
-## How it works
+        git clone https://github.com/adailida/job-radar.git && cd job-radar
+        ./scripts/setup.sh
 
-Each run fetches postings, merges duplicates across sources, drops ones you've already seen, and filters them against your searches. A cheap LLM pass classifies each job (seniority, job type, cause area), a fuller pass extracts requirements from the ones that match, and the report is rendered as Markdown.
+   The script installs [uv](https://docs.astral.sh/uv/) if it's missing, then Python and the dependencies (`uv sync`). It copies `config_local_example/` to `config_local/` only if you don't have a `config_local/` yet (it never overwrites one), and checks the Claude Code login. Run it again any time.
 
-- **Sources**: [JobsPipe](https://jobspipe.dev) (an aggregator covering LinkedIn, Indeed, Greenhouse, Lever, Ashby, Workday and more; paid per job, with cost checks before every fetch) and the [Fast Forward](https://jobs.ffwd.org) job board for tech nonprofits (free). Only sources whose terms allow scripted access; no scraping
-- **LLM**: runs through your Claude subscription with the Claude Code CLI (`claude -p`), not per-token API billing
-- **Searches**: one or more named searches combined with OR, US states and other regions as ISO codes, cause areas, and a choice per criterion of keeping or dropping postings that lack the field (for example, no salary listed)
+2. **Put yourself in `config_local/`.** It starts as a copy of a made-up person; it is gitignored and never committed. Edit:
+   - `cv.md` or `cv.pdf`: your CV. Replace `cv.md`, or add `cv.pdf` (with a text layer, not a scan), which is read first
+   - `preferences.md`: your ideal job in your own words: what you want to do, where, for whom, what matters to you. Claude reads it with your CV when it ranks jobs
+   - `profile.yaml`: your searches: roles, excluded titles, work mode, places, minimum salary, seniority and cause areas. The comments explain each key
+   - `settings.yaml`: only the settings you change; [config/settings.yaml](config/settings.yaml) lists every setting with its default
+   - `.env`: only for JobsPipe: your `JOBSPIPE_API_KEY`
 
-## Requirements
+3. **Run it:**
 
-- Python 3.12+ and [uv](https://docs.astral.sh/uv/)
-- [Claude Code](https://claude.com/claude-code), logged in
-- A JobsPipe API key, if you use JobsPipe
+        uv run job-radar run --demo   # try it: made-up postings, no network, no Claude
+        uv run job-radar run          # for real: your searches, ranked by Claude
 
-## Usage
+   The demo runs as the made-up person in [config_local_example/](config_local_example/), so it works before you edit anything. A real run's report lands in `output/runs/<time>/report.md` (demo runs: `output/demo/<time>/`), and the terminal gives the path. `uv run job-radar runs` lists earlier runs; `uv run job-radar delete <id>` deletes one, after asking.
 
-### First run
+## Commands
 
-1. **Install.** With Python 3.12+ and uv:
-
-        git clone https://github.com/adailida/job-radar.git
-        cd job-radar
-        uv sync
-
-2. **Create your files in `config_local/`** (gitignored, never committed). Each has a same-named example or default in `config/`:
-   - `profile.yaml`: what you're searching for: roles, excluded titles, work mode, places, minimum salary, seniority and domains (cause areas, as the settings name them). Copy [config/profile.example.yaml](config/profile.example.yaml) and change it
-   - your CV as `cv.pdf` (with a text layer, not a scan), `cv.md` or `cv.txt`. [config/cv.example.md](config/cv.example.md) shows a made-up one
-   - `preferences.md`: your ideal job in your own words (what you want to do, where, for whom, what matters to you). Claude reads it with your CV when it ranks jobs. [config/preferences.example.md](config/preferences.example.md) shows a made-up one
-   - optionally `settings.yaml`, with only the settings you change. The app reads [config/settings.yaml](config/settings.yaml) first, every setting with its default, and merges yours over it
-
-3. **Log in to Claude Code.** Install [Claude Code](https://claude.com/claude-code) and log in; `claude auth status` should say you are. A real run checks this before it fetches anything.
-
-4. **Try the demo:** `uv run job-radar run --demo`. It runs every step on made-up postings: no network, no LLM, and nothing from `config_local/`. Its runs go under `output/demo/`, apart from real ones.
-
-5. **Run for real:** `uv run job-radar run`. This fetches Fast Forward (free), filters the jobs against your searches, and has Claude label, read and rank the ones left. A first run fetches the last 14 days and asks before going ahead. For a small first run, put this in `config_local/settings.yaml`:
-
-        lookback_days: 1
-        llm:
-          max_jobs_per_run: 20
-
-   `llm.max_jobs_per_run` (60 by default) is a safety cap on how many jobs one run sends to Claude. Over it, the run asks: "75 jobs would go to Claude, over the cap of 60. Send them all, only the first 60, or stop? (a/f/s, Enter for f)". The first 60 go on and the rest are carried over to the next run, so none are lost; stop ends the run before any call to Claude, and running the same command again resumes it and asks again. Read the report at the path the terminal gives.
-
-6. **Add JobsPipe** (paid, off by default), for LinkedIn, Indeed and employers' own ATS. Put `JOBSPIPE_API_KEY=...` in `config_local/.env` (never committed) and turn it on in `config_local/settings.yaml`, with a low per-run max to start:
-
-        sources:
-          jobspipe:
-            enabled: true
-            max_jobs_per_run: 25
-
-   Before fetching, a run estimates what JobsPipe will cost (the estimate is free) and checks it against the per-run max, the monthly budget and the credits left. Within them it goes ahead and says so; over a limit, it asks whether to go ahead, skip JobsPipe this run, or stop (Enter skips). The plan (`free` or `seeker`) sets the limits unless `max_jobs_per_run` and `monthly_budget` say otherwise. Check what a run spent in the report's header against the estimate before you widen the limits, searches or lookback.
-
-### Commands
-
-    uv run job-radar run --demo   # a run on made-up postings: no network, no LLM, no CV needed
+    uv run job-radar run --demo   # made-up postings, as the person in config_local_example/
     uv run job-radar run          # real jobs, ranked by Claude against your CV and preferences
     uv run job-radar runs         # list earlier runs, newest first
     uv run job-radar delete <id>  # delete a run after asking (Enter means no); --all for every run
 
 Add `--demo` to `runs` or `delete` for demo runs.
 
-### What a run does
+## What a run does
 
-Each report has the same sections in the same order: alerts, the recommended jobs, every new opening that matched (grouped by job type; `report.group_by` in `settings.yaml` can say `domain` or `both`), market trends, what employers ask for, experience to gain, and about this run. The header says how many postings each source gave and what a paid one cost. At the end the terminal says, for example, "Run finished: 23 new openings, 10 recommended, 0 alerts." and where the report is.
+It agrees the dates first: the last `lookback_days` on a first run (or after a long break, when it asks before going ahead), and since the last run after that. Then it fetches postings from Fast Forward and, when it's on, JobsPipe; merges the same job found in both; drops jobs an earlier run already found; and filters the rest against your searches. Claude labels each job left (seniority, job type, cause area), finds what the matching ones ask for, and ranks them against your CV and preferences. Only sources whose terms allow scripted access are used; nothing is scraped.
 
-The report also has a market trends section: postings per day, work mode, salary and seniority by month (`trend_period` in `settings.yaml`: week, month or quarter), compared with the last complete period.
+- If your Claude usage limit runs out mid-run, the run asks whether to finish with what's done and carry the rest over to the next run, or stop and resume after the reset
+- If a run fails, run the same command again: it offers to resume after the last step that finished
+- Problems that don't stop a run (a source down, credits running low, jobs Claude couldn't read) are listed under Alerts in the report and in the terminal. A run stops only when it can't start (invalid settings or profile, unreadable CV, missing key, `claude` not logged in, another run going) or no source returned data, with one message saying what to fix
+- Deleting a run makes its jobs new again
 
-It then compares what employers ask for with your CV, in "Experience to gain": each requirement covered, partly or missing, with a reason, and how to gain the five most asked gaps (`report.gap_suggestions`). Claude judges each requirement once per CV, kept in `output/cache/gaps.jsonl`, so later runs ask only about new requirements; a changed CV is judged again.
+## What the report holds
 
-A run shows only jobs no earlier run found (set `new_only: false` in `settings.yaml` to see them all again). Deleting a run makes its jobs new again.
+Each run writes `output/runs/<time>/report.md`, with `dropped.md` next to it (what the filter dropped, by reason). The sections, always in this order:
 
-If your Claude usage limit runs out mid-run, the run asks whether to finish with what's done and carry the rest over to the next run, or stop and resume after the reset.
+- **Alerts**: problems from this run, if any
+- **Recommended jobs**: the best fits, with a score and why
+- **New openings**: every new matching job, grouped by job type (or cause area, or both), with salary, place, date and link
+- **Market trends**: postings per day, work mode, salary and seniority per period, against the last complete one
+- **What employers ask for**: skills, tools, certifications and years, by how often they appear
+- **Experience to gain**: what's asked that your CV doesn't cover yet, with how to gain the most asked. Each requirement is compared with your CV once (kept in `output/cache/gaps.jsonl`); a changed CV is compared again
+- **About this run**: how many jobs each step kept
 
-If a run fails, run the same command again: it offers to resume after the last step that finished.
+The header gives the dates covered, how many postings each source gave and what a paid one cost.
 
-Problems that don't stop a run are listed under Alerts at the top of the report, and at the end in the terminal: a source that failed or returned nothing (the other sources still run), credits running low (`alerts.low_credits` in `settings.yaml`, 100 by default), the monthly budget reached, jobs the LLM couldn't label, read or rank, jobs carried over at the usage limit or the LLM cap, no new jobs matched. A run stops only when it can't do anything useful (no source returned data) or can't start (invalid settings or profile, unreadable CV, missing API key, `claude` not logged in, another run in progress), with one message saying what to fix. An unexpected error shows one line and writes the details to `error.log`. Only one run goes at a time.
+## Settings worth knowing
 
-Each run says which dates it fetches: the last 14 days on a first run, since the last run after that. On a first run, or after a long break, it asks before going ahead.
+Set these in `config_local/settings.yaml`; [config/settings.yaml](config/settings.yaml) has every setting with its default.
 
-Each run writes `output/runs/<run-id>/report.md`, with `dropped.md` next to it.
+- `lookback_days` (14 by default; 7 in the copied file): how far back a first run, or one after a long break, reaches. For a small first run, try 1
+- `llm.max_jobs_per_run` (60): a safety cap on the jobs one run sends to Claude. Over it, the run asks whether to send them all, only the first 60 (the rest carry over to the next run, so none are lost), or stop
+- `recommend.top_n` (10) and `recommend.min_score` (40): how many jobs are recommended, and the lowest score that counts
+- JobsPipe, off by default. Put your key in `config_local/.env` and start with a low per-run max (the copied `settings.yaml` has this block commented out):
+
+        sources:
+          jobspipe:
+            enabled: true
+            max_jobs_per_run: 25
+
+  Before fetching, a run estimates what JobsPipe will cost (the estimate is free) and checks it against the per-run max, the monthly budget and the credits left. Over a limit, it asks whether to go ahead, skip JobsPipe this run, or stop. Compare what a run spent (in the report's header) with the estimate before you widen the limits, searches or lookback
+- `new_only` (true): set it to false to see every matching job again, not only new ones
+- `trend_period` (month) and `report.group_by` (job_type): how market trends and new openings are grouped
+
+## Status
+
+The MVP is done (Nov 10): every step of a run works on made-up data, on real Fast Forward jobs, and with JobsPipe on. [acceptance.md](docs/acceptance.md) maps each acceptance criterion to the tests that prove it: 26 of 28 pass, one is decided otherwise by the owner, and one gap is left (market trends broken down by sector and domain). Keywords in descriptions and terminal prompts for user input are deferred until after the MVP.
 
 ## Docs
 
 - [Requirements](docs/requirements.md): what it does, acceptance criteria, non-goals
-- [Acceptance](docs/acceptance.md): each acceptance criterion with the tests that prove it, and its status
+- [Acceptance](docs/acceptance.md): each acceptance criterion with the tests that prove it, and its status: the proof the MVP does what it promises
 - [Design](docs/design.md): architecture, data model, decisions and alternatives
 - [Architecture](docs/architecture.md): diagrams of the components and of one run, with where state lives
-- [Tasks](docs/tasks.md): build steps
+- [Tasks](docs/tasks.md): the build steps, and what comes after the MVP
 - [Data sources](docs/research/sources.md): source research and why these two
 
 ## License

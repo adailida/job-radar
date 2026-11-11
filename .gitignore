@@ -2,6 +2,7 @@
 config_local/
 output/
 .env
+!config_local_example/.env
 CLAUDE.local.md
 
 # Python

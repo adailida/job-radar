@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from fakes import EXAMPLE
 
 from job_radar.cli import Cli
 from job_radar.config.settings import RecommendSettings, Settings, SettingsFile
@@ -78,6 +79,12 @@ def test_broken_defaults_are_named_as_the_file_at_fault(tmp_path):
 
 def test_the_defaults_are_config_settings_yaml_at_the_repo_root():
     assert SettingsFile.DEFAULTS == Path(__file__).resolve().parents[1] / "config" / "settings.yaml"
+
+
+def test_the_example_settings_merge_over_the_defaults():
+    settings = SettingsFile(EXAMPLE / "settings.yaml").load()
+    assert (settings.lookback_days, settings.recommend.top_n) == (7, 5)
+    assert settings.sources.jobspipe.enabled is False
 
 
 def test_missing_defaults_are_a_setup_error_naming_the_file(tmp_path):

@@ -1,5 +1,7 @@
 # Requirements
 
+**Status: the MVP meets these (Nov 10).** [acceptance.md](acceptance.md) maps every acceptance criterion to the tests that prove it: 26 of 28 passing, 1 gap (trends broken down by sector and domain), 1 decided by the owner. The items under "After the MVP" are deferred.
+
 ## Purpose
 
 Help someone find their next job, and understand the market they're searching in:

@@ -1,9 +1,13 @@
 """Test doubles shared by several test files."""
 
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 from job_radar.models import Job, Location, Posting, Report, StepCount, Window, WorkMode
 from job_radar.utils.clock import Clock
+
+EXAMPLE = Path(__file__).parent.parent / "config_local_example"
+"""The committed example folder: demo runs read their searches, CV and preferences there."""
 
 
 class FixedClock(Clock):

@@ -3,13 +3,14 @@
 Job search and job-market trends, pulled from job APIs. Built spec-first with Claude Code.
 
 ## Status
-Spec done: requirements, design and tasks. Building in task order from docs/tasks.md; each task follows the definition of done there.
+MVP done Nov 10: tasks 1 to 26 (docs/acceptance.md: 26 of 28 criteria passing, 1 gap, 1 decided by the owner). Deferred after the MVP: tasks 11c (keywords) and 12 (terminal prompts). Post-MVP changes since: PR #32 regrouped the code and the config folders; PR #33 adds config_local_example/ (which --demo runs on), scripts/setup.sh and a README that opens with requirements and a quick start. New work goes under "After the MVP" in docs/tasks.md and follows the definition of done there.
 
 ## Docs
 - docs/requirements.md: what it does, acceptance criteria, non-goals
 - docs/design.md: architecture, data model, decisions and alternatives
 - docs/architecture.md: component and run diagrams, state marked; updated by every PR that changes the flow
-- docs/tasks.md: small ordered steps, each checkable
+- docs/tasks.md: small ordered steps, each checkable; "After the MVP" for later work
+- docs/acceptance.md: each acceptance criterion with the tests that prove it
 - docs/research/sources.md: data source research
 
 ## Decided so far

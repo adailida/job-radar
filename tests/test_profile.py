@@ -1,6 +1,7 @@
 from io import BytesIO
 
 import pytest
+from fakes import EXAMPLE
 from pypdf import PdfWriter
 
 from job_radar.config.profile_loader import ProfileError, ProfileLoader
@@ -98,3 +99,9 @@ def test_empty_preferences_is_a_setup_error(tmp_path):
     (with_preferences(tmp_path, "\n") / "cv.md").write_text("Jane")
     with pytest.raises(ProfileError, match="preferences.md is empty"):
         ProfileLoader(tmp_path).load()
+
+
+def test_the_example_folder_reads():
+    profile = ProfileLoader(EXAMPLE).load()
+    assert profile.cv.startswith("# Sam Example")
+    assert "mission-driven" in profile.preferences

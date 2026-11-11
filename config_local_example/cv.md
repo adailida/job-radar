@@ -1,6 +1,6 @@
 # Sam Example
 
-A made-up person, for trying job-radar. Copy to `config_local/cv.md` and replace it with your own CV (or put `config_local/cv.pdf` there instead).
+A made-up person, for trying job-radar: `--demo` runs as Sam. In your `config_local/`, replace this file with your own CV, or put your CV there as `cv.pdf` (read before `cv.md`).
 
 Senior software engineer, remote (US) · sam@example.org
 

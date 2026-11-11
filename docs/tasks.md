@@ -1,5 +1,7 @@
 # Tasks
 
+**Status: the MVP is complete (Nov 10).** Tasks 1 to 26 are done; [acceptance.md](acceptance.md) maps every acceptance criterion to its tests (26 of 28 passing, 1 gap, 1 decided by the owner). Deferred after the MVP by the owner: 11c (keywords) and 12 (terminal prompts), left unticked below. Work after the MVP goes in [After the MVP](#after-the-mvp) at the end, one PR each, under the same definition of done.
+
 Build order for the MVP in [design.md](design.md), following the classes in [architecture.md](architecture.md). First the whole run works end to end on made-up data, with every step in a simple form. Then a thin slice: one real run from Fast Forward to a report, one step per PR. Then each part grown until it meets its design section, then an acceptance pass.
 
 ## Definition of done
@@ -103,7 +105,7 @@ One line each for now; each task gets its detail, against the class names in arc
 
 - [x] **10. Settings file:** YAML with defaults, unknown keys rejected, an example file
   - `config_local/settings.yaml` over the defaults (nested: `llm`, `recommend`, `sources`), and the searches from `config_local/profile.yaml` (`common` and `searches`, roles only); errors name the file and the key's path
-  - `config/profile.example.yaml`; the defaults moved into a YAML file in task 16, now `config/settings.yaml`, read first on every run
+  - an example profile, now `config_local_example/profile.yaml`; the defaults moved into a YAML file in task 16, now `config/settings.yaml`, read first on every run
   - Fetch and filter take all the searches; a job is kept if any matches. The demo has its own search in code
 - [x] **11a. Search criteria:** excluded titles, work mode, locations (ISO codes, read from the place text by `PlaceCodes`), minimum salary, each with `if_missing`; `JobMatcher` names the criterion a job fails
 - [x] **11b. Dropped by the filter:** a `dropped.md` next to the report, titles by the reason they were dropped, so silent misses show; the report links it
@@ -151,9 +153,18 @@ One line each for now; each task gets its detail, against the class names in arc
   - Step 1: Fast Forward with the full settings, a low LLM job limit and a 1-day lookback
   - Step 2: add JobsPipe with very tight limits: per-run max about 25 credits, one narrow search, 1-day lookback. Check that credits spent (before and after) match the estimate, then the report and run data
   - Step 3: widen step by step (limits, searches, lookback), checking spend against the estimate each time, before switching to the full settings
-  - Examples complete (now in `config/`); README usage moved from "planned" to real
-  - Built: llm.max_jobs_per_run (60), README First run, config/cv.example.md
+  - Examples complete (now in `config_local_example/`); README usage moved from "planned" to real
+  - Built: llm.max_jobs_per_run (60), README First run, an example CV (now `config_local_example/cv.md`)
   - Done Nov 9 to 10, narrowed by the owner to short windows (no widening: the owner runs the full thing after his code changes):
     - Nov 9: Fast Forward 1 and 14 days; JobsPipe Nov 8 to 9 (18 credits, matched the estimate within the cap; 10 recommended, top 86)
     - Nov 10: every step on, Nov 8 to 10: the cost check estimated 46 JobsPipe credits, over the 25 cap, and the owner skipped JobsPipe; Fast Forward only, 3 haiku prompts, one alert. Found and fixed: "Myanmar (Burma)" wasn't read as a country, so an on-site job in Yangon passed the `seattle` search as "no place given"
     - Not seen yet: a real usage-limit answer from `claude` (the pattern stays to confirm)
+
+## After the MVP
+
+Changes since the MVP, one PR each, newest last.
+
+- [x] **PR #32. Regroup the code and the config folders** (Nov 11): code in folders by responsibility; defaults in `config/`, personal files in `config_local/`
+- [x] **PR #33. Example folder and quick start:** `config_local_example/` mirrors `config_local/` and `--demo` runs on it; `scripts/setup.sh`; the README opens with requirements and a quick start; the docs show the MVP as done
+- [ ] **Trend breakdowns:** market trends by sector, domain and job type, the gap left by the acceptance pass (design.md section 10, "Breakdowns")
+- [ ] **Deferred tasks:** 11c (keywords) and 12 (terminal prompts), above

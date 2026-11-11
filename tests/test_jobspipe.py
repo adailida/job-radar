@@ -5,7 +5,7 @@ from pathlib import Path
 
 import httpx
 import pytest
-from fakes import FakePrompter
+from fakes import EXAMPLE, FakePrompter
 
 from job_radar.app.app_factory import AppFactory
 from job_radar.config.secrets import EnvSecrets
@@ -211,6 +211,13 @@ def test_secrets_come_from_the_environment_first_then_the_file(tmp_path, monkeyp
     assert EnvSecrets(tmp_path / "none").get("X") is None
 
 
+def test_the_example_env_file_names_the_key_without_a_value(monkeypatch):
+    monkeypatch.delenv("JOBSPIPE_API_KEY", raising=False)
+    env = EXAMPLE / ".env"
+    assert "JOBSPIPE_API_KEY=" in env.read_text()
+    assert EnvSecrets(env).get("JOBSPIPE_API_KEY") is None
+
+
 def test_jobspipe_on_without_a_key_is_a_setup_error(tmp_path):
     local = tmp_path / "config_local"
     local.mkdir()
@@ -220,6 +227,7 @@ def test_jobspipe_on_without_a_key_is_a_setup_error(tmp_path):
     factory = AppFactory(
         SettingsFile.defaults(output=str(tmp_path), sources={"jobspipe": {"enabled": True}}),
         local,
+        EXAMPLE,
         None,
         FakePrompter(),
         {},
@@ -243,6 +251,7 @@ def test_a_run_fetches_from_jobspipe_and_fast_forward(tmp_path, monkeypatch):
     factory = AppFactory(
         SettingsFile.defaults(output=str(tmp_path), sources={"jobspipe": {"enabled": True}}),
         local,
+        EXAMPLE,
         None,
         FakePrompter(),
         {"JOBSPIPE_API_KEY": "jp_test"},
@@ -310,7 +319,7 @@ def test_a_domain_the_settings_dont_define_is_a_setup_error(tmp_path):
     local.mkdir()
     (local / "profile.yaml").write_text("searches: {all: {domains: [space]}}\n")
     factory = AppFactory(
-        SettingsFile.defaults(output=str(tmp_path)), local, None, FakePrompter(), {}
+        SettingsFile.defaults(output=str(tmp_path)), local, EXAMPLE, None, FakePrompter(), {}
     )
     with pytest.raises(
         ConfigError, match=r"searches.all.domains: unknown space; the settings define"

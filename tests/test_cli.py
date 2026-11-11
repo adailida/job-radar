@@ -1,7 +1,7 @@
 import json
 from datetime import date
 
-from fakes import WINDOW, FakePrompter, FakeStep, FixedClock, NoCost, NoLock
+from fakes import EXAMPLE, WINDOW, FakePrompter, FakeStep, FixedClock, NoCost, NoLock
 
 from job_radar.app.app_factory import AppFactory
 from job_radar.app.job_radar_app import JobRadarApp
@@ -25,7 +25,9 @@ FIRST_RUN = "2026-11-05T10-00-00"
 def demo_cli(tmp_path, prompter: FakePrompter, hour: int = 10) -> Cli:
     """The real command, with run folders in a temp folder, a fixed clock and a set user."""
     settings = SettingsFile.defaults(output=str(tmp_path), recommend={"top_n": 3})
-    return Cli(AppFactory(settings, tmp_path / "config_local", FixedClock(hour), prompter, {}))
+    return Cli(
+        AppFactory(settings, tmp_path / "config_local", EXAMPLE, FixedClock(hour), prompter, {})
+    )
 
 
 class FailingFactory:
@@ -83,7 +85,7 @@ def test_demo_run_end_to_end(tmp_path, capsys):
     folder = tmp_path / "demo" / FIRST_RUN
     out = capsys.readouterr().out
     assert out == (
-        f"Run finished: 8 new openings, 3 recommended, 0 alerts.\nReport: {folder / 'report.md'}\n"
+        f"Run finished: 5 new openings, 3 recommended, 0 alerts.\nReport: {folder / 'report.md'}\n"
     )
     assert prompter.asked == ["Continue?"]
     assert sorted(p.name for p in folder.iterdir()) == KEPT
@@ -99,26 +101,29 @@ def test_a_demo_run_has_every_section_in_order(tmp_path):
     report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
     headings = [line.split(" (")[0] for line in report.splitlines() if line.startswith("## ")]
     assert headings == SECTIONS
-    assert "sources: {demo: 12}\nnew_openings: 8\nrecommended: 3\nalerts: 0\n" in report
+    assert "sources: {demo: 12}\nnew_openings: 5\nrecommended: 3\nalerts: 0\n" in report
     assert "\nSources: Demo board 12 postings.\n" in report
     assert "## Alerts\n\nNone.\n" in report
-    assert "## New openings (8)\n\n### engineering (7)\n\n" in report
-    assert "### engineering-management (1)\n\n- **Engineering Manager, Data Platform**" in report
+    assert "## New openings (5)\n\n### engineering (5)\n\n" in report
     assert (
         "- **Platform Engineer**, Commons Ledger. Remote. Remote, US. $130k to $160k a year. "
-        "Posted 5 Nov. Recommended, score 100. "
-        "[Demo board](https://example.org/commons-ledger/jobs/4)\n"
+        "Posted 5 Nov. [Demo board](https://example.org/commons-ledger/jobs/4)\n"
+    ) in report
+    assert (
+        "- **Senior Data Engineer**, Brightwater Trust. Hybrid. New York, NY. "
+        "$140k to $170k a year. Posted 2 Nov. Recommended, score 100. "
+        "[Demo board](https://example.org/brightwater-trust/jobs/1)\n"
     ) in report
 
 
 def test_new_openings_are_grouped_as_the_settings_say(tmp_path):
     settings = SettingsFile.defaults(output=str(tmp_path), report={"group_by": "both"})
     factory = AppFactory(
-        settings, tmp_path / "config_local", FixedClock(10), FakePrompter(True), {}
+        settings, tmp_path / "config_local", EXAMPLE, FixedClock(10), FakePrompter(True), {}
     )
     Cli(factory).main(["run", "--demo"])
     report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
-    assert "### engineering (7)\n\n#### Not labelled (7)\n\n- " in report
+    assert "### engineering (5)\n\n#### Not labelled (5)\n\n- " in report
 
 
 def test_each_run_writes_one_report_and_saves_its_run_data(tmp_path):
@@ -145,13 +150,13 @@ def test_new_source_plugs_in_without_changes_downstream(tmp_path):
         "convert": 12,
         "dedupe": 12,
         "new_jobs_filter": 12,
-        "filter": 8,
-        "carried_over": 8,
-        "describe": 8,
-        "llm_cap": 8,
-        "classify": 8,
-        "match": 8,
-        "extract": 8,
+        "filter": 5,
+        "carried_over": 5,
+        "describe": 5,
+        "llm_cap": 5,
+        "classify": 5,
+        "match": 5,
+        "extract": 5,
         "recommend": 3,
         "report": 1,
     }
@@ -166,14 +171,14 @@ def test_next_run_fetches_since_the_last_one_without_asking(tmp_path):
     manifest = json.loads((tmp_path / "demo" / "2026-11-05T15-00-00" / "manifest.json").read_text())
     assert manifest["window"] == {"start": "2026-11-04", "end": "2026-11-05"}
     counts = {step["step"]: step["count"] for step in manifest["steps"]}
-    # The first run found 8 of the 12 jobs: only the 4 it didn't keep are new.
-    assert (counts["convert"], counts["new_jobs_filter"], counts["filter"]) == (12, 4, 0)
+    # The first run found 5 of the 12 jobs: only the 7 it didn't keep are new.
+    assert (counts["convert"], counts["new_jobs_filter"], counts["filter"]) == (12, 7, 0)
 
 
 def test_the_report_lists_every_matching_posting_not_seen_in_an_earlier_run(tmp_path, capsys):
     demo_cli(tmp_path, FakePrompter(True)).main(["run", "--demo"])
     first = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
-    assert "## New openings (8)" in first
+    assert "## New openings (5)" in first
     demo_cli(tmp_path, FakePrompter(), hour=15).main(["run", "--demo"])
     second = (tmp_path / "demo" / "2026-11-05T15-00-00" / "report.md").read_text()
     assert "## New openings (0)\n\nNo new job matched your searches this run.\n" in second
@@ -246,7 +251,9 @@ def test_a_deleted_runs_postings_count_as_unseen_again_and_its_data_drops_out_of
     def cli(day: int, prompter: FakePrompter) -> Cli:
         """The real command on this day of November, with this user."""
         return Cli(
-            AppFactory(settings, tmp_path / "config_local", FixedClock(10, day), prompter, {})
+            AppFactory(
+                settings, tmp_path / "config_local", EXAMPLE, FixedClock(10, day), prompter, {}
+            )
         )
 
     cli(5, FakePrompter(True)).main(["run", "--demo"])
@@ -255,7 +262,7 @@ def test_a_deleted_runs_postings_count_as_unseen_again_and_its_data_drops_out_of
     assert deleting.asked == [f"Delete run {FIRST_RUN} (completed, 22 Oct to 5 Nov 2026)?"]
     cli(20, FakePrompter(True)).main(["run", "--demo"])
     report = (tmp_path / "demo" / "2026-11-20T10-00-00" / "report.md").read_text()
-    assert "## New openings (8)" in report
+    assert "## New openings (5)" in report
     trends = report[report.index("## Market trends") : report.index("## What employers")]
     assert "|  | Nov (partial, 15 of 30 days) |\n" in trends
     assert "Oct" not in trends
@@ -299,7 +306,12 @@ def test_with_new_only_off_a_second_run_sees_every_job_again(tmp_path):
     for hour in (10, 15):
         cli = Cli(
             AppFactory(
-                settings, tmp_path / "config_local", FixedClock(hour), FakePrompter(True), {}
+                settings,
+                tmp_path / "config_local",
+                EXAMPLE,
+                FixedClock(hour),
+                FakePrompter(True),
+                {},
             )
         )
         assert cli.main(["run", "--demo"]) == 0
@@ -317,19 +329,20 @@ def test_jobs_the_usage_limit_stopped_are_ranked_by_the_next_run(tmp_path, monke
     monkeypatch.setattr(KeywordRanker, "score", limited)
     first = FakePrompter(True, "f")
     assert demo_cli(tmp_path, first).main(["run", "--demo"]) == 0
-    assert first.asked[-1].startswith("6 jobs not ranked: usage limit reached.")
+    assert first.asked[-1].startswith("3 jobs not ranked: usage limit reached.")
     folder = tmp_path / "demo" / FIRST_RUN
-    assert len(FilePendingLog(folder).jobs()) == 6
+    assert len(FilePendingLog(folder).jobs()) == 3
     assert (
-        "6 jobs carried over to the next run (usage limit or LLM cap)."
+        "3 jobs carried over to the next run (usage limit or LLM cap)."
         in (folder / "report.md").read_text()
     )
     monkeypatch.setattr(KeywordRanker, "score", real_score)
     assert demo_cli(tmp_path, FakePrompter(), hour=15).main(["run", "--demo"]) == 0
     manifest = json.loads((tmp_path / "demo" / "2026-11-05T15-00-00" / "manifest.json").read_text())
     counts = {step["step"]: step["count"] for step in manifest["steps"]}
-    assert (counts["filter"], counts["carried_over"]) == (0, 6)
-    assert counts["recommend"] == 3
+    assert (counts["filter"], counts["carried_over"]) == (0, 3)
+    # Machine Learning Engineer, one of the 3, scores under min_score: not recommended.
+    assert counts["recommend"] == 2
 
 
 def test_a_demo_run_reports_market_trends(tmp_path):
@@ -347,21 +360,21 @@ def test_a_demo_run_reports_what_employers_ask_for(tmp_path):
     report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
     section = report.index("## What employers ask for")
     assert report.index("## Market trends") < section < report.index("## About this run")
-    assert "In the 30 days from 7 Oct to 5 Nov 2026: 8 matched jobs (low sample)." in report
+    assert "In the 30 days from 7 Oct to 5 Nov 2026: 5 matched jobs (low sample)." in report
     assert "### Tools" in report
-    assert "| Python | 25% (2) |" in report
+    assert "| Python | 20% (1) |" in report
     assert "No change yet: no matched job with requirements in the 30 days before." in report
 
 
 def test_how_many_requirements_the_report_lists_is_a_setting(tmp_path):
     settings = SettingsFile.defaults(output=str(tmp_path), report={"requirements_per_type": 1})
     factory = AppFactory(
-        settings, tmp_path / "config_local", FixedClock(10), FakePrompter(True), {}
+        settings, tmp_path / "config_local", EXAMPLE, FixedClock(10), FakePrompter(True), {}
     )
     Cli(factory).main(["run", "--demo"])
     report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
     tools = report[report.index("### Tools") :].split("\n\n")[1]
-    assert tools.splitlines() == ["| Requirement | Share |", "|---|---|", "| Python | 25% (2) |"]
+    assert tools.splitlines() == ["| Requirement | Share |", "|---|---|", "| Python | 20% (1) |"]
 
 
 def test_a_demo_run_reports_experience_to_gain(tmp_path):
@@ -370,7 +383,7 @@ def test_a_demo_run_reports_experience_to_gain(tmp_path):
     section = report.index("## Experience to gain")
     assert report.index("## What employers ask for") < section < report.index("## About this run")
     assert (
-        "| machine learning | 12% (1) | missing: not named in the CV "
+        "| machine learning | 20% (1) | missing: not named in the CV "
         "| Use it in a small project of your own. |"
     ) in report
     assert "Covered: Python." in report
@@ -381,8 +394,8 @@ def test_a_demo_run_reports_experience_to_gain(tmp_path):
 def test_how_many_gaps_show_how_to_gain_them_is_a_setting(tmp_path):
     settings = SettingsFile.defaults(output=str(tmp_path), report={"gap_suggestions": 0})
     factory = AppFactory(
-        settings, tmp_path / "config_local", FixedClock(10), FakePrompter(True), {}
+        settings, tmp_path / "config_local", EXAMPLE, FixedClock(10), FakePrompter(True), {}
     )
     Cli(factory).main(["run", "--demo"])
     report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
-    assert "| machine learning | 12% (1) | missing: not named in the CV |  |" in report
+    assert "| machine learning | 20% (1) | missing: not named in the CV |  |" in report

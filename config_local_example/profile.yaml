@@ -1,4 +1,7 @@
-# What you're looking for. Copy to config_local/profile.yaml and change it.
+# What you're looking for, here for a made-up person (the one in cv.md).
+# `job-radar run --demo` runs on this folder as it is. For your own setup, copy
+# this folder to config_local/ (cp -r config_local_example config_local) and
+# edit the files there.
 #
 # A job is kept if it matches any search; it matches a search when it meets
 # every criterion set there. A criterion set in a search replaces the same one
@@ -9,7 +12,8 @@
 # a job that doesn't say. Short means keep.
 
 common:                   # applies to every search
-  roles: [software engineer, data engineer]   # the title contains any
+  roles: [software engineer, backend engineer, data engineer, platform engineer,
+          machine learning engineer, python developer]  # the title contains any
   exclude_titles: [intern, sales]             # the title contains none
   min_salary: {amount: 120000, currency: USD, period: year, if_missing: keep}
 

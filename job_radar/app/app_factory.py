@@ -11,8 +11,8 @@ from job_radar.app.job_radar_app import JobRadarApp
 from job_radar.app.resume_offer import ResumeOffer
 from job_radar.app.runs_command import RunsCommand
 from job_radar.app.window import WindowChooser, WindowPlanner
-from job_radar.config.profile_loader import DEMO_PROFILE, ProfileLoader
-from job_radar.config.searches_file import DEMO_SEARCHES, SearchesFile
+from job_radar.config.profile_loader import ProfileLoader
+from job_radar.config.searches_file import SearchesFile
 from job_radar.config.secrets import Secrets
 from job_radar.config.settings import Settings
 from job_radar.config.yaml_file import ConfigError
@@ -90,7 +90,8 @@ class AppFactory:
 
     Wires concrete classes together, so every other class depends only on
     interfaces. Stateless: holds only the settings, the user's folder, the
-    clock, the prompter and where secrets are read.
+    example folder the demo runs on, the clock, the prompter and where
+    secrets are read.
     """
 
     USER_AGENT = "job-radar (+https://github.com/adailida/job-radar)"
@@ -99,13 +100,15 @@ class AppFactory:
         self,
         settings: Settings,
         local: Path,
+        example: Path,
         clock: Clock,
         prompter: Prompter,
         secrets: Secrets,
     ) -> None:
-        """Keep the settings, the user's folder, the clock and the prompter to build from."""
+        """Keep the settings, the user's and the example folders, the clock and the prompter."""
         self._settings = settings
         self._local = local
+        self._example = example
         self._secrets = secrets
         self._clock = clock
         self._prompter = prompter
@@ -113,9 +116,10 @@ class AppFactory:
     def create(self, demo: bool = False) -> JobRadarApp:
         """Build the app, reading the user's files first so a setup error stops before anything.
 
-        With `demo`, the run uses the built-in demo board, a made-up profile and
-        keyword scoring: no network, no LLM, nothing from the user's folder.
-        Demo runs keep their own history, so they never move a real run's window.
+        With `demo`, the run uses the built-in demo board, the made-up person
+        in the example folder and keyword scoring: no network, no LLM, nothing
+        from the user's folder. Demo runs keep their own history, so they never
+        move a real run's window.
         """
         parts = self._demo() if demo else self._real()
         runs = self._runs(demo)
@@ -243,6 +247,12 @@ class AppFactory:
         ]
         return Pipeline(steps, checkpoints, FileErrorLog(folder))
 
+    def _searches(self, folder: Path) -> SearchCriteria:
+        """The searches in a folder's `profile.yaml`, with every domain they name checked."""
+        criteria = SearchesFile(folder / "profile.yaml").load()
+        self._check_domains(criteria)
+        return criteria
+
     def _check_domains(self, criteria: SearchCriteria) -> None:
         """Every domain a search names is one the settings define."""
         known = self._settings.domains
@@ -276,17 +286,22 @@ class AppFactory:
         )
 
     def _demo(self) -> Parts:
-        """The boards, searches, LLM parts and profile of a demo run: no LLM, nothing local."""
+        """The parts of a demo run: the demo board, keyword scoring and the example person.
+
+        The searches, CV and preferences come from the example folder, so the
+        demo shows what a copy of it in `config_local/` would do. No LLM, no
+        network, nothing from the user's folder.
+        """
         return Parts(
             [DemoSource()],
             [DemoParser(PlaceCodes())],
             [],
-            DEMO_SEARCHES,
+            self._searches(self._example),
             TitleClassifier(),
             KeywordExtractor(),
             KeywordRanker(),
             KeywordGapJudge(),
-            DEMO_PROFILE,
+            ProfileLoader(self._example).load(),
         )
 
     def _real(self) -> Parts:
@@ -296,8 +311,7 @@ class AppFactory:
         checks `claude` is logged in, so a missing file, key or login stops the
         run before anything is fetched. JobsPipe joins Fast Forward when it is on.
         """
-        criteria = SearchesFile(self._local / "profile.yaml").load()
-        self._check_domains(criteria)
+        criteria = self._searches(self._local)
         profile = ProfileLoader(self._local).load()
         http = httpx.Client(headers={"User-Agent": self.USER_AGENT}, timeout=20)
         getro = BoardClient(http)

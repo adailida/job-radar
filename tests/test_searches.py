@@ -16,7 +16,7 @@ from job_radar.models import (
     WorkModes,
 )
 
-EXAMPLE = Path(__file__).parent.parent / "config" / "profile.example.yaml"
+EXAMPLE = Path(__file__).parent.parent / "config_local_example" / "profile.yaml"
 
 
 def load(tmp_path, text: str) -> SearchCriteria:
@@ -46,7 +46,9 @@ def test_a_search_with_no_roles_anywhere_matches_every_title(tmp_path):
 
 
 def test_no_file_is_an_error_pointing_at_the_example(tmp_path):
-    with pytest.raises(ConfigError, match=r"no .*profile.yaml: copy config/profile.example.yaml"):
+    with pytest.raises(
+        ConfigError, match=r"no .*profile.yaml: copy config_local_example/profile.yaml"
+    ):
         SearchesFile(tmp_path / "profile.yaml").load()
 
 

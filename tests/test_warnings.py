@@ -3,6 +3,7 @@ from datetime import date
 
 import pytest
 from fakes import (
+    EXAMPLE,
     FakePrompter,
     FixedClock,
     MemoryPendingLog,
@@ -393,7 +394,9 @@ def test_kept_jobs_that_cant_be_read_count_as_none_with_a_warning(tmp_path):
 def demo_cli(tmp_path, prompter: FakePrompter, hour: int = 10) -> Cli:
     """The real command over demo runs in a temp folder."""
     settings = SettingsFile.defaults(output=str(tmp_path), recommend={"top_n": 3})
-    return Cli(AppFactory(settings, tmp_path / "config_local", FixedClock(hour), prompter, {}))
+    return Cli(
+        AppFactory(settings, tmp_path / "config_local", EXAMPLE, FixedClock(hour), prompter, {})
+    )
 
 
 def test_a_demo_run_shows_its_warnings_in_the_report_and_the_terminal(
@@ -405,9 +408,9 @@ def test_a_demo_run_shows_its_warnings_in_the_report_and_the_terminal(
     )
     assert demo_cli(tmp_path, FakePrompter(True)).main(["run", "--demo"]) == 0
     folder = tmp_path / "demo" / FIRST_RUN
-    said = "The LLM couldn't rank 1 of 8 jobs: they can't be recommended."
+    said = "The LLM couldn't rank 1 of 5 jobs: they can't be recommended."
     assert capsys.readouterr().out == (
-        f"Run finished: 8 new openings, 3 recommended, 1 alert.\n- {said}\n"
+        f"Run finished: 5 new openings, 3 recommended, 1 alert.\n- {said}\n"
         f"Report: {folder / 'report.md'}\n"
     )
     report = (folder / "report.md").read_text()

@@ -23,6 +23,7 @@ class Cli:
     """
 
     LOCAL = Path("config_local")  # the user's folder: CV, preferences, profile, settings, keys
+    EXAMPLE = Path("config_local_example")  # a made-up person's folder: the demo runs on it
 
     @staticmethod
     def start() -> int:
@@ -33,7 +34,7 @@ class Cli:
             print(f"Could not set up the run: {error}")
             return 2
         secrets = EnvSecrets(Cli.LOCAL / ".env")
-        factory = AppFactory(settings, Cli.LOCAL, Clock(), TerminalPrompter(), secrets)
+        factory = AppFactory(settings, Cli.LOCAL, Cli.EXAMPLE, Clock(), TerminalPrompter(), secrets)
         return Cli(factory).main(sys.argv[1:])
 
     def __init__(self, factory: AppFactory) -> None:
@@ -56,7 +57,7 @@ class Cli:
         run.add_argument(
             "--demo",
             action="store_true",
-            help="use made-up postings and a made-up profile: no network, no LLM",
+            help="made-up postings, as the person in config_local_example/: no network, no LLM",
         )
         runs = commands.add_parser("runs", help="list earlier runs, newest first")
         runs.add_argument("--demo", action="store_true", help="list demo runs instead")
