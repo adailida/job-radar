@@ -355,7 +355,7 @@ Each source applies what it can server-side, to save credits. The Filter stage t
 - Off by default (`sources.jobspipe.enabled`); the key from `JOBSPIPE_API_KEY` in the environment or `config_local/.env`. On without a key is a setup error
 - One search per user search: roles to `job_title_or`, excluded titles to `job_title_not`, work mode to `work_arrangement_or`, countries to `job_country_code_or` and US or Canadian regions to `region_or`, a USD minimum to `min_salary_usd`, the window's start to `posted_at_gte`. A criterion whose `if_missing` keeps jobs also sends `include_unknown`, unless `match_if_missing: false`
 - `filters` in settings are JobsPipe-only, sent as written (tech occupations, no agencies, ghost score, mission phrases, seniority)
-- `max_jobs_per_run` (25) caps the jobs returned, and so the credits, until task 17's cost checks
+- `max_jobs_per_run` (25) caps the jobs returned, and so the credits, until task 17's cost checks. Now `ask_above_credits`: a run that needs more asks first (section 12)
 - Measured Nov 9 with the owner's searches and filters: about 84 jobs a day with unknowns asked for, about 18 without
 
 ## 5. Run data storage
@@ -552,7 +552,7 @@ searches:                                 # a job matches if it matches any sear
 
 ### Settings
 
-Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`, `max_jobs_per_run`), `recommend` (`top_n`, `min_score`), `report.group_by`, `report.requirements_per_type`, `report.gap_suggestions`, `alerts.low_credits` and `sources.getro.network`. The others come with their tasks; [config/settings.yaml](../config/settings.yaml) holds what exists.
+Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`, `ask_above_jobs`), `recommend` (`top_n`, `min_score`), `report.group_by`, `report.requirements_per_type`, `report.gap_suggestions`, `alerts.low_credits` and `sources.getro.network`. The others come with their tasks; [config/settings.yaml](../config/settings.yaml) holds what exists.
 
 ```yaml
 domains:                    # cause areas or fields: used by the domains filter and report headings
@@ -581,7 +581,7 @@ llm:
   classify_batch: 50
   extract_batch: 10
   max_description_chars: 4000
-  max_jobs_per_run: 60      # above this, the run asks before Classify
+  ask_above_jobs: 60        # above this, the run asks before Classify; nothing is cut
   concurrency: 2
   timeout_seconds: 120
 store: {backend: files, path: output}
@@ -589,7 +589,7 @@ sources:
   getro: {enabled: true, network: "997", delay_seconds: 1}   # 997: Fast Forward
   jobspipe:
     enabled: true
-    plan: seeker            # sets default monthly_budget and per_run_max
+    plan: seeker            # sets default monthly_budget and ask_above_credits
     api_key_env: JOBSPIPE_API_KEY
     filters: {occupations: [25], max_ghost_score: 40, exclude_agencies: true}
 ```
@@ -724,7 +724,7 @@ Built (task 19): `ClaudeCli` raises `UsageLimit` when an error answer matches a 
 
 ### Volume guard
 
-Built (task 26): a safety cap on the jobs one run sends to the LLM, `llm.max_jobs_per_run` (60), checked by its own step, `llm_cap`, after describe and right before classify, the first LLM step and the one that sees the most jobs. Under the cap nothing is asked. Over it, the run asks: "75 jobs would go to Claude, over the cap of 60. Send them all, only the first 60, or stop? (a/f/s, Enter for f)". All: every job goes on. First: the first 60, in the order they come, go on; the rest go to the run's `pending.jsonl` with their descriptions, like jobs the usage limit stopped, so the next run's `carried_over` step takes them, the report's carried-over line counts them, and an `llm_capped` warning says how many. Stop: the step fails before any LLM call, and the same command resumes it and asks again (with a changed cap, if `config_local/settings.yaml` now says one). The cap starts low for the first real runs and goes up as they show what a run costs in usage.
+Built (task 26): a safety cap on the jobs one run sends to the LLM, `llm.ask_above_jobs` (60; `max_jobs_per_run` until renamed after the MVP, as a limit that asks, not one that cuts), checked by its own step, `llm_cap`, after describe and right before classify, the first LLM step and the one that sees the most jobs. Under the cap nothing is asked. Over it, the run asks: "75 jobs would go to Claude, over the cap of 60. Send them all, only the first 60, or stop? (a/f/s, Enter for f)". All: every job goes on. First: the first 60, in the order they come, go on; the rest go to the run's `pending.jsonl` with their descriptions, like jobs the usage limit stopped, so the next run's `carried_over` step takes them, the report's carried-over line counts them, and an `llm_capped` warning says how many. Stop: the step fails before any LLM call, and the same command resumes it and asks again (with a changed cap, if `config_local/settings.yaml` now says one). The cap starts low for the first real runs and goes up as they show what a run costs in usage.
 
 ### Seniority values
 
@@ -923,23 +923,23 @@ Fetched 1,890. Merged 37. Already seen 1,402. Filtered out 389. Classified 62. M
 
 Applies to `PaidSource`s only; free sources skip it.
 
-Built (task 17), with two changes from the plan below, both from the JobsPipe API check: the estimate is free (`POST /v1/jobs/export/estimate` per search, added up), not count queries at 1 credit each; and monthly spend comes from `GET /v1/account` (free), so there is no ledger. The check runs in `JobRadarApp` after the window is agreed and before the run folder exists, so stopping leaves nothing behind; a resumed run checks again (free). When JobsPipe can't count a search (slow phrase searches time out), the estimate is the per-run max. Seen Nov 9: `/v1/account` lagged the credits left that searches report (867 against 844); the fetch records the search's own figure.
+Built (task 17), with two changes from the plan below, both from the JobsPipe API check: the estimate is free (`POST /v1/jobs/export/estimate` per search, added up), not count queries at 1 credit each; and monthly spend comes from `GET /v1/account` (free), so there is no ledger. The check runs in `JobRadarApp` after the window is agreed and before the run folder exists, so stopping leaves nothing behind; a resumed run checks again (free). When JobsPipe can't count a search (slow phrase searches time out), the estimate is the ask-above limit. Seen Nov 9: `/v1/account` lagged the credits left that searches report (867 against 844); the fetch records the search's own figure.
 
 ### Limits from the plan
 
-| Plan | Monthly budget | Per-run max (default) |
+| Plan | Monthly budget | Ask above, a run (default) |
 |---|---|---|
 | Free | 1,000 once, no reset (budget = what is left) | 250 |
 | Seeker | 10,000 | 2,500 (a quarter of the budget) |
 
-Both can be overridden in settings. The per-run max is a default to tune to how often the user runs: at the research funnel's rate, a 2-week window (~3,200 jobs) is over 2,500 and triggers the question below.
+Both can be overridden in settings (`sources.jobspipe.ask_above_credits`, `monthly_budget`). The ask-above limit is not a cut: a run that needs more asks first. It is a default to tune to how often the user runs: at the research funnel's rate, a 2-week window (~3,200 jobs) is over 2,500 and triggers the question below.
 
 ### Plan stage, per paid source, before any fetch
 
 1. `credits()`: credits left, used this billing month, reset date if the API gives one
 2. `count()` per search: one call each, 1 credit each
 3. Estimate: the counts added up. An upper bound: overlapping searches and repeats within the month are free
-4. Checks: estimate ≤ per-run max; used this month + estimate ≤ monthly budget; estimate ≤ credits left
+4. Checks: estimate ≤ ask-above limit; used this month + estimate ≤ monthly budget; estimate ≤ credits left
 
 All paid sources are planned before any fetch, so the user decides once, up front.
 
@@ -948,21 +948,22 @@ All paid sources are planned before any fetch, so the user decides once, up fron
 | Case | What happens |
 |---|---|
 | Within all limits | Show the estimate, go ahead |
-| Over the per-run max or the monthly budget | Show the estimate, both limits and credits left; ask: go ahead, skip this source this run, or stop the run |
+| Over the ask-above limit or the monthly budget | Show the estimate, both limits and credits left; ask: go ahead, skip this source this run, or stop the run |
 | Over credits left | Ask: skip this source, or stop. No "go ahead": running out mid-fetch would make it partial |
 
 ```
 JobsPipe: about 3,240 jobs (3 searches, may overlap). Count queries used 3 credits.
-Per-run max 2,500: over. Monthly budget 10,000: 6,900 used, 3,100 left: over.
+Ask above 2,500: over. Monthly budget 10,000: 6,900 used, 3,100 left: over.
 Credits left: 3,180.
 [g] go ahead  [s] skip JobsPipe this run  [x] stop the run
 ```
 
 ### During the fetch
 
-- The fetch may spend at most the approved estimate plus 10% (new postings can appear between count and fetch)
-- If it hits that cap, it stops and the source counts as failed, so fetches stay all-or-nothing. Rare, and the credits aren't lost: repeats within the month are free, so the next run gets those jobs again at no cost
-- Built in task 25 (found by the acceptance pass): until then the fetch stopped at the cap and kept what it had. Now reaching the cap with jobs still to fetch, or with a search not yet asked, raises `JobsPipeError` after saying what was spent, and the fetch step warns that JobsPipe failed, as for any failing source
+- The fetch may spend the approved estimate plus 10% (new postings can appear between count and fetch) without asking again
+- Reaching that cap with jobs still to fetch, or with a search not yet asked, it asks (built after the MVP): "JobsPipe: 330 jobs fetched (330 credits) and more to go. Keep going for up to 330 more? (y/n, Enter for n)". Yes fetches on from where it stopped (the same search and cursor, then the searches left) for up to another cap's worth, never past the credits left, and asks again each time that runs out. No, Enter or no one to answer fails the source as before. Most useful when JobsPipe couldn't count and the cap is only the ask-above limit plus 10%, but it asks the same when a count was low
+- A fetch stays all or nothing: failing, it raises `JobsPipeError` after saying what was spent, and the fetch step warns that JobsPipe failed, as for any failing source. Credits run out with jobs left: it fails without asking. The credits aren't lost: repeats within the month are free, so the next run gets those jobs again at no cost
+- Built in task 25 (found by the acceptance pass): until then the fetch stopped at the cap and kept what it had. Until the change after the MVP, reaching the cap failed the source without asking
 
 ### Monthly spend
 
@@ -972,7 +973,7 @@ Credits left: 3,180.
 
 ### Recorded and alerted
 
-- `spend.jsonl` records each paid source's approval (the estimate, credits before, what the monthly budget still allowed, the decision: `auto`, `approved`, `skipped`, or `failed` when the cost check itself failed) and what the fetch charged and left
+- `spend.jsonl` records each paid source's approval (the estimate, credits before, what the monthly budget still allowed, the decision: `auto`, `approved`, `skipped`, or `failed` when the cost check itself failed) and what the fetch charged and left, with the credits agreed during the fetch past the cap (`extra_approved`, 0 when none); the report says them as "20 more approved by you during the fetch"
 - Warnings (built, task 24): credits left after the fetch below `alerts.low_credits` (100 by default); the monthly budget reached (the fetch charged at least what the budget had left); a source skipped by you at the cost check
 - A paid source whose cost check fails (JobsPipe down, say) is told in the terminal and left out of the run as `failed`; the fetch step warns about it like any failed source, so the free sources still run
 - Later, for scheduled runs: with no one to ask, over a limit means skip the source
@@ -1032,7 +1033,7 @@ A source fails when it raises after its retries. `BoardClient` says why in a few
 | `credits_low` | fetch step | JobsPipe credits running low: 80 left (alerts.low_credits is 100). |
 | `llm_failed` | classify, extract and recommend steps | The LLM couldn't label 3 of 40 jobs: their seniority and domain count as not given. Also "couldn't read the requirements of" (left out of What employers ask for) and "couldn't rank" (they can't be recommended) |
 | `llm_pending` | `UsageLimitGuard` | Usage limit reached: 12 jobs not ranked, carried over to the next run. |
-| `llm_capped` | `llm_cap` step | Over the LLM cap: 15 of 75 jobs not sent to Claude, carried over to the next run (llm.max_jobs_per_run is 60). |
+| `llm_capped` | `llm_cap` step | Over the LLM cap: 15 of 75 jobs not sent to Claude, carried over to the next run (llm.ask_above_jobs is 60). |
 | `gaps_skipped` | `CvGaps` | Experience to gain: 5 requirements weren't compared with your CV (the LLM gave no usable answer). The next run asks again. |
 | `no_new_jobs` | report step | No new jobs matched your searches. |
 | `run_unreadable` | `FileRunHistory` | Run 2026-11-01T09-00-00 can't be read, so it is left out: its manifest.json is not as expected (window: Field required). `job-radar delete` removes it. |
@@ -1097,7 +1098,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | `LLM.complete` text in, text out; JSON validated in a shared helper | Structured-output method on the interface | A new backend implements one method |
 | Invalid output: retry once, then split the batch; no retry in later runs | Retry until success; drop the whole batch | Isolates bad jobs without looping forever |
 | Jobs skipped by the usage limit carried over in `pending.jsonl` | Drop them; widen the next window to re-fetch | No re-fetch or credits; JobsPipe's next window wouldn't include them |
-| Volume guard: ask above `max_jobs_per_run` | No limit | Subscription usage is a real limit |
+| Volume guard: ask above `ask_above_jobs` | No limit | Subscription usage is a real limit |
 | Current vocabulary in the prompt, deterministic cleanup; alias map later | Free naming; a fixed taxonomy | Stable names without maintaining a taxonomy |
 | Prompt version recorded; cache kept when prompts change | Invalidate the cache on prompt change | No re-spend on every prompt tweak; re-extract can target old versions later |
 | Periods track coverage; counts compared per covered day when partial | Raw counts only | Gaps and half periods don't read as market drops; run frequency doesn't change figures |
@@ -1208,7 +1209,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Carried-over jobs join after the filter, not before | Before the filter, as first planned | They passed the filter in their own run, and are usually dated before this run's window, which the filter would drop |
 | One `UsageLimitGuard` for classify, extract and rank; the LLM passes signal partial progress with `UsageLimitReached` | Each step handles the limit itself | One rule and one question, and the passes stay unaware of prompts and files |
 | Only the usage limit carries jobs over; other LLM errors fail the step | Carry over on any LLM error | A failed step resumes from its saved input; carrying over is for a limit that resets on its own |
-| A cap on the jobs one run sends to the LLM (`llm.max_jobs_per_run`, 60), in its own `llm_cap` step right before classify; over it, ask: all, the first 60 (the rest carried over in `pending.jsonl`, a warning), or stop (Enter for the first 60) | Before Extract at 1,000, as first planned; a cap inside each LLM step; cut silently | Classify is the first LLM call and sees the most jobs, so one check bounds every pass; carrying over reuses the usage-limit path, so nothing is lost; asking keeps a surprise volume from using the subscription unseen. Set low for the first real runs (task 26) |
+| A cap on the jobs one run sends to the LLM (`llm.ask_above_jobs`, 60), in its own `llm_cap` step right before classify; over it, ask: all, the first 60 (the rest carried over in `pending.jsonl`, a warning), or stop (Enter for the first 60) | Before Extract at 1,000, as first planned; a cap inside each LLM step; cut silently | Classify is the first LLM call and sees the most jobs, so one check bounds every pass; carrying over reuses the usage-limit path, so nothing is lost; asking keeps a surprise volume from using the subscription unseen. Set low for the first real runs (task 26) |
 | Each run's searches and sources are kept in its manifest, and trends compare them run to run | Compare against the current profile only | A jump after adding JobsPipe or a search is otherwise read as the market; older manifests without it are skipped |
 | Only periods with a covered day are shown; a job dated in a period no run covered counts nowhere | Show every period back to the oldest posting | A period no run covered has no denominator for postings per day |
 | "What employers ask for" uses a rolling window of 7, 30 or 91 days ending on the run's last day | Calendar periods, as the trends use | Independent of how often the user runs, and not tiny early in a month; the trends already show calendar periods |
@@ -1228,3 +1229,4 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | The code is grouped in folders by responsibility (app, pipeline and its steps, sources, llm, matching, report, storage, config, utils, models), read from the command down; a module is named after its main class, its interface, or its step | One flat package (the earlier layout); folders by layer only | Changed Nov 10 (PR #32): with over 40 modules in one folder, finding a class meant searching. Folders say what each part is for, and the naming rule says where a class lives without searching |
 | Defaults in a committed `config/`, the user's overrides and personal files in a gitignored `config_local/`, and a committed `config_local_example/` that mirrors `config_local/` file for file | Examples beside the defaults in `config/` (PR #32); defaults inside the package (`job_radar/default_settings.yaml`), examples in `examples/`, personal files in `local/` and keys in `.env` at the repo root (the earlier layout) | Changed Nov 11 (PR #33): `config/` holds only what the app reads, so it is plain which files are defaults. Set up by copying one folder (`cp -r config_local_example config_local`) and editing, with every file already under its right name. Keys live in `config_local/` too, so one ignored folder holds everything personal |
 | The demo runs on `config_local_example/`: its searches, CV and preferences, read by `SearchesFile` and `ProfileLoader` | A demo search and profile as constants in code (`--demo` before PR #33) | The demo shows what a fresh copy of the example would do, through the same readers as a real run, so the example files are tested on every demo run and can't go stale. The demo keeps its made-up board, keyword scoring and `output/demo/` |
+| Per-run limits are named for what they do: `llm.ask_above_jobs` and `sources.jobspipe.ask_above_credits` (were `max_jobs_per_run`); reaching the JobsPipe cap with jobs left asks to keep going for another cap's worth, within the credits left, and the spend record keeps the credits agreed during the fetch | Keep the names; fail the source at the cap, as since task 25 | Changed Nov 11 at the owner's ask: "max" read as a cut, but both limits only ask first. A slow phrase search can't be counted, so its cap is a guess, and failing at it wasted the credits spent for that run. Asking keeps the fetch all or nothing and every credit agreed to |

@@ -52,7 +52,7 @@ def test_over_the_cap_first_sends_the_first_ones_and_carries_the_rest_over_with_
         Alert(
             code=AlertCode.LLM_CAPPED,
             message="Over the LLM cap: 2 of 5 jobs not sent to Claude, carried over to the "
-            "next run (llm.max_jobs_per_run is 3).",
+            "next run (llm.ask_above_jobs is 3).",
         )
     ]
 
@@ -67,7 +67,7 @@ def test_over_the_cap_stop_fails_the_step_and_carries_nothing_over():
 def capped_cli(tmp_path, prompter: FakePrompter, hour: int = 10, cap: int = 3) -> Cli:
     """The real demo command with a low LLM cap: the demo's 5 jobs are over it."""
     settings = SettingsFile.defaults(
-        output=str(tmp_path), recommend={"top_n": 3}, llm={"max_jobs_per_run": cap}
+        output=str(tmp_path), recommend={"top_n": 3}, llm={"ask_above_jobs": cap}
     )
     return Cli(
         AppFactory(settings, tmp_path / "config_local", EXAMPLE, FixedClock(hour), prompter, {})

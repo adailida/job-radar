@@ -324,6 +324,26 @@ def test_the_report_says_what_each_paid_source_spent():
     ) in text
 
 
+def test_the_report_says_when_more_credits_were_agreed_during_the_fetch():
+    approval = Approval(
+        source="jobspipe", estimate=18, decision=SpendDecision.AUTO, cap=20, credits_before=862
+    )
+    spend = Spend(approval=approval, charged=38, credits_after=824, extra_approved=20)
+    report = ReportContent(
+        run=RUN,
+        window=NOV,
+        sources=SOURCES,
+        min_score=40,
+        recommendations=(),
+        funnel=(),
+        spends=(spend,),
+    )
+    assert (
+        "- JobsPipe: estimate 18 credits, within every limit, 20 more approved by you during "
+        "the fetch. 38 used, 824 left.\n"
+    ) in MarkdownRenderer(Words()).render(report)
+
+
 def test_the_header_lists_each_source_with_its_postings_and_credits():
     sources = (
         SourceSummary(source="getro", name="Fast Forward", postings=1478),

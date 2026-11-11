@@ -26,8 +26,9 @@ class NoSourceData(JobRadarError):
 class FetchStep:
     """Fetches raw pages for the user's searches from every configured job board.
 
-    A paid board spends at most what its approval allows, and is left out when
-    the user chose to skip it; what it spent is recorded, with a warning when
+    A paid board spends what its approval allows, more only if the user agrees
+    during the fetch, and is left out when the user chose to skip it; what it
+    spent and any credits agreed during the fetch are recorded, with a warning when
     it used up its monthly budget or has few credits left. A board that fails
     is left out with a warning and the others go on; only when every board it
     tried failed does the step fail. A board that gave nothing is a warning
@@ -108,7 +109,12 @@ class FetchStep:
             return source.fetch(self._criteria, self._window)
         paid = source.fetch_paid(self._criteria, self._window, approval.cap)
         self._log.write(
-            Spend(approval=approval, charged=paid.charged, credits_after=paid.credits_left)
+            Spend(
+                approval=approval,
+                charged=paid.charged,
+                credits_after=paid.credits_left,
+                extra_approved=paid.extra_approved,
+            )
         )
         self._credits(source.label, approval, paid)
         return list(paid.pages)

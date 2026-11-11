@@ -70,16 +70,16 @@ The header gives the dates covered, how many postings each source gave and what 
 Set these in `config_local/settings.yaml`; [config/settings.yaml](config/settings.yaml) has every setting with its default.
 
 - `lookback_days` (14 by default; 7 in the copied file): how far back a first run, or one after a long break, reaches. For a small first run, try 1
-- `llm.max_jobs_per_run` (60): a safety cap on the jobs one run sends to Claude. Over it, the run asks whether to send them all, only the first 60 (the rest carry over to the next run, so none are lost), or stop
+- `llm.ask_above_jobs` (60): a run with more jobs for Claude asks you first; nothing is cut. Over it, the run asks whether to send them all, only the first 60 (the rest carry over to the next run, so none are lost), or stop
 - `recommend.top_n` (10) and `recommend.min_score` (40): how many jobs are recommended, and the lowest score that counts
-- JobsPipe, off by default. Put your key in `config_local/.env` and start with a low per-run max (the copied `settings.yaml` has this block commented out):
+- JobsPipe, off by default. Put your key in `config_local/.env` and start with a low limit to ask above (the copied `settings.yaml` has this block commented out):
 
         sources:
           jobspipe:
             enabled: true
-            max_jobs_per_run: 25
+            ask_above_credits: 25
 
-  Before fetching, a run estimates what JobsPipe will cost (the estimate is free) and checks it against the per-run max, the monthly budget and the credits left. Over a limit, it asks whether to go ahead, skip JobsPipe this run, or stop. Compare what a run spent (in the report's header) with the estimate before you widen the limits, searches or lookback
+  Before fetching, a run estimates what JobsPipe will cost (the estimate is free) and checks it against `ask_above_credits`, the monthly budget and the credits left. Over a limit, it asks whether to go ahead, skip JobsPipe this run, or stop. If the fetch reaches what you agreed with jobs still to fetch (as when JobsPipe couldn't count a slow search), it asks whether to keep going for as many again, never past the credits left. Answering no leaves JobsPipe out of this run, as a fetch is all or nothing (the credits spent aren't lost: jobs paid for are free again this month). Compare what a run spent (in the report's header) with the estimate before you widen the limits, searches or lookback
 - `new_only` (true): set it to false to see every matching job again, not only new ones
 - `trend_period` (month) and `report.group_by` (job_type): how market trends and new openings are grouped
 

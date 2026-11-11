@@ -108,3 +108,25 @@ def test_new_openings_can_be_grouped_by_job_type_domain_or_both(tmp_path, group_
 def test_any_other_grouping_is_an_error_naming_its_path(tmp_path):
     with pytest.raises(ConfigError, match=r"report.group_by: input should be 'job_type', 'domain'"):
         load(tmp_path, "report: {group_by: sector}\n")
+
+
+def test_the_limits_a_run_asks_above_load_under_their_names(tmp_path):
+    settings = load(
+        tmp_path, "llm: {ask_above_jobs: 20}\nsources: {jobspipe: {ask_above_credits: 25}}\n"
+    )
+    assert (settings.llm.ask_above_jobs, settings.sources.jobspipe.ask_above_credits) == (20, 25)
+    defaults = SettingsFile.defaults()
+    assert (defaults.llm.ask_above_jobs, defaults.sources.jobspipe.ask_above_credits) == (60, None)
+
+
+@pytest.mark.parametrize(
+    ("text", "path"),
+    [
+        ("llm: {max_jobs_per_run: 20}\n", "llm.max_jobs_per_run"),
+        ("sources: {jobspipe: {max_jobs_per_run: 25}}\n", "sources.jobspipe.max_jobs_per_run"),
+    ],
+)
+def test_the_old_names_of_those_limits_are_unknown_keys(tmp_path, text, path):
+    with pytest.raises(ConfigError, match=rf"settings.yaml: {path}: unknown key") as old:
+        load(tmp_path, text)
+    assert "config/settings.yaml lists every setting with its default" in str(old.value)

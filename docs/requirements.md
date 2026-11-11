@@ -50,7 +50,7 @@ After the MVP
 
 - **Sources**: only sources whose terms allow scripted access through an API. No scraping. MVP: JobsPipe and Fast Forward (Getro)
 - **Adding sources**: more sources can be plugged in later without changing the rest. Each source's integration is declarative (settings) where possible, otherwise in its own module. Everything specific to a source stays inside its integration, including how it reports credits left and used
-- **Cost**: paid sources charge per job returned (JobsPipe: 1 credit per job). The settings name the plan for each paid source, which sets the default limits: a monthly budget and a per-run maximum, both adjustable. A run estimates the cost before spending and checks it against the limits and the credits left
+- **Cost**: paid sources charge per job returned (JobsPipe: 1 credit per job). The settings name the plan for each paid source, which sets the default limits: a monthly budget and a per-run limit above which the run asks first (nothing is cut without asking), both adjustable. A run estimates the cost before spending and checks it against the limits and the credits left
 - **LLM**: in the MVP, calls use the user's Claude subscription through Claude Code (`claude -p`), not per-token API billing. So only filtered postings go to the LLM, batched, with a small model. Per-token API billing may replace this later, so the way the LLM is called must be easy to swap
 - **Cadence**: in the MVP the user starts each run, at whatever interval they like. Freshness is not critical
 - **Where it runs**: locally in the terminal in the MVP, and runs are interactive: the user confirms spending over a limit and deleting runs. Scheduled, fully automated cloud runs may come later
@@ -84,7 +84,7 @@ Experience to gain
 Cost
 - Before fetching from a paid source, a run gets the credits left from the source's API, and asks for the match count (JobsPipe: 1 credit) to estimate the cost of the full fetch
 - Within the limits, the run shows the estimate and goes ahead
-- Over the per-run maximum or the monthly budget, the run shows the estimate, both limits and the credits left, and asks the user whether to go ahead, skip that source for this run, or stop
+- Over the per-run ask-above limit or the monthly budget, the run shows the estimate, both limits and the credits left, and asks the user whether to go ahead, skip that source for this run, or stop
 - A fetch is never partial: a source is fetched in full or not at all, so trends can rely on complete data
 - Monthly spend comes from the source's own credit data, so the budget holds whatever the number of runs
 

@@ -456,6 +456,8 @@ class MarkdownRenderer:
         said = f"{name}: estimate {approval.estimate} credits, {agreed}"
         if approval.decision is SpendDecision.SKIPPED:
             return said + f". {approval.credits_before} credits left."
+        if spend.extra_approved:
+            said += f", {spend.extra_approved} more approved by you during the fetch"
         return said + f". {spend.charged} used, {spend.credits_after} left."
 
     def _job(self, rank: int, rec: Recommendation, names: dict[str, str]) -> list[str]:

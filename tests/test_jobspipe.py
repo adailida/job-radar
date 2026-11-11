@@ -27,6 +27,7 @@ from job_radar.models import (
 from job_radar.sources.board_client import BoardClient
 from job_radar.sources.jobspipe import JobsPipeError, JobsPipeParser, JobsPipeSource
 from job_radar.utils.html_text import HtmlText
+from job_radar.utils.prompter import TerminalPrompter
 
 FIXTURE = Path(__file__).parent / "fixtures" / "jobspipe" / "search_page.json"
 WINDOW = Window(start=date(2026, 11, 8), end=date(2026, 11, 9))
@@ -93,10 +94,10 @@ SEARCH = Search(
 )
 
 
-def source(handler, filters=None, max_jobs=25, prompter=None) -> JobsPipeSource:
+def source(handler, filters=None, ask_above=25, prompter=None) -> JobsPipeSource:
     """A source over a fake API, with no pauses."""
     client = BoardClient(httpx.Client(transport=httpx.MockTransport(handler)), 0, lambda s: None)
-    return JobsPipeSource(client, filters or {}, (max_jobs, None), prompter or FakePrompter())
+    return JobsPipeSource(client, filters or {}, (ask_above, None), prompter or FakePrompter())
 
 
 def test_query_sends_each_criterion_and_asks_for_unknowns_a_criterion_keeps():
@@ -119,9 +120,9 @@ def test_query_sends_each_criterion_and_asks_for_unknowns_a_criterion_keeps():
 class FakeApi:
     """JobsPipe over MockTransport: the account, then pages of a set size with cursors."""
 
-    def __init__(self, total: int, status: int = 200):
+    def __init__(self, total: int, status: int = 200, credits: int = 100):
         self.total, self.status, self.bodies = total, status, []
-        self.served = 0
+        self.served, self.credits = 0, credits
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         if request.url.path == "/v1/account":
@@ -143,7 +144,7 @@ class FakeApi:
         cursor = "more" if self.served < self.total else None
         meta = {
             "credits_charged": count,
-            "credits_remaining": 100 - self.served,
+            "credits_remaining": self.credits - self.served,
             "next_cursor": cursor,
         }
         return httpx.Response(200, json={"metadata": meta, "data": data})
@@ -151,7 +152,7 @@ class FakeApi:
 
 def test_fetch_pages_with_the_cursor_up_to_the_cap():
     api, prompter = FakeApi(total=30), FakePrompter()
-    pages = source(api, max_jobs=30, prompter=prompter).fetch(
+    pages = source(api, ask_above=30, prompter=prompter).fetch(
         SearchCriteria(searches=(SEARCH,)), WINDOW
     )
     assert [b["limit"] for b in api.bodies] == [25, 5]
@@ -162,9 +163,9 @@ def test_fetch_pages_with_the_cursor_up_to_the_cap():
 
 def test_a_fetch_is_never_partial():
     # Acceptance (Cost): a fetch is never partial: a source is fetched in full or not at all.
-    api, prompter = FakeApi(total=100), FakePrompter()
+    api, prompter = FakeApi(total=100), FakePrompter(False)
     with pytest.raises(JobsPipeError) as over:
-        source(api, max_jobs=30, prompter=prompter).fetch_paid(
+        source(api, ask_above=30, prompter=prompter).fetch_paid(
             SearchCriteria(searches=(SEARCH,)), WINDOW, cap=30
         )
     assert str(over.value) == (
@@ -174,11 +175,85 @@ def test_a_fetch_is_never_partial():
     assert prompter.told == ["JobsPipe: 30 jobs, 30 credits used, 70 left."]
 
 
-def test_a_search_the_cap_leaves_unasked_fails_the_fetch_too():
-    api = FakeApi(total=100)
+def test_reaching_the_cap_with_jobs_left_asks_to_keep_going():
+    api, prompter = FakeApi(total=100), FakePrompter(False)
+    with pytest.raises(JobsPipeError):
+        source(api, prompter=prompter).fetch_paid(
+            SearchCriteria(searches=(SEARCH,)), WINDOW, cap=30
+        )
+    assert prompter.asked == [
+        "JobsPipe: 30 jobs fetched (30 credits) and more to go. Keep going for up to 30 more?"
+    ]
+    assert len(api.bodies) == 2
+
+
+def test_keep_going_fetches_the_rest_from_where_it_stopped():
+    api, prompter = FakeApi(total=60, credits=200), FakePrompter(True)
+    paid = source(api, prompter=prompter).fetch_paid(
+        SearchCriteria(searches=(SEARCH,)), WINDOW, cap=30
+    )
+    assert [b["limit"] for b in api.bodies] == [25, 5, 25, 5]
+    assert [b.get("cursor") for b in api.bodies] == [None, "more", "more", "more"]
+    assert sum(len(json.loads(p.body)["data"]) for p in paid.pages) == 60
+    assert [p.page for p in paid.pages] == [1, 2, 3, 4]
+    assert (paid.charged, paid.credits_left, paid.extra_approved) == (60, 140, 30)
+    assert prompter.told == ["JobsPipe: 60 jobs, 60 credits used, 140 left."]
+
+
+def test_keep_going_asks_again_each_time_a_chunk_runs_out():
+    api, prompter = FakeApi(total=70, credits=200), FakePrompter(True, True, False)
+    with pytest.raises(JobsPipeError, match="more jobs than the 60 approved") as over:
+        source(api, prompter=prompter).fetch_paid(
+            SearchCriteria(searches=(SEARCH,)), WINDOW, cap=20
+        )
+    assert prompter.asked == [
+        "JobsPipe: 20 jobs fetched (20 credits) and more to go. Keep going for up to 20 more?",
+        "JobsPipe: 40 jobs fetched (40 credits) and more to go. Keep going for up to 20 more?",
+        "JobsPipe: 60 jobs fetched (60 credits) and more to go. Keep going for up to 20 more?",
+    ]
+    assert "(60 credits used; jobs paid for are free again this month)" in str(over.value)
+
+
+def test_keep_going_goes_on_to_the_searches_left():
+    api, prompter = FakeApi(total=25, credits=200), FakePrompter(True)
+    paid = source(api, prompter=prompter).fetch_paid(TWO, WINDOW, cap=25)
+    assert len(prompter.asked) == 1
+    assert "cursor" not in api.bodies[1]
+    assert sum(len(json.loads(p.body)["data"]) for p in paid.pages) == 25
+
+
+def test_keep_going_never_goes_past_the_credits_left():
+    api, prompter = FakeApi(total=100, credits=50), FakePrompter(True)
+    with pytest.raises(JobsPipeError) as over:
+        source(api, prompter=prompter).fetch_paid(
+            SearchCriteria(searches=(SEARCH,)), WINDOW, cap=30
+        )
+    assert prompter.asked == [
+        "JobsPipe: 30 jobs fetched (30 credits) and more to go. Keep going for up to 20 more?"
+    ]
+    assert sum(b["limit"] for b in api.bodies) == 50
+    assert str(over.value) == (
+        "found more jobs than the credits left allow, so none are used, as a fetch is all or "
+        "nothing (50 credits used; jobs paid for are free again this month)"
+    )
+
+
+def test_keep_going_with_no_one_to_answer_means_no():
+    def closed(question):
+        raise EOFError
+
+    terminal = TerminalPrompter(read=closed, write=lambda line: None)
+    with pytest.raises(JobsPipeError, match="more jobs than the 30 approved"):
+        source(FakeApi(total=100), prompter=terminal).fetch_paid(
+            SearchCriteria(searches=(SEARCH,)), WINDOW, cap=30
+        )
+
+
+def test_a_search_the_cap_leaves_unasked_asks_too():
+    api, prompter = FakeApi(total=100), FakePrompter(False)
     with pytest.raises(JobsPipeError, match="more jobs than the 25 approved"):
-        source(api).fetch_paid(TWO, WINDOW, cap=25)
-    assert len(api.bodies) == 1
+        source(api, prompter=prompter).fetch_paid(TWO, WINDOW, cap=25)
+    assert len(api.bodies) == 1 and len(prompter.asked) == 1
 
 
 def test_a_cap_of_nothing_fetches_nothing():
@@ -285,9 +360,9 @@ TWO = SearchCriteria(searches=(SEARCH, SEARCH.model_copy(update={"name": "seattl
 
 
 def test_plan_adds_up_free_estimates_and_reads_the_credits():
-    plan = source(FakeApi(total=12), max_jobs=25).plan(TWO, WINDOW)
+    plan = source(FakeApi(total=12), ask_above=25).plan(TWO, WINDOW)
     assert (plan.estimate, plan.estimated, plan.credits_left) == (24, True, 100)
-    assert (plan.per_run_max, plan.budget_left) == (25, 100)
+    assert (plan.ask_above, plan.budget_left) == (25, 100)
 
 
 def test_a_monthly_budget_is_what_the_month_has_left():
@@ -298,14 +373,14 @@ def test_a_monthly_budget_is_what_the_month_has_left():
     assert paid.plan(TWO, WINDOW).budget_left == 10_000 - 40
 
 
-def test_when_jobspipe_cant_count_the_estimate_is_the_per_run_max():
-    plan = source(FakeApi(total=5, status=504), max_jobs=25).plan(TWO, WINDOW)
+def test_when_jobspipe_cant_count_the_estimate_is_the_ask_above_limit():
+    plan = source(FakeApi(total=5, status=504), ask_above=25).plan(TWO, WINDOW)
     assert (plan.estimate, plan.estimated) == (25, False)
 
 
 def test_fetch_paid_spends_within_the_cap_and_says_what_it_cost():
-    paid = source(FakeApi(total=10), max_jobs=250).fetch_paid(TWO, WINDOW, cap=20)
-    assert (paid.charged, paid.credits_left) == (10, 90)
+    paid = source(FakeApi(total=10), ask_above=250).fetch_paid(TWO, WINDOW, cap=20)
+    assert (paid.charged, paid.credits_left, paid.extra_approved) == (10, 90, 0)
     assert sum(len(json.loads(p.body)["data"]) for p in paid.pages) == 10
 
 

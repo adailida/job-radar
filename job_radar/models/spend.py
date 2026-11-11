@@ -11,9 +11,9 @@ class SpendPlan(Model):
 
     source: str
     estimate: int  # the most the run's searches can cost: their match counts added up
-    estimated: bool  # False when the source couldn't count, and the estimate is the per-run max
+    estimated: bool  # False when the source couldn't count, and the estimate is ask_above
     credits_left: int
-    per_run_max: int
+    ask_above: int  # a run that needs more credits asks first
     budget_left: int  # what the monthly budget still allows; the credits left on a one-time grant
 
 
@@ -44,6 +44,7 @@ class PaidFetch(Model):
     pages: tuple[RawPage, ...]
     charged: int
     credits_left: int
+    extra_approved: int = 0  # credits the user agreed to during the fetch, past the approval's cap
 
 
 class Spend(Model):
@@ -52,3 +53,4 @@ class Spend(Model):
     approval: Approval
     charged: int = 0
     credits_after: int | None = None  # None when the source was skipped
+    extra_approved: int = 0  # credits the user agreed to during the fetch, past the approval's cap
