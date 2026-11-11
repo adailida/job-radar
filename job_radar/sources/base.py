@@ -29,7 +29,7 @@ class PaidSource(JobBoardSource, Protocol):
         ...
 
     def fetch_paid(self, criteria: SearchCriteria, window: Window, cap: int) -> PaidFetch:
-        """Fetch, spending at most `cap` credits, and say what it cost."""
+        """Fetch, asking before spending more than `cap` credits, and say what it cost."""
         ...
 
 

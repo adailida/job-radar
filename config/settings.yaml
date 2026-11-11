@@ -18,8 +18,7 @@ llm:
   classify_description_chars: 1000  # labelling reads only the start of each description
   extract_batch_size: 10  # jobs per prompt when finding what matched jobs ask for
   extract_description_chars: 8000  # how much of each description that reads
-  max_jobs_per_run: 60    # a safety cap: over this many jobs for the LLM, the run asks
-                          # whether to send them all, only the first ones, or stop
+  ask_above_jobs: 60      # a run with more jobs for the LLM asks you first; nothing is cut
 
 # What the LLM labels each job with. The descriptions guide it; searches and the
 # report use the names. Change, add or remove entries freely.
@@ -59,8 +58,8 @@ sources:
   jobspipe:               # a paid API: LinkedIn, Indeed and employers' own ATS
     enabled: false        # on needs JOBSPIPE_API_KEY in the environment or config_local/.env
     api_key_env: JOBSPIPE_API_KEY
-    plan: free            # free: 1,000 credits once, 250 a run; seeker: 10,000 a month, 2,500 a run
-    max_jobs_per_run: null  # the per-run max in credits (one a job); null takes the plan's
+    plan: free            # free: 1,000 credits once, asks above 250 a run; seeker: 10,000 a month, above 2,500
+    ask_above_credits: null  # a run that needs more asks you first; nothing is cut (null: the plan's)
     monthly_budget: null  # credits a month; null takes the plan's (free has no monthly reset)
     delay_seconds: 1.0    # between requests
     match_if_missing: true  # also ask for jobs that don't say; false costs fewer credits

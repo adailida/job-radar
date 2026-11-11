@@ -20,7 +20,7 @@ class LlmSettings(Model):
     classify_description_chars: int = Field(ge=0)  # labelling reads only the start
     extract_batch_size: int = Field(ge=1)  # jobs per prompt when finding requirements
     extract_description_chars: int = Field(ge=0)  # how much of each description that reads
-    max_jobs_per_run: int = Field(ge=1)  # over this many jobs for the LLM, the run asks first
+    ask_above_jobs: int = Field(ge=1)  # a run with more jobs for the LLM asks first; none cut
 
 
 class ReportSettings(Model):
@@ -51,12 +51,12 @@ class GetroSettings(Model):
 
 
 class JobsPipeSettings(Model):
-    """JobsPipe, a paid job API: off until turned on, and capped per run."""
+    """JobsPipe, a paid job API: off until turned on; a run that needs more credits asks."""
 
     enabled: bool
     api_key_env: str  # the variable in the environment or config_local/.env
-    plan: Literal["free", "seeker"]  # sets the per-run max and the monthly budget
-    max_jobs_per_run: int | None = Field(ge=1)  # per-run max; None takes the plan's
+    plan: Literal["free", "seeker"]  # sets the ask-above limit and the monthly budget
+    ask_above_credits: int | None = Field(ge=1)  # a run needing more asks first; None: the plan's
     monthly_budget: int | None = Field(ge=1)  # None takes the plan's
     delay_seconds: float = Field(ge=0)  # between requests
     # Also ask for jobs that don't say, where a criterion's if_missing keeps them.

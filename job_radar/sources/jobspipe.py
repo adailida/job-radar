@@ -33,15 +33,15 @@ class JobsPipeError(JobRadarError):
 
 
 class JobsPipeSource:
-    """Searches JobsPipe once per search, newest first, never past the credits agreed.
+    """Searches JobsPipe once per search, newest first, asking before it spends more than agreed.
 
     Each search's criteria are sent so JobsPipe filters on its side, with the
     source-only filters from the settings added as written. One credit buys
     one job for the calendar month; jobs already paid for are free. Before a
     run it says what the searches would cost, for free: the account's credits
-    and an estimate of the matches. The plan sets the per-run max and the
-    monthly budget unless the settings override them. Stateless: holds only
-    its client, filters, limits and who it tells.
+    and an estimate of the matches. The plan sets the limit a run asks above
+    and the monthly budget unless the settings override them. Stateless:
+    holds only its client, filters, limits and who it asks.
     """
 
     name = "jobspipe"
@@ -50,7 +50,7 @@ class JobsPipeSource:
     ACCOUNT = "https://api.jobspipe.dev/v1/account"
     ESTIMATE = "https://api.jobspipe.dev/v1/jobs/export/estimate"
     PAGE_SIZE = 25  # the most a page holds on the Free plan
-    PLANS = {"free": (250, None), "seeker": (2500, 10_000)}  # per-run max, monthly budget
+    PLANS = {"free": (250, None), "seeker": (2500, 10_000)}  # ask above, monthly budget
 
     def __init__(
         self,
@@ -62,13 +62,13 @@ class JobsPipeSource:
     ) -> None:
         """Keep the client (which carries the key), the extra filters, the limits, who to tell.
 
-        `limits` is the per-run max and the monthly budget (None for a one-time
+        `limits` is the credits a run asks above and the monthly budget (None for a one-time
         grant, where the budget is what's left). With `match_if_missing` off,
         jobs that don't say are never asked for.
         """
         self._client = client
         self._filters = filters
-        self._per_run_max, self._budget = limits
+        self._ask_above, self._budget = limits
         self._prompter = prompter
         self._match_if_missing = match_if_missing
 
@@ -76,7 +76,7 @@ class JobsPipeSource:
         """What the searches would cost this run, and the limits, without spending a credit.
 
         When JobsPipe can't count a search (a slow phrase search can time out),
-        the estimate is the per-run max, marked as not counted.
+        the estimate is the ask-above limit, marked as not counted.
         """
         account = self._account()
         left = account["credits_remaining"]
@@ -85,7 +85,7 @@ class JobsPipeSource:
             self._client.pause()
             response = self._client.post(self.ESTIMATE, json=self.query(search, window))
             if response.status_code != 200:
-                estimate, counted = self._per_run_max, False
+                estimate, counted = self._ask_above, False
                 break
             estimate += response.json().get("rows") or 0
         used = account.get("credits_used") or 0
@@ -95,30 +95,32 @@ class JobsPipeSource:
             estimate=estimate,
             estimated=counted,
             credits_left=left,
-            per_run_max=self._per_run_max,
+            ask_above=self._ask_above,
             budget_left=budget_left,
         )
 
     def fetch(self, criteria: SearchCriteria, window: Window) -> list[RawPage]:
-        """Pages of every search, when no cost check ran; more than the per-run max fails."""
-        return list(self.fetch_paid(criteria, window, self._per_run_max).pages)
+        """Pages of every search, when no cost check ran; above the limit, it asks to go on."""
+        return list(self.fetch_paid(criteria, window, self._ask_above).pages)
 
     def fetch_paid(self, criteria: SearchCriteria, window: Window, cap: int) -> PaidFetch:
-        """Pages of every search until each runs out, never more than `cap` jobs (and credits).
+        """Pages of every search until each runs out, asking before spending more than `cap`.
 
-        A fetch is never partial: when the cap is reached with jobs still to
-        fetch, it raises `JobsPipeError` instead of giving part of the results.
+        When `cap` credits are spent with jobs still to fetch, the user is
+        asked whether to keep going for up to `cap` more, within the credits
+        left, and again each time that runs out. A fetch is never partial: if
+        the user says no, or the credits run out, it raises `JobsPipeError`
+        instead of giving part of the results.
         """
         pages: list[RawPage] = []
-        budget, charged, left = cap, 0, 0
-        unfinished = False
-        for search in criteria.searches:
-            if budget <= 0:
-                unfinished = bool(pages)
-                break
+        budget, charged, left, approved = cap, 0, 0, cap
+        searches = criteria.searches if cap > 0 else ()  # nothing agreed, nothing fetched
+        for search in searches:
             cursor: str | None = None
-            jobs: list = []
-            while budget > 0:
+            while True:
+                if budget <= 0:
+                    budget = self._more(pages, charged, left, cap, approved)
+                    approved += budget
                 if pages:
                     self._client.pause()
                 body = self.query(search, window) | {"limit": min(self.PAGE_SIZE, budget)}
@@ -131,19 +133,46 @@ class JobsPipeSource:
                 cursor = metadata.get("next_cursor")
                 if not jobs or not cursor:
                     break
-            if jobs and cursor:
-                unfinished = True
-                break
-        found = sum(len(json.loads(page.body)["data"]) for page in pages)
         if not pages:
             left = self._account()["credits_remaining"]
-        self._prompter.tell(f"JobsPipe: {found} jobs, {charged} credits used, {left} left.")
-        if unfinished:
-            raise JobsPipeError(
-                f"found more jobs than the {cap} approved, so none are used, as a fetch is "
-                f"all or nothing ({charged} credits used; jobs paid for are free again this month)"
-            )
-        return PaidFetch(pages=tuple(pages), charged=charged, credits_left=left)
+        self._told(pages, charged, left)
+        return PaidFetch(
+            pages=tuple(pages), charged=charged, credits_left=left, extra_approved=approved - cap
+        )
+
+    def _more(self, pages: list[RawPage], charged: int, left: int, cap: int, approved: int) -> int:
+        """How many more credits the user agrees to, `cap` at most, when the approved ones ran out.
+
+        Raises `JobsPipeError` when the user says no or no credits are left,
+        as a fetch is all or nothing.
+        """
+        found = self._found(pages)
+        more = min(cap, left)
+        reason = "the credits left allow"
+        if more > 0:
+            if self._prompter.confirm(
+                f"{self.label}: {found} jobs fetched ({charged} credits) and more to go. "
+                f"Keep going for up to {more} more?",
+                default=False,
+            ):
+                return more
+            reason = f"the {approved} approved"
+        self._told(pages, charged, left)
+        raise JobsPipeError(
+            f"found more jobs than {reason}, so none are used, as a fetch is "
+            f"all or nothing ({charged} credits used; jobs paid for are free again this month)"
+        )
+
+    def _told(self, pages: list[RawPage], charged: int, left: int) -> None:
+        """Tell the user what the fetch found and spent."""
+        self._prompter.tell(
+            f"{self.label}: {self._found(pages)} jobs, {charged} credits used, {left} left."
+        )
+
+    @staticmethod
+    def _found(pages: list[RawPage]) -> int:
+        """How many jobs the pages hold."""
+        return sum(len(json.loads(page.body)["data"]) for page in pages)
 
     def query(self, search: Search, window: Window) -> dict:
         """The search body for one search and the window, with the extra filters added.

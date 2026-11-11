@@ -23,14 +23,14 @@ WINDOW = Window(start=date(2026, 11, 8), end=date(2026, 11, 9))
 CRITERIA = SearchCriteria(searches=(Search(name="s"),))
 
 
-def plan(estimate=18, left=844, per_run=25, budget=844, estimated=True) -> SpendPlan:
+def plan(estimate=18, left=844, ask_above=25, budget=844, estimated=True) -> SpendPlan:
     """A spend plan for JobsPipe."""
     return SpendPlan(
         source="jobspipe",
         estimate=estimate,
         estimated=estimated,
         credits_left=left,
-        per_run_max=per_run,
+        ask_above=ask_above,
         budget_left=budget,
     )
 
@@ -71,8 +71,7 @@ def test_within_every_limit_it_goes_ahead_with_ten_percent_to_spare():
     )
     assert prompter.asked == []
     assert prompter.told == [
-        "jobspipe: about 18 credits for this run "
-        "(per-run max 25, budget left 844, credits left 844)."
+        "jobspipe: about 18 credits for this run (ask above 25, budget left 844, credits left 844)."
     ]
 
 
@@ -80,24 +79,23 @@ def test_within_every_limit_it_goes_ahead_with_ten_percent_to_spare():
     ("answer", "decision", "cap"),
     [("g", SpendDecision.APPROVED, 44), ("s", SpendDecision.SKIPPED, 0)],
 )
-def test_over_the_per_run_max_the_user_chooses(answer, decision, cap):
+def test_over_the_ask_above_limit_the_user_chooses(answer, decision, cap):
     [approval], prompter = check(plan(estimate=40), answer)
     assert (approval.decision, approval.cap) == (decision, cap)
     assert prompter.asked == [
-        "That's over the per-run max. Go ahead, skip jobspipe this run, or stop?"
+        "That's over the ask-above limit. Go ahead, skip jobspipe this run, or stop?"
     ]
 
 
 def test_over_a_limit_the_run_shows_the_estimate_both_limits_and_the_credits_left_and_asks():
-    # Acceptance (Cost): over the per-run maximum or the monthly budget, the run shows the
+    # Acceptance (Cost): over the per-run ask-above limit or the monthly budget, the run shows the
     # estimate, both limits and the credits left, and asks: go ahead, skip that source, or stop.
     [approval], prompter = check(plan(estimate=40, budget=30), "g")
     assert prompter.told == [
-        "jobspipe: about 40 credits for this run "
-        "(per-run max 25, budget left 30, credits left 844)."
+        "jobspipe: about 40 credits for this run (ask above 25, budget left 30, credits left 844)."
     ]
     assert prompter.asked == [
-        "That's over the per-run max. Go ahead, skip jobspipe this run, or stop?"
+        "That's over the ask-above limit. Go ahead, skip jobspipe this run, or stop?"
     ]
     assert approval.decision is SpendDecision.APPROVED
 
@@ -115,7 +113,7 @@ def test_stopping_stops_the_run():
 
 
 def test_over_the_credits_left_only_skip_or_stop():
-    [approval], prompter = check(plan(estimate=900, per_run=2500, budget=900), "s")
+    [approval], prompter = check(plan(estimate=900, ask_above=2500, budget=900), "s")
     assert approval.decision is SpendDecision.SKIPPED
     assert prompter.asked == [
         "That's more than the 844 credits left. Skip jobspipe this run, or stop?"
@@ -142,6 +140,24 @@ def test_the_fetch_spends_within_the_approval_and_records_it():
     pages = FetchStep([paid], CRITERIA, WINDOW, [approval()], log, MemoryWarningLog(), 100).run([])
     assert paid.caps == [20] and len(pages) == 1
     assert log.written == [Spend(approval=approval(), charged=18, credits_after=100)]
+
+
+class KeptGoing(Planned):
+    """A paid source where the user agreed to more credits during the fetch."""
+
+    def fetch_paid(self, criteria, window, cap):
+        page = RawPage(source="jobspipe", page=1, body="{}")
+        return PaidFetch(pages=(page,), charged=38, credits_left=806, extra_approved=20)
+
+
+def test_credits_agreed_during_the_fetch_are_recorded_with_what_it_charged():
+    log = MemorySpendLog()
+    FetchStep(
+        [KeptGoing(plan())], CRITERIA, WINDOW, [approval()], log, MemoryWarningLog(), 100
+    ).run([])
+    assert log.written == [
+        Spend(approval=approval(), charged=38, credits_after=806, extra_approved=20)
+    ]
 
 
 def test_a_skipped_source_fetches_nothing_and_is_recorded():

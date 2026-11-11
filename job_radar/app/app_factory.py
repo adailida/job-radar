@@ -209,7 +209,7 @@ class AppFactory:
             FilterStep(parts.criteria, window, JobMatcher(normalizer), FileDropLog(folder, words)),
             CarriedOverStep(LastRunPending(history, runs)),
             DescribeStep({d.source: d for d in parts.describers}, self._prompter),
-            LlmCapStep(self._settings.llm.max_jobs_per_run, self._prompter, pending, warnings),
+            LlmCapStep(self._settings.llm.ask_above_jobs, self._prompter, pending, warnings),
             ClassifyStep(parts.classifier, self._prompter, guard, warnings),
             MatchStep(parts.criteria, JobMatcher(normalizer)),
             ExtractStep(parts.extractor, self._prompter, guard, warnings),
@@ -279,8 +279,8 @@ class AppFactory:
             headers={"User-Agent": self.USER_AGENT, "Authorization": f"Bearer {key}"}, timeout=60
         )
         client = BoardClient(http, jobspipe.delay_seconds)
-        per_run, budget = JobsPipeSource.PLANS[jobspipe.plan]
-        limits = (jobspipe.max_jobs_per_run or per_run, jobspipe.monthly_budget or budget)
+        ask_above, budget = JobsPipeSource.PLANS[jobspipe.plan]
+        limits = (jobspipe.ask_above_credits or ask_above, jobspipe.monthly_budget or budget)
         return JobsPipeSource(
             client, jobspipe.filters, limits, self._prompter, jobspipe.match_if_missing
         )

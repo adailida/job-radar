@@ -49,7 +49,7 @@ class LlmCapStep:
             return data
         if choice == "s":
             raise CapStopped(
-                f"stopped before sending {len(data)} jobs to Claude, over llm.max_jobs_per_run "
+                f"stopped before sending {len(data)} jobs to Claude, over llm.ask_above_jobs "
                 f"({self._cap}); resuming asks again, with any new cap from "
                 "config_local/settings.yaml"
             )
@@ -58,6 +58,6 @@ class LlmCapStep:
         self._warnings.warn(
             AlertCode.LLM_CAPPED,
             f"Over the LLM cap: {len(rest)} of {len(data)} jobs not sent to Claude, carried "
-            f"over to the next run (llm.max_jobs_per_run is {self._cap}).",
+            f"over to the next run (llm.ask_above_jobs is {self._cap}).",
         )
         return kept

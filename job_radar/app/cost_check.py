@@ -12,8 +12,8 @@ from job_radar.utils.prompter import Prompter
 class CostCheck:
     """Checks each paid source's estimate against its limits, and asks when one is over.
 
-    Within the per-run max, the budget and the credits left, a source goes
-    ahead on its own. Over the per-run max or the budget, the user chooses:
+    Within the ask-above limit, the budget and the credits left, a source goes
+    ahead on its own. Over the ask-above limit or the budget, the user chooses:
     go ahead, skip the source this run, or stop. Over the credits left, only
     skip or stop: running out mid-fetch would leave it partial. Enter means
     skip, the safe choice. The fetch may then spend the estimate plus 10%, as
@@ -68,7 +68,7 @@ class CostCheck:
         about = "about " if plan.estimated else "at most "
         self._prompter.tell(
             f"{name}: {about}{plan.estimate} credits for this run "
-            f"(per-run max {plan.per_run_max}, budget left {plan.budget_left}, "
+            f"(ask above {plan.ask_above}, budget left {plan.budget_left}, "
             f"credits left {plan.credits_left})."
         )
         cap = min(math.ceil(plan.estimate * (1 + self.MARGIN)), plan.credits_left)
@@ -79,8 +79,8 @@ class CostCheck:
                 {"s": "skip", "x": "stop"},
                 default="s",
             )
-        elif plan.estimate > plan.per_run_max or plan.estimate > plan.budget_left:
-            over = "per-run max" if plan.estimate > plan.per_run_max else "budget left"
+        elif plan.estimate > plan.ask_above or plan.estimate > plan.budget_left:
+            over = "ask-above limit" if plan.estimate > plan.ask_above else "budget left"
             choice = self._prompter.choose(
                 f"That's over the {over}. Go ahead, skip {name} this run, or stop?",
                 {"g": "go ahead", "s": "skip", "x": "stop"},

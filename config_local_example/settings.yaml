@@ -8,11 +8,11 @@ recommend:
   top_n: 5                # at most this many jobs in the report (10 by default)
 
 # llm:
-#   max_jobs_per_run: 20  # a safety cap on jobs sent to Claude in one run (60 by default)
+#   ask_above_jobs: 20  # a run with more jobs for Claude asks you first; nothing is cut (60 by default)
 
 # JobsPipe, a paid source, is off by default. To turn it on, set JOBSPIPE_API_KEY
-# in config_local/.env and start with a low per-run max:
+# in config_local/.env and start with a low limit to ask above:
 # sources:
 #   jobspipe:
 #     enabled: true
-#     max_jobs_per_run: 25  # credits a run, one a job
+#     ask_above_credits: 25  # a run that needs more credits asks you first; nothing is cut

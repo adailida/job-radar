@@ -154,7 +154,7 @@ One line each for now; each task gets its detail, against the class names in arc
   - Step 2: add JobsPipe with very tight limits: per-run max about 25 credits, one narrow search, 1-day lookback. Check that credits spent (before and after) match the estimate, then the report and run data
   - Step 3: widen step by step (limits, searches, lookback), checking spend against the estimate each time, before switching to the full settings
   - Examples complete (now in `config_local_example/`); README usage moved from "planned" to real
-  - Built: llm.max_jobs_per_run (60), README First run, an example CV (now `config_local_example/cv.md`)
+  - Built: llm.max_jobs_per_run (60; now `llm.ask_above_jobs`), README First run, an example CV (now `config_local_example/cv.md`)
   - Done Nov 9 to 10, narrowed by the owner to short windows (no widening: the owner runs the full thing after his code changes):
     - Nov 9: Fast Forward 1 and 14 days; JobsPipe Nov 8 to 9 (18 credits, matched the estimate within the cap; 10 recommended, top 86)
     - Nov 10: every step on, Nov 8 to 10: the cost check estimated 46 JobsPipe credits, over the 25 cap, and the owner skipped JobsPipe; Fast Forward only, 3 haiku prompts, one alert. Found and fixed: "Myanmar (Burma)" wasn't read as a country, so an on-site job in Yangon passed the `seattle` search as "no place given"
@@ -166,5 +166,6 @@ Changes since the MVP, one PR each, newest last.
 
 - [x] **PR #32. Regroup the code and the config folders** (Nov 11): code in folders by responsibility; defaults in `config/`, personal files in `config_local/`
 - [x] **PR #33. Example folder and quick start:** `config_local_example/` mirrors `config_local/` and `--demo` runs on it; `scripts/setup.sh`; the README opens with requirements and a quick start; the docs show the MVP as done
+- [x] **Ask above limits:** `llm.ask_above_jobs` and `sources.jobspipe.ask_above_credits` replace `max_jobs_per_run`; reaching the JobsPipe cap with jobs left asks to keep going for another cap's worth, within the credits left, instead of failing the source; the credits agreed during the fetch are kept in `spend.jsonl` and the report
 - [ ] **Trend breakdowns:** market trends by sector, domain and job type, the gap left by the acceptance pass (design.md section 10, "Breakdowns")
 - [ ] **Deferred tasks:** 11c (keywords) and 12 (terminal prompts), above

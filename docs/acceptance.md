@@ -110,20 +110,22 @@ Tests are written `file::test name`, all under `tests/`. Check them with `uv run
 
 1. **Before fetching from a paid source, a run gets the credits left from the source's API and the match count to estimate the cost of the full fetch.** Passing. The estimate comes from JobsPipe's free estimate call, not count queries at 1 credit each (design.md section 12, task 17), so planning costs nothing
    - `test_jobspipe.py::test_plan_adds_up_free_estimates_and_reads_the_credits`
-   - `test_jobspipe.py::test_when_jobspipe_cant_count_the_estimate_is_the_per_run_max`
+   - `test_jobspipe.py::test_when_jobspipe_cant_count_the_estimate_is_the_ask_above_limit`
 2. **Within the limits, the run shows the estimate and goes ahead.** Passing
    - `test_cost.py::test_within_every_limit_it_goes_ahead_with_ten_percent_to_spare`
    - `test_cost.py::test_an_estimate_jobspipe_couldnt_count_says_at_most`
-3. **Over the per-run maximum or the monthly budget, the run shows the estimate, both limits and the credits left, and asks: go ahead, skip that source, or stop.** Passing
+3. **Over the per-run ask-above limit or the monthly budget, the run shows the estimate, both limits and the credits left, and asks: go ahead, skip that source, or stop.** Passing
    - `test_cost.py::test_over_a_limit_the_run_shows_the_estimate_both_limits_and_the_credits_left_and_asks`
-   - `test_cost.py::test_over_the_per_run_max_the_user_chooses`
+   - `test_cost.py::test_over_the_ask_above_limit_the_user_chooses`
    - `test_cost.py::test_over_the_budget_left_the_user_chooses`
    - `test_cost.py::test_stopping_stops_the_run`
    - `test_cost.py::test_over_the_credits_left_only_skip_or_stop`
    - `test_resume.py::test_stopping_at_the_cost_check_builds_no_run`
-4. **A fetch is never partial: a source is fetched in full or not at all.** Passing, after a fix in this task: a JobsPipe fetch that reached its cap kept the jobs it had; now it fails as a whole and the run warns that JobsPipe failed (design.md section 12, "During the fetch")
+4. **A fetch is never partial: a source is fetched in full or not at all.** Passing, after a fix in this task: a JobsPipe fetch that reached its cap kept the jobs it had; now it fails as a whole and the run warns that JobsPipe failed (design.md section 12, "During the fetch"). After the MVP, reaching the cap first asks to keep going; no (or no credits left) fails it as a whole, as before
    - `test_jobspipe.py::test_a_fetch_is_never_partial`
-   - `test_jobspipe.py::test_a_search_the_cap_leaves_unasked_fails_the_fetch_too`
+   - `test_jobspipe.py::test_a_search_the_cap_leaves_unasked_asks_too`
+   - `test_jobspipe.py::test_keep_going_never_goes_past_the_credits_left`
+   - `test_jobspipe.py::test_keep_going_with_no_one_to_answer_means_no`
    - `test_getro.py::test_fetch_fails_as_a_whole_when_a_later_page_fails`
    - `test_warnings.py::test_warnings_let_the_run_finish_when_a_source_failed`
 5. **Monthly spend comes from the source's own credit data, so the budget holds whatever the number of runs.** Passing
