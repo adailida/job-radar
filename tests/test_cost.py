@@ -6,6 +6,7 @@ from fakes import FakePrompter, MemoryCoverage, MemorySpendLog, MemoryWarningLog
 from job_radar.app.cost_check import CostCheck
 from job_radar.models import (
     Approval,
+    DayCount,
     PaidFetch,
     RawPage,
     RunWindows,
@@ -54,7 +55,7 @@ class Planned:
     def fetch(self, criteria, window):
         return []
 
-    def fetch_paid(self, criteria, window, cap):
+    def fetch_paid(self, criteria, window, cap, counts=()):
         self.caps.append(cap)
         page = RawPage(source="jobspipe", page=1, body="{}")
         return PaidFetch(pages=(page,), charged=cap - 2, credits_left=100)
@@ -163,7 +164,7 @@ def test_the_fetch_spends_within_the_approval_and_records_it():
 class KeptGoing(Planned):
     """A paid source where the user agreed to more credits during the fetch."""
 
-    def fetch_paid(self, criteria, window, cap):
+    def fetch_paid(self, criteria, window, cap, counts=()):
         page = RawPage(source="jobspipe", page=1, body="{}")
         return PaidFetch(pages=(page,), charged=38, credits_left=806, extra_approved=20)
 
@@ -228,7 +229,7 @@ class Free:
 class Empty(Planned):
     """A paid source that comes back with nothing, as a phrase search that timed out."""
 
-    def fetch_paid(self, criteria, window, cap):
+    def fetch_paid(self, criteria, window, cap, counts=()):
         return PaidFetch(pages=(), charged=0, credits_left=844)
 
 
@@ -243,7 +244,7 @@ class Remembering(Planned):
         self.windows.append(window)
         return super().plan(criteria, window)
 
-    def fetch_paid(self, criteria, window, cap):
+    def fetch_paid(self, criteria, window, cap, counts=()):
         self.windows.append(window)
         return super().fetch_paid(criteria, window, cap)
 
@@ -347,6 +348,28 @@ def test_the_cost_check_plans_each_source_for_its_own_window():
     jobspipe = Remembering(plan())
     CostCheck([jobspipe], CRITERIA, FakePrompter()).check(APART)
     assert jobspipe.windows == [EARLY]
+
+
+COUNTS = (DayCount(search="s", day=date(2026, 11, 9), found=12),)
+
+
+def test_the_approval_carries_the_plans_count_per_search_and_day():
+    approvals, _ = check(plan(estimate=12).model_copy(update={"counts": COUNTS}))
+    assert approvals[0].counts == COUNTS
+
+
+class Counting(Planned):
+    """A paid source that remembers the counts each fetch was given."""
+
+    def fetch_paid(self, criteria, window, cap, counts=()):
+        self.counts = counts
+        return super().fetch_paid(criteria, window, cap)
+
+
+def test_the_fetch_gives_a_paid_source_its_approvals_counts():
+    paid = Counting(plan())
+    fetch([paid], [approval().model_copy(update={"counts": COUNTS})], MemorySpendLog()).run([])
+    assert paid.counts == COUNTS
 
 
 def test_the_approval_keeps_whether_the_estimate_was_counted():

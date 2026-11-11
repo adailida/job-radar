@@ -155,3 +155,13 @@ Not in the MVP
 - Free calls: `GET /v1/account` (credits used and left this month), `POST /v1/jobs/export/estimate` (match count and the most it could cost)
 - Records carry full descriptions, country and state codes, work arrangement, yearly pay in its currency, ISCO occupation codes
 - Volumes, one day, the owner's two searches (remote US, Seattle) with engineering roles: about 1,000 as is; about 575 with tech occupations, no agencies, ghost score at most 40; about 21 with mission phrases in the description; 14-day phrase searches time out on their side
+
+## JobsPipe with mission phrases, by window (checked 2026-11-11)
+
+The owner's 3 searches (remote-us, seattle, nyc) with the settings' filters, counted with the free `POST /v1/jobs/export/estimate`:
+
+- With the 14 mission phrases (`description_phrase_or`): windows of 3, 7 and 14 days all answer 504 "Job search timed out. Narrow your filters and retry."; a 1-day window answers, with 30, 6 and 24 rows
+- The real `POST /v1/jobs/search` over 14 days answered 200 with an empty `data` and no error: the run got 0 jobs without knowing
+- Without the phrases: 14 days counted 6,321, 1,533 and 2,762; 1 day 848, 214 and 384
+- `posted_at_gte` and `posted_at_lte` take `YYYY-MM-DD`, both inclusive, compared by calendar day
+- So job-radar searches and counts one day at a time ([design.md](../design.md), JobsPipe)

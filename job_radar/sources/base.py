@@ -2,7 +2,15 @@
 
 from typing import Protocol, runtime_checkable
 
-from job_radar.models import PaidFetch, Posting, RawPage, SearchCriteria, SpendPlan, Window
+from job_radar.models import (
+    DayCount,
+    PaidFetch,
+    Posting,
+    RawPage,
+    SearchCriteria,
+    SpendPlan,
+    Window,
+)
 
 
 @runtime_checkable
@@ -28,8 +36,14 @@ class PaidSource(JobBoardSource, Protocol):
         """What the searches would cost and the limits that apply, without spending anything."""
         ...
 
-    def fetch_paid(self, criteria: SearchCriteria, window: Window, cap: int) -> PaidFetch:
-        """Fetch, asking before spending more than `cap` credits, and say what it cost."""
+    def fetch_paid(
+        self, criteria: SearchCriteria, window: Window, cap: int, counts: tuple[DayCount, ...] = ()
+    ) -> PaidFetch:
+        """Fetch, asking before spending more than `cap` credits, and say what it cost.
+
+        `counts` are what the plan counted per search and day, so a search
+        that comes back empty against its count can be told from one with none.
+        """
         ...
 
 

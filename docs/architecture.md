@@ -4,7 +4,7 @@ How the code is put together: which classes exist, what each one is responsible 
 
 **Shown now:** the MVP as built (done Nov 10, tasks 1 to 26). One run goes from the command to the report: Fast Forward, and JobsPipe when it's on, then dedupe, the filter, and Claude labelling, reading and ranking jobs through `claude -p`, then the report with trends, asks and gaps. `--demo` runs the same steps offline, as the made-up person in `config_local_example/`. Every class shown works. Green borders marked what worked as each PR landed and were not added to every box, so a plain box is not an unbuilt one. Deferred after the MVP: keywords in descriptions and terminal prompts for user input. Each PR that changes the flow updates these diagrams.
 
-**History:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads the user's settings over the defaults and the searches from their profile; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. PR #17 notes in the report the days a long break left out. PR #18 merges postings on the employer's own id, read from ATS links, and on company, title and country. PR #19 drops jobs an earlier completed run already found, in `NewJobsFilterStep`. PR #20 adds JobsPipe, a paid API, off by default and capped per run, and moves the default settings into a YAML file, which the app reads first. PR #21 agrees what paid sources may spend before anything is fetched. PR #22 labels each job (seniority, job type, domain, sector) and adds a match step for the `seniority` and `domains` criteria. PR #23 finds what each matched job asks for: skills, tools, certifications and years. PR #24 carries jobs the LLM's usage limit stopped over to the next run. PR #25 adds market trends to the report: periods, coverage, figures, the change and notes on changed searches or sources. PR #26 adds the What employers ask for section. PR #27 adds the Experience to gain section. PR #28 completes the report: sources line, alerts, new openings grouped by job type, display names, terminal summary. PR #29 completes errors and warnings: a failing source no longer stops the run, warnings in the report and terminal, one run at a time. PR #30 adds the acceptance checklist. PR #31 adds a cap on jobs sent to the LLM, the README first-run walkthrough and an example CV. With it the MVP's tasks are done. PR #32 regroups the code into folders and moves defaults to config/ and personal files to config_local/. PR #33 adds config_local_example/, a copy-and-edit template of config_local/, which --demo runs on. PR #33 also opens the README with requirements and a quick start. After it, the per-run limits are named `llm.ask_above_jobs` and `sources.jobspipe.ask_above_credits`, and a JobsPipe fetch that reaches its cap asks to keep going instead of failing ("A paid source: the cost check and the fetch", below). Then each source tracks the dates it covered in full: a source that failed, was skipped or came back empty catches up in the next run, from its own window ("Agreeing the windows", below).
+**History:** the design for the first real run, agreed on Nov 4. PR #2 built it as a skeleton: every class and its signatures, no internals. PR #3 made the whole run work end to end on made-up data (`job-radar run --demo`), with every step in a simple form. PR #4 agrees each run's window with the user before anything is fetched. PR #5 fetches real Fast Forward jobs. PR #6 merges postings of the same job and filters on roles. PR #7 fetches full descriptions for the jobs the filter keeps. PR #8 numbers the step files in the run folder in run order. PR #9 ranks real runs with the LLM against your CV and preferences. PR #10 completes the report: work mode, salary and posted date for each job, a minimum score, YAML front matter, and a renderer that only formats. PR #11 is the first limited real run: default roles in code, and two layout fixes it found. PR #12 reads the user's settings over the defaults and the searches from their profile; a job is kept if it matches any search. PR #13 adds the search criteria on a posting's own fields: excluded titles, work mode, places as ISO codes, minimum salary, each with `if_missing`. PR #14 lists what the filter dropped, by reason, in `dropped.md` next to the report. PR #15 adds `job-radar runs` and `job-radar delete`. PR #16 resumes a failed run: the same command offers it, and the pipeline skips the saved steps. PR #17 notes in the report the days a long break left out. PR #18 merges postings on the employer's own id, read from ATS links, and on company, title and country. PR #19 drops jobs an earlier completed run already found, in `NewJobsFilterStep`. PR #20 adds JobsPipe, a paid API, off by default and capped per run, and moves the default settings into a YAML file, which the app reads first. PR #21 agrees what paid sources may spend before anything is fetched. PR #22 labels each job (seniority, job type, domain, sector) and adds a match step for the `seniority` and `domains` criteria. PR #23 finds what each matched job asks for: skills, tools, certifications and years. PR #24 carries jobs the LLM's usage limit stopped over to the next run. PR #25 adds market trends to the report: periods, coverage, figures, the change and notes on changed searches or sources. PR #26 adds the What employers ask for section. PR #27 adds the Experience to gain section. PR #28 completes the report: sources line, alerts, new openings grouped by job type, display names, terminal summary. PR #29 completes errors and warnings: a failing source no longer stops the run, warnings in the report and terminal, one run at a time. PR #30 adds the acceptance checklist. PR #31 adds a cap on jobs sent to the LLM, the README first-run walkthrough and an example CV. With it the MVP's tasks are done. PR #32 regroups the code into folders and moves defaults to config/ and personal files to config_local/. PR #33 adds config_local_example/, a copy-and-edit template of config_local/, which --demo runs on. PR #33 also opens the README with requirements and a quick start. After it, the per-run limits are named `llm.ask_above_jobs` and `sources.jobspipe.ask_above_credits`, and a JobsPipe fetch that reaches its cap asks to keep going instead of failing ("A paid source: the cost check and the fetch", below). Then each source tracks the dates it covered in full: a source that failed, was skipped or came back empty catches up in the next run, from its own window ("Agreeing the windows", below). Then JobsPipe asks one day at a time: one count and one search per search and day, and a day its count said had jobs that comes back empty fails JobsPipe for the run ("A paid source: the cost check and the fetch", below).
 
 The first real run: `job-radar run` fetches Fast Forward through its search API, turns the records into postings, dedupes them into jobs, keeps the jobs that match the search, fetches their full descriptions, asks the LLM which fit the CV best, and writes a report with the top N and a few counts. The demo run takes the same steps, with a made-up board, the made-up person in `config_local_example/` and keyword scoring in place of the LLM.
 
@@ -349,7 +349,7 @@ classDiagram
     class PaidSource {
         <<interface>>
         +plan(criteria, window) SpendPlan
-        +fetch_paid(criteria, window, cap) PaidFetch
+        +fetch_paid(criteria, window, cap, counts) PaidFetch
     }
     class SpendLog {
         <<interface>>
@@ -375,7 +375,7 @@ classDiagram
         -ask_above: int
         -budget: int
         -prompter: Prompter
-        +query(search, window) dict
+        +query(search, day) dict
     }
     class JobsPipeParser
     class Secrets {
@@ -959,7 +959,7 @@ One responsibility per class. "Knows" is everything the class imports or calls; 
 | `CostCheck` | | Before anything is fetched: each paid source's free estimate, for its own window, against the ask-above limit, the budget and the credits left; go ahead on its own within them, else ask go ahead, skip or stop (Enter for skip). A source whose check fails is left out as `failed` | `PaidSource`, `Prompter` |
 | `SpendLog`, `FileSpendLog` | Repository | Keep what each paid source spent in a run, in `spend.jsonl`; the report reads it | its run folder |
 | `JobBoardSource`, `GetroSource` | Adapter | Query one board's API, page by page, and give the board's name for people (`label`: "Fast Forward" for Getro network 997, "JobsPipe", "Demo board"); `GetroSource` stops at the page that reaches past the window | `BoardClient` |
-| `JobsPipeSource` | Adapter, `PaidSource` | One JobsPipe search per user search, with the criteria and the JobsPipe-only filters sent; cursor paging within the agreed cap; reaching it with jobs left, ask to keep going for another cap's worth within the credits left (Enter for no, which fails the source). Its plan is free: the account's credits and an estimate of the matches; the plan (free, seeker) sets the ask-above limit and monthly budget unless settings override them | `BoardClient`, `Prompter` |
+| `JobsPipeSource` | Adapter, `PaidSource` | One JobsPipe search per user search and day of the window, newest day first, with the criteria and the JobsPipe-only filters sent; cursor paging within the agreed cap; reaching it with jobs left, ask to keep going for another cap's worth within the credits left (Enter for no, which fails the source). Its plan is free: the account's credits and the matches counted per search and day, added up, passed on through the approval, so a day counted with jobs that comes back empty fails the fetch; the plan (free, seeker) sets the ask-above limit and monthly budget unless settings override them | `BoardClient`, `Prompter` |
 | `JobsPipeParser` | Adapter | Turn JobsPipe records into `Posting`s: its country and state codes, work arrangement, yearly pay, full description | `PlaceCodes`, `HtmlText` |
 | `Secrets`, `EnvSecrets` | Interface | Read an API key from the environment, else from `config_local/.env` | the environment, `config_local/.env` |
 | `BoardClient` | | Send one board's requests at its pace (1s for Getro), retrying timeouts, server errors and rate limits; say a failure in a few words as a `BoardError` ("HTTP 503 after 3 retries") | the board's API |
@@ -1175,7 +1175,7 @@ sequenceDiagram
 
 ### A paid source: the cost check and the fetch
 
-A real run with JobsPipe on. The cost check runs in `JobRadarApp` after the windows are agreed and before the run folder exists; the fetch is the pipeline's first step. Both ask through the same `TerminalPrompter`; with no one to answer, each takes its default (skip, and no). Built after the MVP: reaching the cap asks to keep going, where it failed the source before.
+A real run with JobsPipe on. The cost check runs in `JobRadarApp` after the windows are agreed and before the run folder exists; the fetch is the pipeline's first step. Both ask through the same `TerminalPrompter`; with no one to answer, each takes its default (skip, and no). Built after the MVP: reaching the cap asks to keep going, where it failed the source before; then JobsPipe is counted and searched one day at a time, as phrase searches over longer spans timed out.
 
 ```mermaid
 sequenceDiagram
@@ -1194,22 +1194,23 @@ sequenceDiagram
 
     app->>cc: check(windows)
     cc->>jp: plan(criteria, JobsPipe's own window)
-    jp->>api: GET /v1/account, POST /v1/jobs/export/estimate per search (free)
+    jp->>api: GET /v1/account, POST /v1/jobs/export/estimate per search and day (free)
     api-->>jp: credits left and used, match counts (or a timeout)
-    jp-->>cc: SpendPlan(estimate, counted or not, credits left, ask_above, budget left)
+    jp-->>cc: SpendPlan(estimate, counted or not, credits left, ask_above, budget left, count per search and day)
     cc->>pr: tell(estimate, ask above, budget left, credits left)
     opt over ask_above or the budget left (or the credits left: skip or stop only)
         cc->>pr: choose(go ahead, skip or stop, Enter for skip)
         pr->>U: That's over the ask-above limit. Go ahead, skip jobspipe this run, or stop? (g/s/x, Enter for s)
         U-->>pr: g, s or x
     end
-    cc-->>app: Approval(decision, cap = the estimate plus 10%, within the credits left)
+    cc-->>app: Approval(decision, cap = the estimate plus 10%, within the credits left, the plan's counts)
     Note over app: x: the run stops, nothing fetched, no run folder
     app->>fetch: run(nothing), in the new run folder
-    fetch->>jp: fetch_paid(criteria, JobsPipe's own window, cap)
-    loop each search, page by page with the cursor
-        jp->>api: POST /v1/jobs/search (one credit a job not already paid for this month)
+    fetch->>jp: fetch_paid(criteria, JobsPipe's own window, cap, the approval's counts)
+    loop each search, each day newest first, page by page with the cursor
+        jp->>api: POST /v1/jobs/search, posted_at_gte and posted_at_lte that day (one credit a job not already paid for this month)
         api-->>jp: a page, credits charged and left, the next cursor
+        Note over jp: a day's first page empty though its count found jobs: JobsPipeError, it timed out
         opt the cap is used up and jobs are left
             jp->>pr: confirm(..., default no)
             pr->>U: JobsPipe: 330 jobs fetched (330 credits) and more to go. Keep going for up to 330 more? (y/n, Enter for n)

@@ -141,7 +141,7 @@ class FetchStep:
         window = self._windows.of(source.name)
         if approval is None or not isinstance(source, PaidSource):
             return source.fetch(self._criteria, window)
-        paid = source.fetch_paid(self._criteria, window, approval.cap)
+        paid = source.fetch_paid(self._criteria, window, approval.cap, approval.counts)
         self._log.write(
             Spend(
                 approval=approval,

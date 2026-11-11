@@ -67,7 +67,14 @@ from job_radar.models.search import (
     Seniorities,
     WorkModes,
 )
-from job_radar.models.spend import Approval, PaidFetch, Spend, SpendDecision, SpendPlan
+from job_radar.models.spend import (
+    Approval,
+    DayCount,
+    PaidFetch,
+    Spend,
+    SpendDecision,
+    SpendPlan,
+)
 
 __all__ = [
     "Alert",
@@ -77,6 +84,7 @@ __all__ = [
     "Asks",
     "CandidateProfile",
     "Classification",
+    "DayCount",
     "Domains",
     "DropList",
     "DroppedJob",
