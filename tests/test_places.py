@@ -1,7 +1,7 @@
 import pytest
 
-from job_radar.model import Location
-from job_radar.places import PlaceCodes
+from job_radar.matching.place_codes import PlaceCodes
+from job_radar.models import Location
 
 
 @pytest.mark.parametrize(

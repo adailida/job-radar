@@ -6,12 +6,12 @@ from decimal import Decimal
 import pytest
 from fakes import MemoryDropLog, MemoryWarningLog, guard, job, posting
 
-from job_radar.matching import JobMatcher
-from job_radar.model import CandidateProfile, Job, Period, Salary, Search, SearchCriteria, Window
-from job_radar.normalize import Normalizer
-from job_radar.ranking import BadAnswer, LlmRanker
-from job_radar.steps.filter import FilterStep
-from job_radar.steps.recommend import RecommendTopJobsStep
+from job_radar.llm.job_ranker import BadAnswer, LlmRanker
+from job_radar.matching.job_matcher import JobMatcher
+from job_radar.matching.normalizer import Normalizer
+from job_radar.models import CandidateProfile, Job, Period, Salary, Search, SearchCriteria, Window
+from job_radar.pipeline.steps.filter import FilterStep
+from job_radar.pipeline.steps.recommend import RecommendTopJobsStep
 
 PROFILE = CandidateProfile(cv="Python engineer, 8 years.", preferences="Remote data roles.")
 

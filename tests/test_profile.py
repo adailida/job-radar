@@ -3,7 +3,7 @@ from io import BytesIO
 import pytest
 from pypdf import PdfWriter
 
-from job_radar.profile import ProfileError, ProfileLoader
+from job_radar.config.profile_loader import ProfileError, ProfileLoader
 
 
 def text_pdf(lines: list[str]) -> bytes:

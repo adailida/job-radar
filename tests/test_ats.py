@@ -1,6 +1,6 @@
 import pytest
 
-from job_radar.ats import AtsLinks
+from job_radar.matching.ats_links import AtsLinks
 
 
 @pytest.mark.parametrize(

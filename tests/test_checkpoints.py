@@ -3,8 +3,8 @@ import json
 import pytest
 from fakes import WINDOW, job
 
-from job_radar.checkpoints import FileCheckpoints
-from job_radar.model import Job, StepCount
+from job_radar.models import Job, StepCount
+from job_radar.storage.checkpoints import FileCheckpoints
 
 
 def test_saved_items_load_back(tmp_path):

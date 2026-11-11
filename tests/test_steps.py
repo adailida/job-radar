@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 from fakes import MemorySourceCountLog, MemorySpendLog, MemoryWarningLog, guard, job, posting
 
-from job_radar.model import (
+from job_radar.models import (
     CandidateProfile,
     Job,
     RawPage,
@@ -13,9 +13,9 @@ from job_radar.model import (
     SourceCount,
     Window,
 )
-from job_radar.steps.convert import ConvertStep
-from job_radar.steps.fetch import FetchStep
-from job_radar.steps.recommend import RecommendTopJobsStep
+from job_radar.pipeline.steps.convert import ConvertStep
+from job_radar.pipeline.steps.fetch import FetchStep
+from job_radar.pipeline.steps.recommend import RecommendTopJobsStep
 
 SEARCH = SearchCriteria(searches=(Search(name="default", roles=()),))
 WINDOW = Window(start=date(2026, 10, 29), end=date(2026, 11, 5))

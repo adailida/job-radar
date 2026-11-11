@@ -61,14 +61,14 @@ class JobsPipeRecorder:
 
 
 def key_from_env(name: str) -> str:
-    """The key from the environment, or from `.env` at the repo root."""
+    """The key from the environment, or from `config_local/.env`."""
     if os.environ.get(name):
         return os.environ[name]
-    env = ROOT / ".env"
+    env = ROOT / "config_local" / ".env"
     for line in env.read_text(encoding="utf-8").splitlines() if env.is_file() else []:
         if line.startswith(f"{name}="):
             return line.split("=", 1)[1].strip()
-    raise SystemExit(f"{name} is not set (environment or .env)")
+    raise SystemExit(f"{name} is not set (environment or config_local/.env)")
 
 
 if __name__ == "__main__":

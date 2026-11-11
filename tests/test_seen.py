@@ -2,11 +2,11 @@ from datetime import date, timedelta
 
 from fakes import MemoryWarningLog, job
 
-from job_radar.checkpoints import FileCheckpoints
-from job_radar.history import FileRunHistory
-from job_radar.model import Job, Window
-from job_radar.seen import FileSeenJobs
-from job_radar.steps.new_jobs_filter import NewJobsFilterStep
+from job_radar.models import Job, Window
+from job_radar.pipeline.steps.new_jobs_filter import NewJobsFilterStep
+from job_radar.storage.checkpoints import FileCheckpoints
+from job_radar.storage.run_history import FileRunHistory
+from job_radar.storage.seen_jobs import FileSeenJobs
 
 TODAY = date(2026, 11, 9)
 ATS = "greenhouse:acme:42"

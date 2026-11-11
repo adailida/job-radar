@@ -3,18 +3,18 @@ import os
 import pytest
 from fakes import WINDOW, FakePrompter, FakeStep, FixedClock, NoCost
 
-from job_radar.app import JobRadarApp
-from job_radar.checkpoints import FileCheckpoints
+from job_radar.app.app_factory import AppFactory
+from job_radar.app.job_radar_app import JobRadarApp
+from job_radar.app.window import WindowPlan, WindowReason
 from job_radar.cli import Cli
-from job_radar.error_log import FileErrorLog
-from job_radar.errors import JobRadarError
-from job_radar.factory import AppFactory
-from job_radar.llm import ClaudeCli, LlmUnavailable
-from job_radar.pipeline import Pipeline
-from job_radar.run_lock import FileRunLock, RunInProgress
-from job_radar.settings import SettingsFile
-from job_radar.window import WindowPlan, WindowReason
-from job_radar.yaml_file import ConfigError
+from job_radar.config.settings import SettingsFile
+from job_radar.config.yaml_file import ConfigError
+from job_radar.llm.llm import ClaudeCli, LlmUnavailable
+from job_radar.pipeline.pipeline import Pipeline
+from job_radar.storage.checkpoints import FileCheckpoints
+from job_radar.storage.error_log import FileErrorLog
+from job_radar.storage.run_lock import FileRunLock, RunInProgress
+from job_radar.utils.errors import JobRadarError
 
 DEAD = 999_999  # a process id taken as no longer running
 
@@ -71,7 +71,7 @@ def test_this_process_is_running_and_a_finished_one_is_not():
 def demo_cli(tmp_path, prompter: FakePrompter) -> Cli:
     """The real command over demo runs in a temp folder."""
     settings = SettingsFile.defaults(output=str(tmp_path))
-    return Cli(AppFactory(settings, tmp_path / "local", FixedClock(), prompter, {}))
+    return Cli(AppFactory(settings, tmp_path / "config_local", FixedClock(), prompter, {}))
 
 
 def test_a_run_takes_the_lock_and_releases_it_when_it_ends(tmp_path):
@@ -180,12 +180,12 @@ def test_errors_stop_the_run_with_a_clear_message_for_invalid_settings(
 ):
     # Acceptance (Problem alerts): errors stop the run with a clear message: invalid settings.
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "local").mkdir()
-    (tmp_path / "local" / "settings.yaml").write_text("recommend:\n  min_scor: 30\n")
+    (tmp_path / "config_local").mkdir()
+    (tmp_path / "config_local" / "settings.yaml").write_text("recommend:\n  min_scor: 30\n")
     assert Cli.start() == 2
     assert capsys.readouterr().out == (
-        "Could not set up the run: local/settings.yaml: recommend.min_scor: unknown key. "
-        "Fix it in local/settings.yaml; job_radar/default_settings.yaml lists every setting "
+        "Could not set up the run: config_local/settings.yaml: recommend.min_scor: unknown key. "
+        "Fix it in config_local/settings.yaml; config/settings.yaml lists every setting "
         "with its default\n"
     )
 
@@ -193,7 +193,7 @@ def test_errors_stop_the_run_with_a_clear_message_for_invalid_settings(
 def test_errors_stop_the_run_with_a_clear_message_for_invalid_user_input(tmp_path, capsys):
     # Acceptance (Problem alerts): errors stop the run with a clear message: user input
     # missing or invalid.
-    local = tmp_path / "local"
+    local = tmp_path / "config_local"
     local.mkdir()
     (local / "profile.yaml").write_text("searches:\n  one:\n    rols: [engineer]\n")
     factory = AppFactory(
@@ -202,12 +202,12 @@ def test_errors_stop_the_run_with_a_clear_message_for_invalid_user_input(tmp_pat
     assert Cli(factory).main(["run"]) == 2
     assert capsys.readouterr().out == (
         f"Could not set up the run: {local / 'profile.yaml'}: searches.one.rols: unknown key. "
-        f"Fix it in {local / 'profile.yaml'}; examples/profile.example.yaml shows every key\n"
+        f"Fix it in {local / 'profile.yaml'}; config/profile.example.yaml shows every key\n"
     )
 
 
 def test_an_unreadable_cv_names_the_file_and_the_fix(tmp_path, capsys):
-    local = tmp_path / "local"
+    local = tmp_path / "config_local"
     local.mkdir()
     (local / "profile.yaml").write_text("searches:\n  one:\n    roles: [engineer]\n")
     (local / "cv.md").write_text("   \n")
@@ -224,8 +224,8 @@ def test_a_missing_api_key_names_the_key_and_the_fix(tmp_path):
     with pytest.raises(ConfigError) as missing:
         factory._jobspipe()
     assert str(missing.value) == (
-        "JOBSPIPE_API_KEY is not set: add it to .env, "
-        "or set sources.jobspipe.enabled: false in local/settings.yaml"
+        "JOBSPIPE_API_KEY is not set: add it to config_local/.env, "
+        "or set sources.jobspipe.enabled: false in config_local/settings.yaml"
     )
 
 

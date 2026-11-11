@@ -1,6 +1,6 @@
 import pytest
 
-from job_radar.prompter import TerminalPrompter
+from job_radar.utils.prompter import TerminalPrompter
 
 
 def prompter(*answers: str) -> tuple[TerminalPrompter, list[str]]:

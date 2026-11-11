@@ -3,8 +3,8 @@ from datetime import date
 import pytest
 from fakes import FakePrompter, MemorySpendLog, MemoryWarningLog
 
-from job_radar.cost import CostCheck, FileSpendLog
-from job_radar.model import (
+from job_radar.app.cost_check import CostCheck
+from job_radar.models import (
     Approval,
     PaidFetch,
     RawPage,
@@ -15,8 +15,9 @@ from job_radar.model import (
     SpendPlan,
     Window,
 )
-from job_radar.prompter import TerminalPrompter
-from job_radar.steps.fetch import FetchStep
+from job_radar.pipeline.steps.fetch import FetchStep
+from job_radar.storage.spend_log import FileSpendLog
+from job_radar.utils.prompter import TerminalPrompter
 
 WINDOW = Window(start=date(2026, 11, 8), end=date(2026, 11, 9))
 CRITERIA = SearchCriteria(searches=(Search(name="s"),))

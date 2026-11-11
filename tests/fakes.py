@@ -2,8 +2,8 @@
 
 from datetime import date, datetime, timedelta, timezone
 
-from job_radar.clock import Clock
-from job_radar.model import Job, Location, Posting, Report, StepCount, Window, WorkMode
+from job_radar.models import Job, Location, Posting, Report, StepCount, Window, WorkMode
+from job_radar.utils.clock import Clock
 
 
 class FixedClock(Clock):
@@ -202,7 +202,7 @@ class MemoryWarningLog:
 
     def warn(self, code, message) -> None:
         """Keep the warning, unless it is kept already."""
-        from job_radar.model import Alert
+        from job_radar.models import Alert
 
         alert = Alert(code=code, message=message)
         if alert not in self.kept:
@@ -219,7 +219,7 @@ class MemoryWarningLog:
 
 def guard(*answers: str, warnings=None):
     """A usage-limit guard with a user giving these answers and an in-memory pending log."""
-    from job_radar.usage import UsageLimitGuard
+    from job_radar.llm.usage_limit_guard import UsageLimitGuard
 
     return UsageLimitGuard(
         FakePrompter(*answers), MemoryPendingLog(), warnings or MemoryWarningLog()
@@ -247,7 +247,7 @@ class NoGaps:
 
     def gaps(self, asks):
         """An empty section."""
-        from job_radar.model import Gaps
+        from job_radar.models import Gaps
 
         return Gaps(rows=())
 
@@ -282,6 +282,6 @@ class SetKeptJobs:
 
 def grouper(group_by: str = "job_type"):
     """An opening grouper with two job types and two domains."""
-    from job_radar.openings import OpeningGrouper
+    from job_radar.report.opening_grouper import OpeningGrouper
 
     return OpeningGrouper(group_by, ["engineering", "data"], ["climate", "health"])

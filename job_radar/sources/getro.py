@@ -4,8 +4,8 @@ import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from job_radar.html_text import HtmlText
-from job_radar.model import (
+from job_radar.matching.place_codes import PlaceCodes
+from job_radar.models import (
     Location,
     Period,
     Posting,
@@ -15,8 +15,8 @@ from job_radar.model import (
     Window,
     WorkMode,
 )
-from job_radar.places import PlaceCodes
-from job_radar.sources.http import BoardClient
+from job_radar.sources.board_client import BoardClient
+from job_radar.utils.html_text import HtmlText
 
 
 class GetroSource:

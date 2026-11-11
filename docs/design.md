@@ -142,40 +142,43 @@ No free functions: every behaviour belongs to a class with one responsibility, o
 
 ### Settings
 
-`Settings` says which board, model and limits to use; `AppFactory` builds the classes from them. The step order stays in code, in `AppFactory`. The defaults live in the `Settings` model; `local/settings.yaml` overrides them (section 7).
+`Settings` says which board, model and limits to use; `AppFactory` builds the classes from them. The step order stays in code, in `AppFactory`. The defaults live in `config/settings.yaml`; `config_local/settings.yaml` overrides them (section 7).
 
 ### CLI
 
 - `job-radar run`: one run
-- `job-radar run --demo`: one run on a made-up board and profile, with keyword scoring in place of the LLM: no network, no LLM, nothing from `local/`. For trying the tool and for the end-to-end tests. A flag, not a setting: a demo is a one-off choice for one command. Demo runs keep their own run folders and history under `output/demo/`, so they never move a real run's window
+- `job-radar run --demo`: one run on a made-up board and profile, with keyword scoring in place of the LLM: no network, no LLM, nothing from `config_local/`. For trying the tool and for the end-to-end tests. A flag, not a setting: a demo is a one-off choice for one command. Demo runs keep their own run folders and history under `output/demo/`, so they never move a real run's window
 - `job-radar runs` lists runs, newest first: status, window, and what a run recommended or the last step a failed one finished. `job-radar delete <run-id>...` deletes runs after confirmation; `--all` deletes every run. `--demo` works on demo runs
 
 ### Layout
 
+Folders by responsibility, read from the command down. A module with one main class is named after that class in snake_case; a module with an interface and its implementations is named after the interface; a step's module is named after the step.
+
 ```
 job_radar/
-  cli.py              Cli
-  app.py              JobRadarApp
-  result.py           RunResult, RunSucceeded, RunFailed, RunCancelled
-  window.py           WindowPlanner, WindowPlan, WindowReason
-  window_chooser.py   WindowChooser
-  history.py          RunHistory, FileRunHistory
-  prompter.py         Prompter, TerminalPrompter
-  factory.py          AppFactory, Settings
-  clock.py            Clock
-  model.py            data models
-  normalize.py        Normalizer
-  html_text.py        HtmlText
-  profile.py          ProfileLoader, the demo profile
-  pipeline.py         Pipeline, Step
-  checkpoints.py      Checkpoints, RunStats, FileCheckpoints, Manifest
-  ranking.py          JobRanker, LlmRanker, KeywordRanker
-  llm.py              Llm, ClaudeCli
-  report_writer.py    ReportWriter, FileReportWriter
-  sources/            base.py (JobBoardSource, JobBoardParser, JobDescriber), http.py (BoardClient),
-                      getro.py (GetroSource, GetroParser, GetroDescriber), demo.py (DemoSource, DemoParser)
-  steps/              fetch.py, convert.py, dedupe.py (DedupeStep, JobKey), filter.py, describe.py,
-                      recommend.py, report.py
+  cli.py              Cli: the entry point
+  app/                job_radar_app.py (JobRadarApp), app_factory.py (AppFactory),
+                      window.py (WindowPlanner, WindowChooser), resume_offer.py (ResumeOffer),
+                      runs_command.py (RunsCommand), run_result.py (RunResult and its kinds),
+                      cost_check.py (CostCheck)
+  pipeline/           pipeline.py (Pipeline, Step)
+    steps/            one module per step, named after it: fetch.py, convert.py, dedupe.py,
+                      new_jobs_filter.py, filter.py, carried_over.py, describe.py, llm_cap.py,
+                      classify.py, match.py, extract.py, recommend.py, report.py
+  sources/            base.py (the board interfaces), board_client.py (BoardClient), getro.py,
+                      jobspipe.py, demo.py
+  llm/                llm.py (Llm, ClaudeCli), job_ranker.py, classifier.py, extractor.py,
+                      gap_judge.py, usage_limit_guard.py (UsageLimitGuard)
+  matching/           job_matcher.py, job_key.py, ats_links.py, place_codes.py, normalizer.py
+  report/             report_renderer.py, report_writer.py, words.py, trends.py, asks.py,
+                      gaps.py, opening_grouper.py
+  storage/            checkpoints.py, run_history.py, seen_jobs.py, spend_log.py, drop_log.py,
+                      pending_log.py, warning_log.py, error_log.py, source_count_log.py,
+                      run_lock.py, gap_cache.py
+  config/             settings.py, profile_loader.py, searches_file.py, secrets.py, yaml_file.py
+  utils/              clock.py, prompter.py, html_text.py, errors.py
+  models/             the data models, by area: posting.py, llm.py, search.py, run.py, spend.py,
+                      report.py, and model.py (their base); import them from `job_radar.models`
 ```
 
 ## 3. Data model
@@ -323,7 +326,7 @@ class JobBoardParser(Protocol):     # Adapter: turns one board's records into po
 | Which sources are on | API calls, paging, auth |
 | Per-source options: board name, plan, limits, request delay | Mapping raw fields to `Posting` (salary, work mode, location) |
 | Source-only filters (JobsPipe: occupation group, ghost score, company size, no agencies) | How the common criteria become this source's query |
-| Name of the API key variable (the key itself is in `.env`) | How this source reports credits |
+| Name of the API key variable (the key itself is in `config_local/.env`) | How this source reports credits |
 
 Adding a source: a module under `sources/` with its source and parser classes, wired in `AppFactory`, and its settings.
 
@@ -347,7 +350,7 @@ Each source applies what it can server-side, to save credits. The Filter stage t
 
 ### JobsPipe (built, task 16)
 
-- Off by default (`sources.jobspipe.enabled`); the key from `JOBSPIPE_API_KEY` in the environment or `.env`. On without a key is a setup error
+- Off by default (`sources.jobspipe.enabled`); the key from `JOBSPIPE_API_KEY` in the environment or `config_local/.env`. On without a key is a setup error
 - One search per user search: roles to `job_title_or`, excluded titles to `job_title_not`, work mode to `work_arrangement_or`, countries to `job_country_code_or` and US or Canadian regions to `region_or`, a USD minimum to `min_salary_usd`, the window's start to `posted_at_gte`. A criterion whose `if_missing` keeps jobs also sends `include_unknown`, unless `match_if_missing: false`
 - `filters` in settings are JobsPipe-only, sent as written (tech occupations, no agencies, ghost score, mission phrases, seniority)
 - `max_jobs_per_run` (25) caps the jobs returned, and so the credits, until task 17's cost checks
@@ -497,25 +500,27 @@ Opt-in (`@pytest.mark.live`, skipped by default), run by hand to catch API chang
 ### Files
 
 ```
-local/                     gitignored as a whole
-  profile.yaml             user input: searches, path to the CV
-  cv.pdf                   the CV: PDF, Markdown or plain text
-  settings.yaml            only the settings the user overrides
-.env                       API keys
-job_radar/
-  default_settings.yaml    every setting with its default, commented: read first, every run
-examples/
-  profile.example.yaml
+config/                    committed: the defaults and examples
+  settings.yaml            every setting with its default, commented: read first, every run
+  profile.example.yaml     every profile key, for a made-up person
   cv.example.md            a fictional person's CV
+  preferences.example.md   the same person's ideal job
+config_local/              gitignored as a whole: the user's overrides and personal files
+  settings.yaml            only the settings the user overrides
+  profile.yaml             user input: the searches
+  cv.pdf                   the CV: PDF, Markdown or plain text
+  preferences.md           the ideal job, in the user's own words
+  .env                     API keys
 ```
 
+- Defaults and overrides in two folders with the same file names: `config_local/settings.yaml` is merged over `config/settings.yaml`, and each personal file has its example under the same name in `config/`
 - One gitignored folder for everything personal: the repo is public, and one rule covers any personal file added later
 - Paths can be overridden with `--profile` and `--settings`
 - The CV is read locally (PDF via `pypdf`); the LLM sees only text. A scanned PDF with no text layer stops the run with an error asking for a text PDF. Word files later
 
 ### Profile
 
-Built so far: `common` and `searches` with `roles`, `exclude_titles`, `work_mode`, `locations` and `min_salary` (task 11a), and `seniority` and `domains` (task 18a), all but the first two with `if_missing`. `keywords` is deferred after the MVP (owner, Nov 10); built, it would come after the describe step (descriptions aren't there when the filter runs). Domain names must be ones the settings define. The CV keeps its fixed names in `local/` (no `cv:` key).
+Built so far: `common` and `searches` with `roles`, `exclude_titles`, `work_mode`, `locations` and `min_salary` (task 11a), and `seniority` and `domains` (task 18a), all but the first two with `if_missing`. `keywords` is deferred after the MVP (owner, Nov 10); built, it would come after the describe step (descriptions aren't there when the filter runs). Domain names must be ones the settings define. The CV keeps its fixed names in `config_local/` (no `cv:` key).
 
 ```yaml
 cv: cv.pdf
@@ -540,7 +545,7 @@ searches:                                 # a job matches if it matches any sear
 
 ### Settings
 
-Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`, `max_jobs_per_run`), `recommend` (`top_n`, `min_score`), `report.group_by`, `report.requirements_per_type`, `report.gap_suggestions`, `alerts.low_credits` and `sources.getro.network`. The others come with their tasks; [job_radar/default_settings.yaml](../job_radar/default_settings.yaml) holds what exists.
+Every key has a default; the file can be missing. The sample shows the full design; built so far: `output`, `lookback_days`, `new_only`, `llm` (`model`, `timeout_seconds`, `batch_size`, `max_description_chars`, `max_jobs_per_run`), `recommend` (`top_n`, `min_score`), `report.group_by`, `report.requirements_per_type`, `report.gap_suggestions`, `alerts.low_credits` and `sources.getro.network`. The others come with their tasks; [config/settings.yaml](../config/settings.yaml) holds what exists.
 
 ```yaml
 domains:                    # cause areas or fields: used by the domains filter and report headings
@@ -587,7 +592,7 @@ sources:
 
 ### Loading and validation
 
-- Defaults live in `job_radar/default_settings.yaml` only, read first on every run. The Pydantic model holds types and limits and no defaults, so a setting missing from that file is an error
+- Defaults live in `config/settings.yaml` only, read first on every run. The Pydantic model holds types and limits and no defaults, so a setting missing from that file is an error
 - The user's file is deep-merged over the defaults
 - Unknown keys are errors, so typos are caught. Errors name the path: `sources.jobspipe.plan: must be one of free, seeker`
 
@@ -595,7 +600,7 @@ sources:
 
 - If `profile.yaml` is missing or a field is invalid, the `Prompter` asks for those fields only and validates each answer
 - An empty answer stops the run with an error
-- At the end it offers to save the answers to `local/profile.yaml`
+- At the end it offers to save the answers to `config_local/profile.yaml`
 
 ```python
 class Prompter(Protocol):
@@ -712,7 +717,7 @@ Built (task 19): `ClaudeCli` raises `UsageLimit` when an error answer matches a 
 
 ### Volume guard
 
-Built (task 26): a safety cap on the jobs one run sends to the LLM, `llm.max_jobs_per_run` (60), checked by its own step, `llm_cap`, after describe and right before classify, the first LLM step and the one that sees the most jobs. Under the cap nothing is asked. Over it, the run asks: "75 jobs would go to Claude, over the cap of 60. Send them all, only the first 60, or stop? (a/f/s, Enter for f)". All: every job goes on. First: the first 60, in the order they come, go on; the rest go to the run's `pending.jsonl` with their descriptions, like jobs the usage limit stopped, so the next run's `carried_over` step takes them, the report's carried-over line counts them, and an `llm_capped` warning says how many. Stop: the step fails before any LLM call, and the same command resumes it and asks again (with a changed cap, if `local/settings.yaml` now says one). The cap starts low for the first real runs and goes up as they show what a run costs in usage.
+Built (task 26): a safety cap on the jobs one run sends to the LLM, `llm.max_jobs_per_run` (60), checked by its own step, `llm_cap`, after describe and right before classify, the first LLM step and the one that sees the most jobs. Under the cap nothing is asked. Over it, the run asks: "75 jobs would go to Claude, over the cap of 60. Send them all, only the first 60, or stop? (a/f/s, Enter for f)". All: every job goes on. First: the first 60, in the order they come, go on; the rest go to the run's `pending.jsonl` with their descriptions, like jobs the usage limit stopped, so the next run's `carried_over` step takes them, the report's carried-over line counts them, and an `llm_capped` warning says how many. Stop: the step fails before any LLM call, and the same command resumes it and asks again (with a changed cap, if `config_local/settings.yaml` now says one). The cap starts low for the first real runs and goes up as they show what a run costs in usage.
 
 ### Seniority values
 
@@ -995,10 +1000,10 @@ The run folder is created only after the window and the spend are agreed, so a s
 
 | Kind | Example message |
 |---|---|
-| Settings invalid | Could not set up the run: local/settings.yaml: recommend.min_scor: unknown key. Fix it in local/settings.yaml; job_radar/default_settings.yaml lists every setting with its default |
-| Profile invalid | Could not set up the run: local/profile.yaml: searches.one.rols: unknown key. Fix it in local/profile.yaml; examples/profile.example.yaml shows every key |
-| CV unreadable | Could not set up the run: local/cv.pdf has no text (a scanned PDF? Export a text PDF, or use cv.md) |
-| API key missing | Could not set up the run: JOBSPIPE_API_KEY is not set: add it to .env, or set sources.jobspipe.enabled: false in local/settings.yaml |
+| Settings invalid | Could not set up the run: config_local/settings.yaml: recommend.min_scor: unknown key. Fix it in config_local/settings.yaml; config/settings.yaml lists every setting with its default |
+| Profile invalid | Could not set up the run: config_local/profile.yaml: searches.one.rols: unknown key. Fix it in config_local/profile.yaml; config/profile.example.yaml shows every key |
+| CV unreadable | Could not set up the run: config_local/cv.pdf has no text (a scanned PDF? Export a text PDF, or use cv.md) |
+| API key missing | Could not set up the run: JOBSPIPE_API_KEY is not set: add it to config_local/.env, or set sources.jobspipe.enabled: false in config_local/settings.yaml |
 | LLM unavailable | Could not set up the run: `claude` is not logged in: run `claude auth login` |
 | Run in progress | Could not start the run: Another run is in progress (pid 4312). Wait for it to finish; if no run is going, delete output/run.lock |
 | No source | Run failed at step 'fetch': No source returned data: JobsPipe failed (no answer in time after 3 retries), Fast Forward failed (HTTP 503 after 3 retries) |
@@ -1070,7 +1075,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Fixtures recorded with neutral queries, scrubbed, reviewed | Record with the user's settings; hand-written fixtures | Public repo: no search strategy or personal data. Recorded pages catch real API quirks |
 | Acceptance criteria as the test list | Coverage percentage target | "Done" means the criteria pass |
 | A `Clock` class injected | A `now()` callable; freezing time with a library | Deterministic tests with no dependency; the same clock stamps run folders and report dates |
-| All personal files in one gitignored `local/` folder | Named files in .gitignore (`config.yaml`, ...) | Public repo: one rule covers files added later |
+| All personal files in one gitignored `config_local/` folder | Named files in .gitignore (`config.yaml`, ...) | Public repo: one rule covers files added later |
 | CV as PDF, Markdown or text; PDF read locally with `pypdf` | Text only; let the LLM read the PDF | PDF is the standard CV format; local extraction is free and deterministic |
 | Profile as named searches: AND within, OR across | One flat criteria set; an expression language | Covers real combinations ("remote in US, or onsite in NY") without a parser |
 | `if_missing: keep \| drop` per criterion | Fixed rule per field | Missing data is common (about half of postings lack salary); the user decides |
@@ -1141,7 +1146,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | The ranker asks with a JSON schema | Plain text answers parsed by the ranker | The CLI holds the answer to the shape, so fewer retries and no code fences to strip; one optional parameter on `Llm` |
 | A bad ranking answer is asked again once, with what was wrong, then the batch is split; a job that still fails gets no score and a warning (changed in task 24) | Fail the step (the earlier choice, until warnings existed) | Same rule as classify and extract (section 9): one bad job no longer fails a run, and the warning says how many weren't ranked |
 | Ranking sees each description cut to 4,000 characters, 20 jobs a prompt | The full description; the Extract cap of 8,000 | About 25,000 tokens a prompt; the start of a posting says most of what fit depends on |
-| The CV is `cv.pdf`, `cv.md` or `cv.txt` in `local/`, the preferences `preferences.md`; both required | A path in a profile file; preferences optional | The profile file comes with settings (task 10). Ranking without preferences would judge experience only, so a missing file is more likely a mistake |
+| The CV is `cv.pdf`, `cv.md` or `cv.txt` in `config_local/`, the preferences `preferences.md`; both required | A path in a profile file; preferences optional | The profile file comes with settings (task 10). Ranking without preferences would judge experience only, so a missing file is more likely a mistake |
 | Title asides in brackets dropped only when about place or work mode | Drop every bracketed aside | Real Fast Forward titles use brackets to tell roles apart ("Specialist (Media and Communication)") |
 | Until country codes exist, the job key compares places as written | Leave places out of the key | Same title in different cities is common on Fast Forward (one org posts a role per district); leaving places out would merge them |
 | `Clock.now()` returns local time with its UTC offset | UTC; naive local time | Run folders and report dates match the user's clock; saved times stay unambiguous |
@@ -1169,7 +1174,7 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | `profile.yaml` is required for a real run (terminal prompts, task 12, deferred after the MVP on Nov 10); the demo has its own search in code | Default roles in code when the file is missing | A run without the user's searches sends the wrong jobs to the LLM; a clear error costs one copy of the example |
 | The settings are read in `Cli.start`, before the factory | The factory reads them | `AppFactory` keeps taking `Settings`, so tests pass settings directly. A bad file still exits with 2 |
 | Fetch and filter take all the searches (`SearchCriteria`); a job is kept if any search matches | One search until task 11 | `profile.yaml` lists several searches; boards with server-side queries (JobsPipe) will need them all |
-| `--settings` and `--profile` flags wait until something needs another path | Add them now | The fixed files in `local/` are enough for one person |
+| `--settings` and `--profile` flags wait until something needs another path | Add them now | The fixed files in `config_local/` are enough for one person |
 | Places get ISO codes when parsed, by `PlaceCodes` with `pycountry`; the country is the last part of the text, the region any other part naming a subdivision | A hand-made country table; codes at filter time; a geocoding service | Boards write places as free text in many forms (130 in two weeks of Fast Forward). `pycountry` knows every country and subdivision; a few aliases (UK, DRC) fill its gaps. Done once, every later stage sees codes |
 | A place counts as missing only when the posting names no country, or the wanted country without the wanted region | Any unreadable place makes the posting missing | "India; Remote" names a country, just not a wanted one; counting it missing kept five India-based jobs |
 | A salary meets the minimum when the top of its range does | The bottom; the middle | A range that reaches the minimum is worth a look; the LLM sees the range |
@@ -1185,8 +1190,8 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Seen jobs are the filter's output of completed runs, kept as `jobs.jsonl` by `FileCheckpoints` on success | A separate writer; a store outside run folders | The output is already saved as a checkpoint, so keeping one file costs nothing; deleting a run makes its jobs unseen with no extra logic |
 | Dropping seen jobs is its own step, `new_jobs_filter`, after dedupe | Inside dedupe | One responsibility each, and the funnel shows how many jobs were new |
 | JobsPipe-only narrowing lives in settings (`sources.jobspipe.filters`), passed through as written, not in the profile | Mission phrases as profile keywords | Fast Forward lists only mission orgs; the phrases are needed only to narrow JobsPipe's mainstream feed. Passing filters through needs no code per JobsPipe field |
-| Keys come from the environment, else `.env`, through a `Secrets` interface | `python-dotenv`; settings | No new dependency for a NAME=value file; the environment wins for one-off runs; tests pass a plain dict |
-| Defaults are a real YAML file the app reads (`job_radar/default_settings.yaml`), the user's file merged over it | Defaults in the model, with an example file a test keeps in sync (the earlier choice) | Changed Nov 9 at the owner's ask: the full config you read is the one the app uses. Still one place for defaults: the model has none |
+| Keys come from the environment, else `config_local/.env`, through a `Secrets` interface | `python-dotenv`; settings | No new dependency for a NAME=value file; the environment wins for one-off runs; tests pass a plain dict |
+| Defaults are a real YAML file the app reads (`config/settings.yaml`), the user's file merged over it | Defaults in the model, with an example file a test keeps in sync (the earlier choice) | Changed Nov 9 at the owner's ask: the full config you read is the one the app uses. Still one place for defaults: the model has none |
 | The cost check runs in the app, before the run folder exists | Inside the fetch step | Stopping at the check leaves no failed run to resume or delete; the fetch step only spends within the approvals |
 | Enter at a cost question means skip the source | Go ahead; stop | Skipping spends nothing and still gives a report from the free sources |
 | Order: filter, describe, classify, match, recommend | Classify before describe | Labels need the description; Fast Forward gives it only after describe. Describing jobs that match then drops costs free requests only |
@@ -1213,3 +1218,5 @@ Lookback capping and criteria changes are not alerts: they are notes in the repo
 | Group headings use the names as the settings write them ("engineering-management") | Capitalised or prettified names | The names are the user's; the same name appears in `profile.yaml` and in the report |
 | A new opening's line includes the salary | Title, company, place, date, score and link only | The acceptance criteria ask for the salary on each job in the report |
 | The demo classifier labels job types from title words | Leave job types unknown in the demo | The demo run shows real grouping, and the end-to-end test checks it |
+| The code is grouped in folders by responsibility (app, pipeline and its steps, sources, llm, matching, report, storage, config, utils, models), read from the command down; a module is named after its main class, its interface, or its step | One flat package (the earlier layout); folders by layer only | Changed Nov 10 (PR #32): with over 40 modules in one folder, finding a class meant searching. Folders say what each part is for, and the naming rule says where a class lives without searching |
+| Defaults and examples in a committed `config/`, the user's overrides and personal files in a gitignored `config_local/`, with the same file names | Defaults inside the package (`job_radar/default_settings.yaml`), examples in `examples/`, personal files in `local/` and keys in `.env` at the repo root (the earlier layout) | Two folders side by side make the override plain: `config_local/settings.yaml` goes over `config/settings.yaml`, and each personal file has its example under the same name. Keys move into `config_local/` too, so one ignored folder holds everything personal |

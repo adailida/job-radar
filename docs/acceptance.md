@@ -181,7 +181,7 @@ Errors stop the run before or during it and are told in the terminal; a stopped 
 Deferred (owner, Nov 10); requirements.md lists them under "After the MVP".
 
 1. **Keywords: a search can require the description to mention any of its keywords** (task 11c). Deferred (owner, Nov 10). Building it would take: a `keywords` criterion in `Search` and `profile.yaml`, checked by `JobMatcher` in a step after describe (descriptions aren't there when the filter runs), dropped jobs added to `dropped.md`, and JobsPipe's query sending the keywords
-2. **Terminal prompts: a run asks for user input that is missing or invalid, and errors only if it is still missing or invalid after that** (task 12). Deferred (owner, Nov 10). Building it would take: `Prompter.ask` for free text, a prompt for each missing or invalid profile field (and a missing CV or preferences file) before the setup error, and the answers saved back to `local/` so the next run doesn't ask again
+2. **Terminal prompts: a run asks for user input that is missing or invalid, and errors only if it is still missing or invalid after that** (task 12). Deferred (owner, Nov 10). Building it would take: `Prompter.ask` for free text, a prompt for each missing or invalid profile field (and a missing CV or preferences file) before the setup error, and the answers saved back to `config_local/` so the next run doesn't ask again
 
 ## Non-goals
 
@@ -191,5 +191,5 @@ Re-checked against requirements.md on Nov 10: nothing built contradicts them.
 - **Rewriting the CV**: "Experience to gain" judges and suggests; nothing writes a CV
 - **Job-board email alerts as a source, or scraping**: both sources are APIs that allow scripted access (Fast Forward's Getro search API, robots.txt allowing it, 1s between requests; JobsPipe's paid API); no email or HTML scraping
 - **Real-time job alerts**: the user starts each run; nothing runs in the background or notifies
-- **A hosted service or user accounts**: everything runs locally from the user's own copy and `local/` folder
+- **A hosted service or user accounts**: everything runs locally from the user's own copy and `config_local/` folder
 - **A UI beyond the report and terminal prompts**: the outputs are `report.md`, `dropped.md` and terminal lines

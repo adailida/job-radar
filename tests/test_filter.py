@@ -2,10 +2,10 @@ from datetime import date
 
 from fakes import MemoryDropLog, job, posting
 
-from job_radar.matching import JobMatcher
-from job_radar.model import Job, Search, SearchCriteria, Window
-from job_radar.normalize import Normalizer
-from job_radar.steps.filter import FilterStep
+from job_radar.matching.job_matcher import JobMatcher
+from job_radar.matching.normalizer import Normalizer
+from job_radar.models import Job, Search, SearchCriteria, Window
+from job_radar.pipeline.steps.filter import FilterStep
 
 WINDOW = Window(start=date(2026, 10, 29), end=date(2026, 11, 5))
 NO_ROLES = SearchCriteria(searches=(Search(name="default", roles=()),))

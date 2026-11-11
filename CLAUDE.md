@@ -18,7 +18,7 @@ Spec done: requirements, design and tasks. Building in task order from docs/task
 - MVP: LLM calls use the Claude subscription (claude -p, runs locally), not per-token API billing; may switch to per-token API later. So only filtered postings go to the LLM, batched, small model
 - One adapter per source into a common posting format; every stage after fetch works only on that format
 - Python 3.12+, uv, pytest, ruff
-- Public repo: personal files (local/) and run output (output/) are never committed
+- Public repo: personal files (config_local/) and run output (output/) are never committed
 
 ## Working rules
 - Propose before acting. No spec content or code without walking through it with the owner first

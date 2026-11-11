@@ -5,7 +5,19 @@ import httpx
 import pytest
 from pytest_socket import SocketBlockedError
 
-SUBPACKAGES = ["sources", "steps"]
+SUBPACKAGES = [
+    "app",
+    "pipeline",
+    "pipeline.steps",
+    "sources",
+    "llm",
+    "matching",
+    "report",
+    "storage",
+    "config",
+    "utils",
+    "models",
+]
 DEPENDENCIES = ["pydantic", "httpx", "yaml", "pypdf"]
 
 

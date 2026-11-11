@@ -3,20 +3,21 @@ from datetime import date
 
 from fakes import WINDOW, FakePrompter, FakeStep, FixedClock, NoCost, NoLock
 
-from job_radar.app import JobRadarApp
-from job_radar.checkpoints import FileCheckpoints
+from job_radar.app.app_factory import AppFactory
+from job_radar.app.job_radar_app import JobRadarApp
+from job_radar.app.run_result import RunCancelled, RunFailed, RunSucceeded
+from job_radar.app.window import WindowPlan, WindowReason
 from job_radar.cli import Cli
-from job_radar.error_log import FileErrorLog
-from job_radar.factory import AppFactory
-from job_radar.model import Window
-from job_radar.pipeline import Pipeline
-from job_radar.profile import ProfileError
-from job_radar.ranking import KeywordRanker
-from job_radar.result import RunCancelled, RunFailed, RunSucceeded
-from job_radar.settings import SettingsFile
-from job_radar.steps.recommend import RecommendTopJobsStep
-from job_radar.usage import FilePendingLog, UsageLimitReached
-from job_radar.window import WindowPlan, WindowReason
+from job_radar.config.profile_loader import ProfileError
+from job_radar.config.settings import SettingsFile
+from job_radar.llm.job_ranker import KeywordRanker
+from job_radar.llm.usage_limit_guard import UsageLimitReached
+from job_radar.models import Window
+from job_radar.pipeline.pipeline import Pipeline
+from job_radar.pipeline.steps.recommend import RecommendTopJobsStep
+from job_radar.storage.checkpoints import FileCheckpoints
+from job_radar.storage.error_log import FileErrorLog
+from job_radar.storage.pending_log import FilePendingLog
 
 FIRST_RUN = "2026-11-05T10-00-00"
 
@@ -24,7 +25,7 @@ FIRST_RUN = "2026-11-05T10-00-00"
 def demo_cli(tmp_path, prompter: FakePrompter, hour: int = 10) -> Cli:
     """The real command, with run folders in a temp folder, a fixed clock and a set user."""
     settings = SettingsFile.defaults(output=str(tmp_path), recommend={"top_n": 3})
-    return Cli(AppFactory(settings, tmp_path / "local", FixedClock(hour), prompter, {}))
+    return Cli(AppFactory(settings, tmp_path / "config_local", FixedClock(hour), prompter, {}))
 
 
 class FailingFactory:
@@ -61,7 +62,7 @@ class BrokenFactory:
     """Fails to build the app, as with a missing CV."""
 
     def create(self, demo: bool = False) -> JobRadarApp:
-        raise ProfileError("no CV in local/: add one of cv.pdf, cv.md, cv.txt")
+        raise ProfileError("no CV in config_local/: add one of cv.pdf, cv.md, cv.txt")
 
 
 KEPT = ["dropped.md", "jobs.jsonl", "manifest.json", "report.md", "source_counts.jsonl"]
@@ -112,7 +113,9 @@ def test_a_demo_run_has_every_section_in_order(tmp_path):
 
 def test_new_openings_are_grouped_as_the_settings_say(tmp_path):
     settings = SettingsFile.defaults(output=str(tmp_path), report={"group_by": "both"})
-    factory = AppFactory(settings, tmp_path / "local", FixedClock(10), FakePrompter(True), {})
+    factory = AppFactory(
+        settings, tmp_path / "config_local", FixedClock(10), FakePrompter(True), {}
+    )
     Cli(factory).main(["run", "--demo"])
     report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
     assert "### engineering (7)\n\n#### Not labelled (7)\n\n- " in report
@@ -202,7 +205,10 @@ def test_failed_run_exits_1_and_says_where(tmp_path, capsys):
 
 def test_setup_error_exits_2(capsys):
     assert Cli(BrokenFactory()).main(["run"]) == 2
-    assert "Could not set up the run: no CV in local/: add one of cv.pdf" in capsys.readouterr().out
+    assert (
+        "Could not set up the run: no CV in config_local/: add one of cv.pdf"
+        in capsys.readouterr().out
+    )
 
 
 def test_no_command_shows_help(capsys):
@@ -239,7 +245,9 @@ def test_a_deleted_runs_postings_count_as_unseen_again_and_its_data_drops_out_of
 
     def cli(day: int, prompter: FakePrompter) -> Cli:
         """The real command on this day of November, with this user."""
-        return Cli(AppFactory(settings, tmp_path / "local", FixedClock(10, day), prompter, {}))
+        return Cli(
+            AppFactory(settings, tmp_path / "config_local", FixedClock(10, day), prompter, {})
+        )
 
     cli(5, FakePrompter(True)).main(["run", "--demo"])
     deleting = FakePrompter(True)
@@ -290,7 +298,9 @@ def test_with_new_only_off_a_second_run_sees_every_job_again(tmp_path):
     settings = SettingsFile.defaults(output=str(tmp_path), new_only=False, recommend={"top_n": 3})
     for hour in (10, 15):
         cli = Cli(
-            AppFactory(settings, tmp_path / "local", FixedClock(hour), FakePrompter(True), {})
+            AppFactory(
+                settings, tmp_path / "config_local", FixedClock(hour), FakePrompter(True), {}
+            )
         )
         assert cli.main(["run", "--demo"]) == 0
     manifest = json.loads((tmp_path / "demo" / "2026-11-05T15-00-00" / "manifest.json").read_text())
@@ -345,7 +355,9 @@ def test_a_demo_run_reports_what_employers_ask_for(tmp_path):
 
 def test_how_many_requirements_the_report_lists_is_a_setting(tmp_path):
     settings = SettingsFile.defaults(output=str(tmp_path), report={"requirements_per_type": 1})
-    factory = AppFactory(settings, tmp_path / "local", FixedClock(10), FakePrompter(True), {})
+    factory = AppFactory(
+        settings, tmp_path / "config_local", FixedClock(10), FakePrompter(True), {}
+    )
     Cli(factory).main(["run", "--demo"])
     report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
     tools = report[report.index("### Tools") :].split("\n\n")[1]
@@ -368,7 +380,9 @@ def test_a_demo_run_reports_experience_to_gain(tmp_path):
 
 def test_how_many_gaps_show_how_to_gain_them_is_a_setting(tmp_path):
     settings = SettingsFile.defaults(output=str(tmp_path), report={"gap_suggestions": 0})
-    factory = AppFactory(settings, tmp_path / "local", FixedClock(10), FakePrompter(True), {})
+    factory = AppFactory(
+        settings, tmp_path / "config_local", FixedClock(10), FakePrompter(True), {}
+    )
     Cli(factory).main(["run", "--demo"])
     report = (tmp_path / "demo" / FIRST_RUN / "report.md").read_text()
     assert "| machine learning | 12% (1) | missing: not named in the CV |  |" in report

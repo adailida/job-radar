@@ -3,9 +3,9 @@ from datetime import date
 import pytest
 from fakes import MemoryWarningLog, job
 
-from job_radar.checkpoints import FileCheckpoints
-from job_radar.history import FileRunHistory, RunFolders
-from job_radar.model import Window
+from job_radar.models import Window
+from job_radar.storage.checkpoints import FileCheckpoints
+from job_radar.storage.run_history import FileRunHistory, RunFolders
 
 
 def window(end_day: int) -> Window:

@@ -1,8 +1,10 @@
+from pathlib import Path
+
 import pytest
 
 from job_radar.cli import Cli
-from job_radar.settings import RecommendSettings, Settings, SettingsFile
-from job_radar.yaml_file import ConfigError
+from job_radar.config.settings import RecommendSettings, Settings, SettingsFile
+from job_radar.config.yaml_file import ConfigError
 
 DEFAULTS = SettingsFile.DEFAULTS
 
@@ -72,6 +74,15 @@ def test_broken_defaults_are_named_as_the_file_at_fault(tmp_path):
     broken.write_text("lookback_days: 14\n")
     with pytest.raises(ConfigError, match=r"output: required"):
         SettingsFile(tmp_path / "settings.yaml", broken).load()
+
+
+def test_the_defaults_are_config_settings_yaml_at_the_repo_root():
+    assert SettingsFile.DEFAULTS == Path(__file__).resolve().parents[1] / "config" / "settings.yaml"
+
+
+def test_missing_defaults_are_a_setup_error_naming_the_file(tmp_path):
+    with pytest.raises(ConfigError, match=r"defaults.yaml: the default settings are missing"):
+        SettingsFile(tmp_path / "settings.yaml", tmp_path / "defaults.yaml").load()
 
 
 def test_a_bad_settings_file_stops_the_command_as_a_setup_error(tmp_path, monkeypatch, capsys):
