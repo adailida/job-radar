@@ -151,6 +151,12 @@ class FetchStep:
             )
         )
         self._credits(source.label, approval, paid)
+        for count in paid.unsure:
+            self._warnings.warn(
+                AlertCode.DAY_UNSURE,
+                f"{source.label}: {count.search} on {count.day.day} {count.day:%b} couldn't be "
+                "counted and came back empty; it may have timed out, so its jobs may be missing.",
+            )
         return list(paid.pages)
 
     def _credits(self, label: str, approval: Approval, paid: PaidFetch) -> None:

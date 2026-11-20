@@ -163,5 +163,6 @@ The owner's 3 searches (remote-us, seattle, nyc) with the settings' filters, cou
 - With the 14 mission phrases (`description_phrase_or`): windows of 3, 7 and 14 days all answer 504 "Job search timed out. Narrow your filters and retry."; a 1-day window answers, with 30, 6 and 24 rows
 - The real `POST /v1/jobs/search` over 14 days answered 200 with an empty `data` and no error: the run got 0 jobs without knowing
 - Without the phrases: 14 days counted 6,321, 1,533 and 2,762; 1 day 848, 214 and 384
+- 2026-11-20: the estimate endpoint now answers a count it can't finish (a slow phrase search timing out) with 200, `rows_counted: false` and `rows` at `max_rows` (10,000), not with an error. A 10-day run's 30 counts summed to 10,016 because of one such day; the other 29 summed to 16
 - `posted_at_gte` and `posted_at_lte` take `YYYY-MM-DD`, both inclusive, compared by calendar day
 - So job-radar searches and counts one day at a time ([design.md](../design.md), JobsPipe)

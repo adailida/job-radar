@@ -36,6 +36,7 @@ class AlertCode(StrEnum):
     SOURCE_FAILED = "source_failed"  # a source raised after its retries
     SOURCE_EMPTY = "source_empty"  # a source returned no postings
     SOURCE_SKIPPED = "source_skipped"  # the user left a paid source out at the cost check
+    DAY_UNSURE = "day_unsure"  # a paid source's day couldn't be counted and came back empty
     NO_NEW_JOBS = "no_new_jobs"  # no new job matched the searches
     BUDGET_REACHED = "budget_reached"  # a paid source used what its monthly budget had left
     CREDITS_LOW = "credits_low"  # a paid source has fewer credits left than the setting

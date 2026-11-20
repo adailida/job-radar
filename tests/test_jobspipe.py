@@ -125,8 +125,11 @@ class FakeApi:
     Each search finds `total` jobs a day, or what `days` says for a day (by its
     ISO date). The count for a day in `uncountable` times out; the search for a
     day in `timed_out` comes back empty with 200, as JobsPipe's does when it
-    times out. Another `status` answers every search with that error, and 504
-    every count too.
+    times out. A day in `unfinished` has its count answered with 200, `rows_counted`
+    false and `rows` at the 10,000 limit, as many times as it says before counting
+    for real. With `phrase_only`, those two kinds of trouble happen only to a
+    query that has `description_phrase_or`, as in the real API. Another `status`
+    answers every search with that error, and 504 every count too.
     """
 
     def __init__(
@@ -137,9 +140,13 @@ class FakeApi:
         days: dict[str, int] | None = None,
         uncountable: tuple[str, ...] = (),
         timed_out: tuple[str, ...] = (),
+        unfinished: dict[str, int] | None = None,
+        phrase_only: bool = False,
     ):
+        self.phrase_only = phrase_only
         self.total, self.status, self.credits = total, status, credits
         self.days, self.uncountable, self.timed_out = days or {}, uncountable, timed_out
+        self.unfinished = dict(unfinished or {})
         self.bodies: list[dict] = []
         self.estimates: list[dict] = []
         self.served, self.left = 0, 0
@@ -151,9 +158,15 @@ class FakeApi:
         day = body["posted_at_gte"]
         if request.url.path == "/v1/jobs/export/estimate":
             self.estimates.append(body)
-            if self.status == 504 or day in self.uncountable:
+            slow = not self.phrase_only or "description_phrase_or" in body
+            if self.status == 504 or (slow and day in self.uncountable):
                 return httpx.Response(504, json={"error": "Job search timed out."})
-            return httpx.Response(200, json={"rows": self.days.get(day, self.total)})
+            if slow and self.unfinished.get(day, 0) > 0:
+                self.unfinished[day] -= 1
+                answer = {"rows": 10_000, "rows_approximate": True, "rows_counted": False}
+                return httpx.Response(200, json=answer | {"max_rows": 10_000})
+            rows = self.days.get(day, self.total)
+            return httpx.Response(200, json={"rows": rows, "rows_counted": True})
         if self.status != 200:
             return httpx.Response(self.status, json={"error": "bad", "message": "No credits left."})
         self.bodies.append(body)
@@ -494,12 +507,52 @@ def test_a_day_its_count_found_empty_can_come_back_empty():
     assert (len(paid.pages), jobs(paid.pages)) == (2, 4)
 
 
-def test_an_empty_day_jobspipe_couldnt_count_is_left_to_the_fetch_step():
-    api = FakeApi(total=4, uncountable=("2026-11-08",), timed_out=("2026-11-08",))
+def test_an_empty_day_jobspipe_couldnt_count_is_accepted_as_empty_and_returned_as_unsure():
+    api = FakeApi(days={"2026-11-09": 4}, uncountable=("2026-11-08",), timed_out=("2026-11-08",))
     src = source(api, ask_above=250)
     plan = src.plan(ONE, WINDOW)
     assert not plan.estimated
-    assert jobs(src.fetch_paid(ONE, WINDOW, cap=250, counts=plan.counts).pages) == 4
+    paid = src.fetch_paid(ONE, WINDOW, cap=250, counts=plan.counts)
+    assert jobs(paid.pages) == 4
+    assert [(c.search, c.day.day) for c in paid.unsure] == [("remote-us", 8)]
+
+
+def test_a_day_jobspipe_couldnt_count_with_jobs_is_fetched():
+    api = FakeApi(total=4, uncountable=("2026-11-08",))
+    src = source(api, ask_above=250)
+    plan = src.plan(ONE, WINDOW)
+    assert jobs(src.fetch_paid(ONE, WINDOW, cap=250, counts=plan.counts).pages) == 8
+
+
+def test_a_day_with_a_real_count_of_zero_and_an_empty_page_still_passes():
+    api = FakeApi(days={"2026-11-09": 0, "2026-11-08": 3})
+    src = source(api, ask_above=250)
+    plan = src.plan(ONE, WINDOW)
+    assert [c.found for c in plan.counts] == [0, 3]
+    assert jobs(src.fetch_paid(ONE, WINDOW, cap=250, counts=plan.counts).pages) == 3
+    assert len(api.estimates) == 2  # a real zero is not asked again
+
+
+def test_a_count_jobspipe_answers_with_200_but_didnt_finish_is_asked_again_and_used():
+    api = FakeApi(total=5, unfinished={"2026-11-08": 1})
+    plan = source(api, ask_above=250).plan(ONE, WINDOW)
+    assert (plan.estimate, plan.estimated) == (10, True)
+    assert [c.found for c in plan.counts] == [5, 5]
+    assert len(api.estimates) == 3
+
+
+def test_a_count_still_unfinished_after_the_second_ask_is_unknown_and_never_added_up():
+    api = FakeApi(total=5, unfinished={"2026-11-08": 2})
+    plan = source(api, ask_above=25).plan(ONE, WINDOW)
+    assert (plan.estimate, plan.estimated) == (25, False)
+    assert [c.found for c in plan.counts] == [5, None]
+    assert len(api.estimates) == 3
+
+
+def test_the_days_after_one_jobspipe_couldnt_count_are_still_counted():
+    api = FakeApi(total=5, uncountable=("2026-11-09",))
+    plan = source(api, ask_above=25).plan(ONE, WINDOW)
+    assert [c.found for c in plan.counts] == [None, 5]
 
 
 def test_a_day_whose_search_errors_fails_jobspipe():
@@ -523,3 +576,35 @@ def test_a_domain_the_settings_dont_define_is_a_setup_error(tmp_path):
         ConfigError, match=r"searches.all.domains: unknown space; the settings define"
     ):
         factory.create(demo=False)
+
+
+PHRASES = {"description_phrase_or": ["our mission"]}
+
+
+def test_a_day_still_uncounted_is_counted_without_the_phrases_as_its_upper_bound():
+    days = {"2026-11-09": 5, "2026-11-08": 47}
+    api = FakeApi(days=days, uncountable=("2026-11-08",), phrase_only=True)
+    plan = source(api, filters=PHRASES, ask_above=250).plan(ONE, WINDOW)
+    assert (plan.estimate, plan.estimated) == (52, False)
+    assert [(c.found, c.at_most) for c in plan.counts] == [(5, None), (None, 47)]
+    assert "description_phrase_or" not in api.estimates[-1]
+
+
+def test_an_unfinished_200_count_gets_the_same_upper_bound_after_its_retry():
+    api = FakeApi(total=3, unfinished={"2026-11-08": 9}, phrase_only=True)
+    plan = source(api, filters=PHRASES, ask_above=250).plan(ONE, WINDOW)
+    assert (plan.estimate, plan.estimated) == (6, False)
+    assert len(api.estimates) == 4  # day 1, then day 2 twice and without phrases
+
+
+def test_a_day_with_no_upper_bound_makes_the_estimate_the_ask_above_limit():
+    api = FakeApi(total=3, uncountable=("2026-11-08",))
+    plan = source(api, filters=PHRASES, ask_above=25).plan(ONE, WINDOW)
+    assert (plan.estimate, plan.estimated) == (25, False)
+    assert [(c.found, c.at_most) for c in plan.counts] == [(3, None), (None, None)]
+
+
+def test_with_no_phrases_to_drop_an_uncounted_day_is_not_counted_again():
+    api = FakeApi(total=3, unfinished={"2026-11-08": 9})
+    source(api, ask_above=25).plan(ONE, WINDOW)
+    assert len(api.estimates) == 3
