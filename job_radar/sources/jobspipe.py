@@ -54,6 +54,7 @@ class JobsPipeSource:
     SEARCH = "https://api.jobspipe.dev/v1/jobs/search"
     ACCOUNT = "https://api.jobspipe.dev/v1/account"
     ESTIMATE = "https://api.jobspipe.dev/v1/jobs/export/estimate"
+    PHRASES = "description_phrase_or"  # the filter that makes a count slow, and only narrows
     PAGE_SIZE = 25  # the most a page holds on the Free plan
     PLANS = {"free": (250, None), "seeker": (2500, 10_000)}  # ask above, monthly budget
 
@@ -82,24 +83,37 @@ class JobsPipeSource:
     def plan(self, criteria: SearchCriteria, window: Window) -> SpendPlan:
         """What the searches would cost this run, and the limits, without spending a credit.
 
-        Each search is counted for each day and the counts added up. When
-        JobsPipe can't count one (a slow phrase search can time out), the
-        estimate is the ask-above limit, marked as not counted. The plan keeps
+        Each search is counted for each day and the counts added up. A count
+        JobsPipe can't finish (a slow phrase search can time out, with an error
+        or with a made-up total) is asked once more. When it still can't, it is
+        counted once without the mission phrases, which only narrow a search, so
+        that number is the most the day can hold. The day is kept as unknown,
+        never added up as a count. The estimate then adds those upper bounds,
+        marked as not counted ("at most"); a day with no bound makes it the
+        ask-above limit. Every other day is still counted, so the plan keeps
         each count it got, for the fetch.
         """
         account = self._account()
         left = account["credits_remaining"]
         counts: list[DayCount] = []
-        counted = True
+        counted = bounded = True
         for search, day in self._queries(criteria, window):
-            self._client.pause()
-            response = self._client.post(self.ESTIMATE, json=self.query(search, day))
-            if response.status_code != 200:
-                counted = False
-                break
-            found = response.json().get("rows") or 0
-            counts.append(DayCount(search=search.name, day=day, found=found))
-        estimate = sum(count.found for count in counts) if counted else self._ask_above
+            body = self.query(search, day)
+            found = self._count(body)
+            if found is None:
+                found = self._count(body)  # once more
+            at_most = None
+            if found is None:
+                loose = {key: value for key, value in body.items() if key != self.PHRASES}
+                at_most = self._count(loose) if loose != body else None
+            counted = counted and found is not None
+            bounded = bounded and (found is not None or at_most is not None)
+            counts.append(DayCount(search=search.name, day=day, found=found, at_most=at_most))
+        estimate = self._ask_above
+        if bounded:
+            estimate = sum(
+                count.found if count.found is not None else count.at_most for count in counts
+            )
         used = account.get("credits_used") or 0
         budget_left = left if self._budget is None else max(self._budget - used, 0)
         return SpendPlan(
@@ -111,6 +125,21 @@ class JobsPipeSource:
             budget_left=budget_left,
             counts=tuple(counts),
         )
+
+    def _count(self, body: dict) -> int | None:
+        """The free count for one query, or None when JobsPipe couldn't finish it.
+
+        JobsPipe answers a count it can't finish with an error, or with 200 and
+        `rows_counted` false, where `rows` is only its upper limit.
+        """
+        self._client.pause()
+        response = self._client.post(self.ESTIMATE, json=body)
+        if response.status_code != 200:
+            return None
+        answer = response.json()
+        if answer.get("rows_counted") is False:
+            return None
+        return answer.get("rows") or 0
 
     def fetch(self, criteria: SearchCriteria, window: Window) -> list[RawPage]:
         """Pages of every search, when no cost check ran; above the limit, it asks to go on."""
@@ -126,10 +155,12 @@ class JobsPipeSource:
         left, and again each time that runs out. A fetch is never partial: if
         the user says no, the credits run out, or a day its plan's `counts`
         found jobs for comes back empty, it raises `JobsPipeError` instead of
-        giving part of the results.
+        giving part of the results. A day its plan couldn't count that comes back
+        empty is accepted as no jobs, and returned in `unsure` so it is warned about.
         """
         found = {(count.search, count.day): count.found for count in counts}
         pages: list[RawPage] = []
+        unsure: list[DayCount] = []
         budget, charged, left, approved = cap, 0, 0, cap
         so_far = 0
         queries = self._queries(criteria, window) if cap > 0 else ()  # none agreed, none sent
@@ -154,9 +185,13 @@ class JobsPipeSource:
                 so_far += len(jobs)
                 charged += metadata.get("credits_charged") or 0
                 left = metadata.get("credits_remaining", left)
-                if not jobs and cursor is None and found.get((search.name, day), 0) > 0:
-                    self._told(pages, charged, left)
-                    raise self._timed_out(search, day, found[search.name, day], charged)
+                if not jobs and cursor is None:
+                    count = found.get((search.name, day), 0)
+                    if count is None:
+                        unsure.append(DayCount(search=search.name, day=day, found=None))
+                    elif count > 0:
+                        self._told(pages, charged, left)
+                        raise self._timed_out(search, day, count, charged)
                 cursor = metadata.get("next_cursor")
                 if not jobs or not cursor:
                     break
@@ -164,7 +199,11 @@ class JobsPipeSource:
             left = self._account()["credits_remaining"]
         self._told(pages, charged, left)
         return PaidFetch(
-            pages=tuple(pages), charged=charged, credits_left=left, extra_approved=approved - cap
+            pages=tuple(pages),
+            charged=charged,
+            credits_left=left,
+            extra_approved=approved - cap,
+            unsure=tuple(unsure),
         )
 
     def _more(self, pages: list[RawPage], charged: int, left: int, cap: int, approved: int) -> int:

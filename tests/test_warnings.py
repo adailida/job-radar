@@ -31,6 +31,7 @@ from job_radar.models import (
     AskRow,
     Asks,
     CandidateProfile,
+    DayCount,
     PaidFetch,
     RawPage,
     Recommendation,
@@ -198,6 +199,27 @@ def test_warnings_let_the_run_finish_when_the_credit_budget_is_reached():
             code=AlertCode.BUDGET_REACHED,
             message="JobsPipe monthly budget reached: this run used 18 credits, "
             "and the budget had 18 left this month.",
+        )
+    ]
+
+
+class Unsure(Paying):
+    """A paid source that came back empty on a day it couldn't count."""
+
+    def fetch_paid(self, criteria, window, cap, counts=()):
+        day = DayCount(search="remote-us", day=date(2026, 11, 11), found=None)
+        return (
+            super().fetch_paid(criteria, window, cap, counts).model_copy(update={"unsure": (day,)})
+        )
+
+
+def test_a_day_a_paid_source_couldnt_count_and_got_nothing_for_is_a_warning():
+    _, warnings = fetch(Unsure(charged=18, left=800), approvals=[approval()])
+    assert warnings.alerts() == [
+        Alert(
+            code=AlertCode.DAY_UNSURE,
+            message="JobsPipe: remote-us on 11 Nov couldn't be counted and came back empty; "
+            "it may have timed out, so its jobs may be missing.",
         )
     ]
 

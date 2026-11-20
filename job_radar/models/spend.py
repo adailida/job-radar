@@ -8,11 +8,16 @@ from job_radar.models.posting import RawPage
 
 
 class DayCount(Model):
-    """How many jobs a paid source's free count found for one search on one day."""
+    """How many jobs a paid source's free count found for one search on one day.
+
+    `found` is None when the source couldn't finish the count for that day;
+    `at_most` is then the most it could be, when a looser count gave one.
+    """
 
     search: str  # the search's name in the profile
     day: date
-    found: int
+    found: int | None  # None: the count is unknown
+    at_most: int | None = None  # for an unknown day: a count of the search without its slow filter
 
 
 class SpendPlan(Model):
@@ -57,6 +62,7 @@ class PaidFetch(Model):
     charged: int
     credits_left: int
     extra_approved: int = 0  # credits the user agreed to during the fetch, past the approval's cap
+    unsure: tuple[DayCount, ...] = ()  # uncounted days that came back empty, so may have timed out
 
 
 class Spend(Model):
